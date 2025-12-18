@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Activity, Calendar, TrendingUp, Trophy } from 'lucide-react-native';
+import { Activity, Calendar, TrendingUp, Trophy, BarChart3 } from 'lucide-react-native';
 
 export default function RootLayout() {
   return (
@@ -43,6 +43,15 @@ export default function RootLayout() {
           title: 'Activities',
           tabBarIcon: ({ color, focused }) => (
             <Activity size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="analytics"
+        options={{
+          title: 'Analytics',
+          tabBarIcon: ({ color, focused }) => (
+            <BarChart3 size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
       />
