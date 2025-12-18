@@ -136,7 +136,8 @@ export default function ActivitiesScreen() {
                     setSelectedWorkout(null);
                     router.push({
                       pathname: '/workout-builder',
-                      params: { workoutId: selectedWorkout.id }
+                      params: { workoutId: selectedWorkout.id,
+                                returnTo: 'activities' }
                     });
                   }}
                   style={styles.editButton}

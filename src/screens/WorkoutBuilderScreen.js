@@ -1,18 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Plus, Trash2, X } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Alert,
-  Modal
+  View
 } from 'react-native';
-import { Plus, Trash2, X } from 'lucide-react-native';
-import { loadWorkouts, saveWorkouts, getTodayString } from '../utils/storage';
-import { WORKOUT_TYPES, EXERCISE_DATABASE } from '../constants/workoutTypes';
-import { router, useLocalSearchParams } from 'expo-router';
+import { EXERCISE_DATABASE, WORKOUT_TYPES } from '../constants/workoutTypes';
+import { getTodayString, loadWorkouts, saveWorkouts } from '../utils/storage';
 
 export default function WorkoutBuilderScreen() {
   const params = useLocalSearchParams();
@@ -33,7 +33,13 @@ export default function WorkoutBuilderScreen() {
     name: '',
     sets: [{ weight: '', reps: '', distance: '', time: '' }]
   });
-
+  const navigateBack = () => {
+  if (params?.returnTo === 'activities') {
+    router.push('/activities');
+  } else {
+    router.back();
+  }
+};
   useEffect(() => {
     if (isEditing) {
       loadEditingWorkout();
@@ -73,8 +79,8 @@ export default function WorkoutBuilderScreen() {
       };
       await saveWorkouts([...workouts, newWorkout]);
     }
-
-    router.back();
+      navigateBack();
+    
   };
 
   const addExercise = () => {
@@ -157,7 +163,7 @@ export default function WorkoutBuilderScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.headerButton}>
+        <Pressable onPress={navigateBack} style={styles.headerButton}>
           <Text style={styles.headerButtonText}>Cancel</Text>
         </Pressable>
         <Text style={styles.headerTitle}>{isEditing ? 'Edit Workout' : 'New Workout'}</Text>
@@ -434,7 +440,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 60,
     paddingBottom: 12,
     backgroundColor: '#111827',
     borderBottomWidth: 1,
