@@ -5,16 +5,15 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Pressable,
-  ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   View
 } from 'react-native';
-import { getWorkoutsByMonth } from '../utils/calculations';
 import { loadWorkouts, saveWorkouts } from '../utils/storage';
 
 export default function ActivitiesScreen() {
-  const [workouts, setWorkouts] = useState([]);
+  const [sections, setSections] = useState([]);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
 
   useEffect(() => {
@@ -30,7 +29,31 @@ export default function ActivitiesScreen() {
   const loadData = async () => {
     const data = await loadWorkouts();
     const sorted = data.sort((a, b) => new Date(b.date) - new Date(a.date));
-    setWorkouts(sorted);
+    
+    // Group workouts by month
+    const grouped = {};
+    sorted.forEach(workout => {
+      const date = new Date(workout.date);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthName = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+      
+      if (!grouped[monthKey]) {
+        grouped[monthKey] = {
+          title: monthName,
+          data: []
+        };
+      }
+      grouped[monthKey].data.push(workout);
+    });
+    
+    // Convert to array and sort by date (newest first)
+    const sectionsArray = Object.values(grouped).sort((a, b) => {
+      const dateA = new Date(a.data[0].date);
+      const dateB = new Date(b.data[0].date);
+      return dateB - dateA;
+    });
+    
+    setSections(sectionsArray);
   };
 
   const getWorkoutIcon = (type) => {
@@ -54,9 +77,10 @@ export default function ActivitiesScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const updated = workouts.filter(w => w.id !== workoutId);
-            setWorkouts(updated);
+            const allWorkouts = sections.flatMap(s => s.data);
+            const updated = allWorkouts.filter(w => w.id !== workoutId);
             await saveWorkouts(updated);
+            loadData();
             setSelectedWorkout(null);
           }
         }
@@ -64,51 +88,64 @@ export default function ActivitiesScreen() {
     );
   };
 
-  const workoutsByMonth = getWorkoutsByMonth(workouts);
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+
+  const renderSectionHeader = ({ section: { title } }) => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionHeaderText}>{title}</Text>
+    </View>
+  );
+
+  const renderWorkout = ({ item: workout }) => (
+    <Pressable
+      onPress={() => setSelectedWorkout(workout)}
+      style={styles.workoutCard}
+    >
+      <View style={styles.workoutIconContainer}>
+        {React.createElement(getWorkoutIcon(workout.type), {
+          size: 24,
+          color: '#fff',
+          strokeWidth: 2
+        })}
+      </View>
+      <View style={styles.workoutInfo}>
+        <Text style={styles.workoutName}>{workout.name}</Text>
+        <Text style={styles.workoutMeta}>
+          {formatDate(workout.date)} • {workout.exercises?.length || 0} exercises
+        </Text>
+      </View>
+      <Pressable
+        onPress={() => deleteWorkout(workout.id)}
+        style={styles.deleteButton}
+      >
+        <Trash2 size={20} color="#EF4444" strokeWidth={2} />
+      </Pressable>
+    </Pressable>
+  );
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.content}>
-          {workouts.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Dumbbell size={64} color="#4B5563" strokeWidth={1.5} />
-              <Text style={styles.emptyTitle}>No Workouts Yet</Text>
-              <Text style={styles.emptyText}>Start your fitness journey today!</Text>
-            </View>
-          ) : (
-            workoutsByMonth.map((monthData, monthIdx) => (
-              <View key={monthIdx} style={styles.monthSection}>
-                <Text style={styles.monthHeader}>{monthData.label}</Text>
-                {monthData.workouts.map((workout) => {
-                  const Icon = getWorkoutIcon(workout.type);
-                  return (
-                    <Pressable
-                      key={workout.id}
-                      onPress={() => setSelectedWorkout(workout)}
-                      style={styles.workoutCard}
-                    >
-                      <View style={styles.iconContainer}>
-                        <Icon size={24} color="#1F2937" strokeWidth={2} />
-                      </View>
-                      <View style={styles.workoutInfo}>
-                        <Text style={styles.workoutName}>{workout.name}</Text>
-                        <Text style={styles.workoutDate}>{workout.date}</Text>
-                      </View>
-                      <Pressable
-                        onPress={() => deleteWorkout(workout.id)}
-                        style={styles.deleteButton}
-                      >
-                        <Trash2 size={20} color="#EF4444" strokeWidth={2} />
-                      </Pressable>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ))
-          )}
-        </View>
-      </ScrollView>
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderWorkout}
+        renderSectionHeader={renderSectionHeader}
+        stickySectionHeadersEnabled={true}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No workouts yet</Text>
+            <Text style={styles.emptySubtext}>Tap the + button to add your first workout</Text>
+          </View>
+        }
+      />
 
       {/* Workout Detail Modal */}
       {selectedWorkout && (
@@ -128,7 +165,9 @@ export default function ActivitiesScreen() {
               </View>
               <View style={styles.modalHeaderText}>
                 <Text style={styles.modalTitle}>{selectedWorkout.name}</Text>
-                <Text style={styles.modalSubtitle}>{selectedWorkout.date} • {selectedWorkout.type}</Text>
+                <Text style={styles.modalSubtitle}>
+                  {selectedWorkout.date} • {selectedWorkout.type}
+                </Text>
               </View>
               <View style={styles.modalActions}>
                 <Pressable
@@ -136,8 +175,10 @@ export default function ActivitiesScreen() {
                     setSelectedWorkout(null);
                     router.push({
                       pathname: '/workout-builder',
-                      params: { workoutId: selectedWorkout.id,
-                                returnTo: 'activities' }
+                      params: { 
+                        workoutId: selectedWorkout.id,
+                        returnTo: 'activities' 
+                      }
                     });
                   }}
                   style={styles.editButton}
@@ -153,7 +194,7 @@ export default function ActivitiesScreen() {
               </View>
             </View>
 
-            <ScrollView style={styles.modalScroll}>
+            <View style={styles.modalScroll}>
               {selectedWorkout.exercises?.map((exercise, idx) => (
                 <View key={idx} style={styles.exerciseCard}>
                   <Text style={styles.exerciseName}>{exercise.name}</Text>
@@ -162,25 +203,27 @@ export default function ActivitiesScreen() {
                       <Text style={styles.setLabel}>Set {setIdx + 1}</Text>
                       <Text style={styles.setValue}>
                         {set.distance > 0 && set.time > 0
-                          ? `${set.distance} mi • ${set.time} min`
+                          ? `${set.distance} mi • ${set.time} min${set.pace > 0 ? ` • ${set.pace} min/mi` : ''}`
                           : `${set.weight} lbs × ${set.reps} reps`}
                       </Text>
                     </View>
                   ))}
                 </View>
               ))}
-            </ScrollView>
+            </View>
           </View>
         </View>
       )}
 
       {/* Floating Add Button */}
-      <Pressable
-        style={styles.fab}
-        onPress={() => router.push('/workout-builder')}
-      >
-        <Plus size={28} color="#fff" strokeWidth={2.5} />
-      </Pressable>
+      {!selectedWorkout && (
+        <Pressable
+          style={styles.fab}
+          onPress={() => router.push('/workout-builder')}
+        >
+          <Plus size={28} color="#fff" strokeWidth={2.5} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -190,53 +233,37 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1F2937',
   },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
+  listContent: {
     paddingBottom: 100,
   },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 80,
+  sectionHeader: {
+    backgroundColor: '#111827',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-    marginTop: 16,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 8,
-  },
-  monthSection: {
-    marginBottom: 24,
-  },
-  monthHeader: {
+  sectionHeaderText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 12,
   },
   workoutCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#374151',
-    borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 6,
     padding: 16,
-    marginBottom: 8,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#E5E7EB',
     borderRadius: 12,
-    justifyContent: 'center',
+  },
+  workoutIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#4B5563',
     alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
   },
   workoutInfo: {
@@ -246,14 +273,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+    marginBottom: 4,
   },
-  workoutDate: {
+  workoutMeta: {
     fontSize: 14,
     color: '#9CA3AF',
-    marginTop: 2,
   },
   deleteButton: {
     padding: 8,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 80,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#6B7280',
   },
   modal: {
     position: 'absolute',
@@ -276,7 +319,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '80%',
-    paddingBottom: 40,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -288,24 +330,31 @@ const styles = StyleSheet.create({
   modalIconContainer: {
     width: 48,
     height: 48,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 12,
-    justifyContent: 'center',
+    borderRadius: 24,
+    backgroundColor: '#D1D5DB',
     alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
   },
   modalHeaderText: {
     flex: 1,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
+    marginBottom: 4,
   },
   modalSubtitle: {
     fontSize: 14,
     color: '#9CA3AF',
-    marginTop: 2,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  editButton: {
+    padding: 8,
   },
   closeButton: {
     padding: 8,
@@ -316,6 +365,7 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     padding: 20,
+    paddingBottom: 100,
   },
   exerciseCard: {
     backgroundColor: '#4B5563',
@@ -336,40 +386,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#374151',
     borderRadius: 8,
     padding: 12,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   setLabel: {
+    color: '#D1D5DB',
     fontSize: 14,
     fontWeight: '500',
-    color: '#D1D5DB',
   },
   setValue: {
+    color: '#fff',
     fontSize: 14,
     fontWeight: '600',
-    color: '#fff',
   },
   fab: {
     position: 'absolute',
     right: 16,
-    bottom: 16,
+    bottom: 24,
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#111827',
+    backgroundColor: '#3B82F6',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  editButton: {
-    padding: 8,
+    shadowRadius: 4,
   },
 });

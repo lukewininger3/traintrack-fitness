@@ -23,13 +23,14 @@ export const initializeSampleData = async () => {
   // Create 3-5 workouts per week with variety
   
   const workoutTemplates = [
-    // Strength workouts
+    // Strength workouts with MIXED progression
     {
       name: 'Upper Body Power',
       type: 'Strength',
       exercises: [
         {
           name: 'Barbell Bench Press',
+          // INCREASING - Good progress
           sets: (week) => [
             { weight: 135 + (week * 5), reps: 10, distance: 0, time: 0 },
             { weight: 155 + (week * 5), reps: 8, distance: 0, time: 0 },
@@ -38,6 +39,7 @@ export const initializeSampleData = async () => {
         },
         {
           name: 'Pull-Ups',
+          // STABLE - No change
           sets: () => [
             { weight: 0, reps: 12, distance: 0, time: 0 },
             { weight: 0, reps: 10, distance: 0, time: 0 },
@@ -46,9 +48,10 @@ export const initializeSampleData = async () => {
         },
         {
           name: 'Overhead Press',
+          // DECREASING - Deload or fatigue
           sets: (week) => [
-            { weight: 95 + (week * 5), reps: 8, distance: 0, time: 0 },
-            { weight: 105 + (week * 5), reps: 6, distance: 0, time: 0 }
+            { weight: 135 - (week * 3), reps: 8, distance: 0, time: 0 },
+            { weight: 145 - (week * 3), reps: 6, distance: 0, time: 0 }
           ]
         }
       ]
@@ -59,21 +62,24 @@ export const initializeSampleData = async () => {
       exercises: [
         {
           name: 'Barbell Squat',
+          // INCREASING - Strong gains
           sets: (week) => [
-            { weight: 185 + (week * 5), reps: 10, distance: 0, time: 0 },
-            { weight: 205 + (week * 5), reps: 8, distance: 0, time: 0 },
-            { weight: 225 + (week * 5), reps: 6, distance: 0, time: 0 }
+            { weight: 185 + (week * 6), reps: 10, distance: 0, time: 0 },
+            { weight: 205 + (week * 6), reps: 8, distance: 0, time: 0 },
+            { weight: 225 + (week * 6), reps: 6, distance: 0, time: 0 }
           ]
         },
         {
           name: 'Leg Press',
+          // INCREASING - Moderate gains
           sets: (week) => [
-            { weight: 225 + (week * 10), reps: 12, distance: 0, time: 0 },
-            { weight: 275 + (week * 10), reps: 10, distance: 0, time: 0 }
+            { weight: 225 + (week * 8), reps: 12, distance: 0, time: 0 },
+            { weight: 275 + (week * 8), reps: 10, distance: 0, time: 0 }
           ]
         },
         {
           name: 'Walking Lunges',
+          // STABLE
           sets: () => [
             { weight: 0, reps: 20, distance: 0, time: 0 },
             { weight: 0, reps: 20, distance: 0, time: 0 }
@@ -87,21 +93,24 @@ export const initializeSampleData = async () => {
       exercises: [
         {
           name: 'Barbell Deadlift',
+          // INCREASING - Excellent progress
           sets: (week) => [
-            { weight: 225 + (week * 5), reps: 8, distance: 0, time: 0 },
-            { weight: 245 + (week * 5), reps: 6, distance: 0, time: 0 },
-            { weight: 265 + (week * 5), reps: 5, distance: 0, time: 0 }
+            { weight: 225 + (week * 7), reps: 8, distance: 0, time: 0 },
+            { weight: 245 + (week * 7), reps: 6, distance: 0, time: 0 },
+            { weight: 265 + (week * 7), reps: 5, distance: 0, time: 0 }
           ]
         },
         {
           name: 'Barbell Row',
+          // DECREASING - Form issues or fatigue
           sets: (week) => [
-            { weight: 135 + (week * 5), reps: 10, distance: 0, time: 0 },
-            { weight: 155 + (week * 5), reps: 8, distance: 0, time: 0 }
+            { weight: 155 - (week * 4), reps: 10, distance: 0, time: 0 },
+            { weight: 175 - (week * 4), reps: 8, distance: 0, time: 0 }
           ]
         },
         {
           name: 'Barbell Curl',
+          // STABLE
           sets: () => [
             { weight: 65, reps: 12, distance: 0, time: 0 },
             { weight: 65, reps: 10, distance: 0, time: 0 },
@@ -116,14 +125,16 @@ export const initializeSampleData = async () => {
       exercises: [
         {
           name: 'Dumbbell Bench Press',
+          // INCREASING - Good progress
           sets: (week) => [
-            { weight: 50 + (week * 2), reps: 10, distance: 0, time: 0 },
-            { weight: 60 + (week * 2), reps: 8, distance: 0, time: 0 },
-            { weight: 70 + (week * 2), reps: 6, distance: 0, time: 0 }
+            { weight: 50 + (week * 3), reps: 10, distance: 0, time: 0 },
+            { weight: 60 + (week * 3), reps: 8, distance: 0, time: 0 },
+            { weight: 70 + (week * 3), reps: 6, distance: 0, time: 0 }
           ]
         },
         {
           name: 'Cable Flyes',
+          // STABLE
           sets: () => [
             { weight: 40, reps: 12, distance: 0, time: 0 },
             { weight: 45, reps: 10, distance: 0, time: 0 }
@@ -131,10 +142,11 @@ export const initializeSampleData = async () => {
         },
         {
           name: 'Tricep Pushdown',
-          sets: () => [
-            { weight: 50, reps: 12, distance: 0, time: 0 },
-            { weight: 55, reps: 10, distance: 0, time: 0 },
-            { weight: 60, reps: 8, distance: 0, time: 0 }
+          // INCREASING - Small gains
+          sets: (week) => [
+            { weight: 50 + (week * 2), reps: 12, distance: 0, time: 0 },
+            { weight: 55 + (week * 2), reps: 10, distance: 0, time: 0 },
+            { weight: 60 + (week * 2), reps: 8, distance: 0, time: 0 }
           ]
         }
       ]
@@ -145,13 +157,15 @@ export const initializeSampleData = async () => {
       exercises: [
         {
           name: 'Dumbbell Shoulder Press',
+          // DECREASING - Shoulder fatigue
           sets: (week) => [
-            { weight: 35 + (week * 2), reps: 10, distance: 0, time: 0 },
-            { weight: 40 + (week * 2), reps: 8, distance: 0, time: 0 }
+            { weight: 55 - (week * 2), reps: 10, distance: 0, time: 0 },
+            { weight: 60 - (week * 2), reps: 8, distance: 0, time: 0 }
           ]
         },
         {
           name: 'Lateral Raises',
+          // STABLE
           sets: () => [
             { weight: 15, reps: 15, distance: 0, time: 0 },
             { weight: 15, reps: 12, distance: 0, time: 0 },
@@ -160,6 +174,7 @@ export const initializeSampleData = async () => {
         },
         {
           name: 'Plank',
+          // STABLE
           sets: () => [
             { weight: 0, reps: 60, distance: 0, time: 0 },
             { weight: 0, reps: 45, distance: 0, time: 0 }
@@ -219,15 +234,14 @@ export const initializeSampleData = async () => {
   ];
 
   // Generate workouts for 7 weeks
-  // Each week: 3-5 workouts, mix of strength and cardio
   const weeklyPatterns = [
-    [0, 1, 4], // Week 1: Upper Body, Leg Day, Shoulders
-    [2, 5, 6], // Week 2: Back & Biceps, Morning Run, Bike
-    [0, 3, 7], // Week 3: Upper Body, Chest & Triceps, Swim
-    [1, 4, 5], // Week 4: Leg Day, Shoulders, Morning Run
-    [2, 3, 6], // Week 5: Back & Biceps, Chest & Triceps, Bike
-    [0, 1, 5, 7], // Week 6: Upper Body, Leg Day, Morning Run, Swim
-    [2, 4, 6, 7] // Week 7: Back & Biceps, Shoulders, Bike, Swim
+    [0, 1, 4], // Week 1
+    [2, 5, 6], // Week 2
+    [0, 3, 7], // Week 3
+    [1, 4, 5], // Week 4
+    [2, 3, 6], // Week 5
+    [0, 1, 5, 7], // Week 6
+    [2, 4, 6, 7] // Week 7
   ];
 
   weeklyPatterns.forEach((weekWorkouts, weekIndex) => {
@@ -249,23 +263,22 @@ export const initializeSampleData = async () => {
     });
   });
 
-  // Add a few more random workouts to fill gaps
+  // Add additional workouts
   const additionalWorkouts = [
-    { daysAgo: 2, templateIndex: 5 }, // Running
-    { daysAgo: 4, templateIndex: 0 }, // Upper Body
-    { daysAgo: 9, templateIndex: 6 }, // Bike
-    { daysAgo: 12, templateIndex: 1 }, // Leg Day
-    { daysAgo: 16, templateIndex: 5 }, // Running
-    { daysAgo: 20, templateIndex: 2 }, // Back & Biceps
-    { daysAgo: 25, templateIndex: 7 }, // Swim
-    { daysAgo: 30, templateIndex: 3 }, // Chest & Triceps
-    { daysAgo: 35, templateIndex: 4 }, // Shoulders
-    { daysAgo: 40, templateIndex: 6 }, // Bike
-    { daysAgo: 45, templateIndex: 0 }, // Upper Body
+    { daysAgo: 2, templateIndex: 5 },
+    { daysAgo: 4, templateIndex: 0 },
+    { daysAgo: 9, templateIndex: 6 },
+    { daysAgo: 12, templateIndex: 1 },
+    { daysAgo: 16, templateIndex: 5 },
+    { daysAgo: 20, templateIndex: 2 },
+    { daysAgo: 25, templateIndex: 7 },
+    { daysAgo: 30, templateIndex: 3 },
+    { daysAgo: 35, templateIndex: 4 },
+    { daysAgo: 40, templateIndex: 6 },
+    { daysAgo: 45, templateIndex: 0 },
   ];
 
   additionalWorkouts.forEach(({ daysAgo, templateIndex }) => {
-    // Check if workout already exists for this day
     const date = formatDate(getDateDaysAgo(daysAgo));
     const exists = workouts.some(w => w.date === date);
     
@@ -286,9 +299,11 @@ export const initializeSampleData = async () => {
     }
   });
 
-  // Sort by date (newest first)
   workouts.sort((a, b) => new Date(b.date) - new Date(a.date));
   
   await saveWorkouts(workouts);
-  console.log(`Sample data initialized with ${workouts.length} workouts over the past 7 weeks!`);
+  console.log(`Sample data initialized with ${workouts.length} workouts!`);
+  console.log('INCREASING: Bench Press, Squat, Deadlift, Dumbbell Bench, Tricep Pushdown, Leg Press');
+  console.log('DECREASING: Overhead Press, Barbell Row, Dumbbell Shoulder Press');
+  console.log('STABLE: Pull-Ups, Walking Lunges, Barbell Curl, Cable Flyes, Lateral Raises, Plank');
 };
