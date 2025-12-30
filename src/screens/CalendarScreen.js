@@ -2,12 +2,12 @@ import { Activity, Bike, Calendar, ChevronLeft, ChevronRight, Dumbbell, Flame } 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-  Modal
+  View
 } from 'react-native';
 import { calculateWeekStreak } from '../utils/calculations';
 import { getTodayString, loadWorkouts } from '../utils/storage';

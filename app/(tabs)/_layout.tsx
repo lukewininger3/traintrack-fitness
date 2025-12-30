@@ -1,33 +1,84 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
+import { Activity, BarChart3, Calendar, TrendingUp, Trophy } from 'lucide-react-native';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
+export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+        headerStyle: {
+          backgroundColor: '#111827',
+        },
+        headerTintColor: '#fff',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+        tabBarStyle: {
+          backgroundColor: '#111827',
+          borderTopColor: '#374151',
+          paddingBottom: 34,
+          paddingTop: 8,
+          height: 88,
+        },
+        tabBarActiveTintColor: '#fff',
+        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '600',
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'TrainTracks',
+          tabBarLabel: 'Calendar',
+          tabBarIcon: ({ color, focused }) => (
+            <Calendar size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="activities"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Activities',
+          tabBarIcon: ({ color, focused }) => (
+            <Activity size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="analytics"
+        options={{
+          title: 'Analytics',
+          tabBarIcon: ({ color, focused }) => (
+            <BarChart3 size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="progress"
+        options={{
+          title: 'Progress',
+          tabBarIcon: ({ color, focused }) => (
+            <TrendingUp size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="trophy"
+        options={{
+          title: 'Trophy Case',
+          tabBarIcon: ({ color, focused }) => (
+            <Trophy size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+          ),
+        }}
+      />
+      {/* Profile is hidden from tabs - accessible via header button */}
+      <Tabs.Screen
+        name="profile"
+        options={{
+          href: null, // This hides it from tabs
+          headerShown: false,
         }}
       />
     </Tabs>

@@ -1,98 +1,53 @@
-import { Tabs } from 'expo-router';
-import { Activity, Calendar, TrendingUp, Trophy, BarChart3 } from 'lucide-react-native';
+import { router, Slot, useRootNavigationState, useSegments } from 'expo-router';
+import { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
+
+function RootLayoutNav() {
+  const { user, loading } = useAuth();
+  const segments = useSegments();
+  const navigationState = useRootNavigationState();
+
+  useEffect(() => {
+    // Don't do anything until navigation is ready and auth is loaded
+    if (!navigationState?.key || loading) return;
+
+    const inAuthGroup = segments[0] === 'auth';
+
+    if (!user && !inAuthGroup) {
+      // User not logged in and trying to access app - redirect to login
+      router.replace('/auth/login' as any);
+    } else if (user && inAuthGroup) {
+      // User IS logged in but still on auth screen - redirect to app
+      router.replace('/(tabs)' as any);
+    }
+  }, [user, loading, segments, navigationState?.key]);
+
+  // Show loading screen while checking auth or navigation not ready
+  if (loading || !navigationState?.key) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+      </View>
+    );
+  }
+
+  return <Slot />;
+}
 
 export default function RootLayout() {
   return (
-    <Tabs
-      screenOptions={({ route }) => ({
-        headerStyle: {
-          backgroundColor: '#111827',
-        },
-        headerTintColor: '#fff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
-        tabBarStyle: {
-          backgroundColor: '#111827',
-          borderTopColor: '#374151',
-          paddingBottom: 34,
-          paddingTop: 8,
-          height: 88,
-        },
-        tabBarActiveTintColor: '#fff',
-        tabBarInactiveTintColor: '#9CA3AF',
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '600',
-        },
-      })}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'TrainTracks',
-          tabBarLabel: 'Calendar',
-          tabBarIcon: ({ color, focused }) => (
-            <Calendar size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="activities"
-        options={{
-          title: 'Activities',
-          tabBarIcon: ({ color, focused }) => (
-            <Activity size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="analytics"
-        options={{
-          title: 'Analytics',
-          tabBarIcon: ({ color, focused }) => (
-            <BarChart3 size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="progress"
-        options={{
-          title: 'Progress',
-          tabBarIcon: ({ color, focused }) => (
-            <TrendingUp size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="trophy"
-        options={{
-          title: 'Trophy Case',
-          tabBarIcon: ({ color, focused }) => (
-            <Trophy size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="(tabs)"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="modal"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="workout-builder"
-        options={{
-          href: null,
-          headerShown: false,
-          tabBarStyle: { display: 'none' },
-        }}
-      />
-    </Tabs>
+    <AuthProvider>
+      <RootLayoutNav />
+    </AuthProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1F2937',
+  },
+});
