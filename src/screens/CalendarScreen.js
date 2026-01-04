@@ -1,4 +1,4 @@
-import { Activity, Bike, Calendar, ChevronLeft, ChevronRight, Dumbbell, Flame } from 'lucide-react-native';
+import { Activity, Bike, ChevronLeft, ChevronRight, Dumbbell, Flame, Zap } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
@@ -11,8 +11,11 @@ import {
 } from 'react-native';
 import { calculateWeekStreak } from '../utils/calculations';
 import { getTodayString, loadWorkouts } from '../utils/storage';
+import { COLORS, TYPOGRAPHY, SPACING, RADIUS, SHADOWS } from '../theme/design';
 
 const { width } = Dimensions.get('window');
+// Calculate day size: screen width - container padding (lg*2) - calendar card padding (lg*2) - week indicator space (48) - day margins (14)
+const DAY_SIZE = (width - SPACING.lg * 2 - SPACING.lg * 2 - 48 - 14) / 7;
 
 export default function CalendarScreen({ navigation }) {
   const [workouts, setWorkouts] = useState([]);
@@ -42,6 +45,10 @@ export default function CalendarScreen({ navigation }) {
     return icons[type] || Activity;
   };
 
+  const getWorkoutColor = (type) => {
+    return COLORS.workoutTypes[type] || COLORS.text.tertiary;
+  };
+
   const previousMonth = () => {
     if (calendarMonth === 0) {
       setCalendarMonth(11);
@@ -61,7 +68,15 @@ export default function CalendarScreen({ navigation }) {
   };
 
   const getCurrentMonthName = () => {
-    return new Date(calendarYear, calendarMonth).toLocaleString('default', { month: 'long', year: 'numeric' });
+    return new Date(calendarYear, calendarMonth).toLocaleString('default', {
+      month: 'long',
+      year: 'numeric'
+    }).toUpperCase();
+  };
+
+  // Helper to check if a date has a workout
+  const dateHasWorkout = (dateStr) => {
+    return workouts.some(w => w.date === dateStr);
   };
 
   const calendarData = useMemo(() => {
@@ -69,19 +84,35 @@ export default function CalendarScreen({ navigation }) {
     const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
     const startingDayOfWeek = firstDay.getDay();
     const daysInMonth = lastDay.getDate();
-    
+    const today = getTodayString();
+
     const calendar = [];
     let week = [];
-    
+    let weekHasWorkoutInAdjacentMonth = false;
+
+    // Check if first week has workouts in previous month
+    if (startingDayOfWeek > 0) {
+      const prevMonthLastDay = new Date(calendarYear, calendarMonth, 0);
+      for (let i = startingDayOfWeek - 1; i >= 0; i--) {
+        const prevDay = prevMonthLastDay.getDate() - i;
+        const prevMonth = calendarMonth === 0 ? 12 : calendarMonth;
+        const prevYear = calendarMonth === 0 ? calendarYear - 1 : calendarYear;
+        const dateStr = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`;
+        if (dateHasWorkout(dateStr)) {
+          weekHasWorkoutInAdjacentMonth = true;
+          break;
+        }
+      }
+    }
+
     for (let i = 0; i < startingDayOfWeek; i++) {
       week.push(null);
     }
-    
+
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const dayWorkouts = workouts.filter(w => w.date === dateStr);
-      const today = getTodayString();
-      
+
       week.push({
         day,
         date: dateStr,
@@ -89,36 +120,87 @@ export default function CalendarScreen({ navigation }) {
         workoutType: dayWorkouts[0]?.type,
         isToday: dateStr === today
       });
-      
+
       if (week.length === 7) {
+        // Add metadata about adjacent month workouts for this week
+        week.adjacentMonthHasWorkout = weekHasWorkoutInAdjacentMonth;
         calendar.push(week);
         week = [];
+        weekHasWorkoutInAdjacentMonth = false;
       }
     }
-    
-    while (week.length > 0 && week.length < 7) {
-      week.push(null);
-    }
+
+    // Handle last partial week - check for workouts in next month
     if (week.length > 0) {
+      const remainingDays = 7 - week.length;
+      for (let i = 1; i <= remainingDays; i++) {
+        const nextMonth = calendarMonth === 11 ? 1 : calendarMonth + 2;
+        const nextYear = calendarMonth === 11 ? calendarYear + 1 : calendarYear;
+        const dateStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+        if (dateHasWorkout(dateStr)) {
+          weekHasWorkoutInAdjacentMonth = true;
+          break;
+        }
+      }
+
+      while (week.length < 7) {
+        week.push(null);
+      }
+      week.adjacentMonthHasWorkout = weekHasWorkoutInAdjacentMonth;
       calendar.push(week);
     }
-    
+
     return calendar;
   }, [calendarMonth, calendarYear, workouts]);
 
+  const monthWorkoutCount = useMemo(() => {
+    const firstDay = new Date(calendarYear, calendarMonth, 1);
+    const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
+    return workouts.filter(w => {
+      const d = new Date(w.date);
+      return d >= firstDay && d <= lastDay;
+    }).length;
+  }, [workouts, calendarMonth, calendarYear]);
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.content}>
+        {/* Hero Stats Section */}
+        <View style={styles.heroSection}>
+          <View style={styles.heroStatLarge}>
+            <View style={styles.streakContainer}>
+              <Flame size={28} color={COLORS.accent.primary} strokeWidth={2.5} />
+              <Text style={styles.heroNumber}>{weekStreak}</Text>
+            </View>
+            <Text style={styles.heroLabel}>WEEK STREAK</Text>
+          </View>
+
+          <View style={styles.heroDivider} />
+
+          <View style={styles.heroStatLarge}>
+            <View style={styles.streakContainer}>
+              <Zap size={28} color={COLORS.tertiary.primary} strokeWidth={2.5} />
+              <Text style={styles.heroNumber}>{workouts.length}</Text>
+            </View>
+            <Text style={styles.heroLabel}>TOTAL WORKOUTS</Text>
+          </View>
+        </View>
+
         {/* Calendar Card */}
-        <View style={styles.card}>
+        <View style={styles.calendarCard}>
           {/* Month Navigation */}
           <View style={styles.monthNav}>
             <Pressable onPress={previousMonth} style={styles.navButton}>
-              <ChevronLeft size={24} color="#fff" strokeWidth={2.5} />
+              <ChevronLeft size={24} color={COLORS.text.primary} strokeWidth={2.5} />
             </Pressable>
-            <Text style={styles.monthText}>{getCurrentMonthName()}</Text>
+            <View style={styles.monthTitleContainer}>
+              <Text style={styles.monthText}>{getCurrentMonthName()}</Text>
+              <View style={styles.monthBadge}>
+                <Text style={styles.monthBadgeText}>{monthWorkoutCount}</Text>
+              </View>
+            </View>
             <Pressable onPress={nextMonth} style={styles.navButton}>
-              <ChevronRight size={24} color="#fff" strokeWidth={2.5} />
+              <ChevronRight size={24} color={COLORS.text.primary} strokeWidth={2.5} />
             </Pressable>
           </View>
 
@@ -127,15 +209,15 @@ export default function CalendarScreen({ navigation }) {
             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
               <Text key={idx} style={styles.dayHeader}>{day}</Text>
             ))}
+            <View style={styles.weekHeaderSpacer} />
           </View>
 
-          {/* Calendar Grid with Week Streaks */}
+          {/* Calendar Grid */}
           {calendarData.map((week, weekIdx) => {
-            const hasWorkoutThisWeek = week.some(day => day?.hasWorkout);
-            const isFutureWeek = week.every(day => !day || day.date > getTodayString());
+            const hasWorkoutInVisibleDays = week.some(day => day?.hasWorkout);
+            const hasWorkoutThisWeek = hasWorkoutInVisibleDays || week.adjacentMonthHasWorkout;
             const today = getTodayString();
             const isCurrentWeek = week.some(day => day?.date === today);
-            const showStreak = isCurrentWeek && calendarMonth === new Date().getMonth() && calendarYear === new Date().getFullYear();
 
             return (
               <View key={weekIdx} style={styles.weekRow}>
@@ -144,6 +226,7 @@ export default function CalendarScreen({ navigation }) {
                   {week.map((day, dayIdx) => {
                     const Icon = day?.hasWorkout ? getWorkoutIcon(day.workoutType) : null;
                     const isFutureDay = day && day.date > today;
+                    const workoutColor = day?.hasWorkout ? getWorkoutColor(day.workoutType) : null;
 
                     return (
                       <Pressable
@@ -162,18 +245,18 @@ export default function CalendarScreen({ navigation }) {
                           !day && styles.dayInvisible,
                           day?.isToday && styles.dayToday,
                           day?.hasWorkout && !day?.isToday && styles.dayWithWorkout,
-                          !day?.hasWorkout && !day?.isToday && !isFutureDay && styles.dayPast,
-                          isFutureDay && styles.dayFuture
                         ]}
                       >
                         {day?.hasWorkout && Icon ? (
-                          <Icon size={20} color={day.isToday ? "#fff" : "#1F2937"} strokeWidth={2.5} />
+                          <View style={[styles.workoutIconBg, { backgroundColor: workoutColor + '20' }]}>
+                            <Icon size={16} color={workoutColor} strokeWidth={2.5} />
+                          </View>
                         ) : (
                           <Text style={[
                             styles.dayText,
                             day?.isToday && styles.dayTextToday,
-                            !day?.hasWorkout && !isFutureDay && styles.dayTextPast,
-                            isFutureDay && styles.dayTextFuture
+                            isFutureDay && styles.dayTextFuture,
+                            !isFutureDay && !day?.isToday && styles.dayTextPast
                           ]}>
                             {day?.day}
                           </Text>
@@ -183,17 +266,16 @@ export default function CalendarScreen({ navigation }) {
                   })}
                 </View>
 
-                {/* Week Streak Circle */}
+                {/* Week Indicator */}
                 <View style={styles.weekIndicator}>
-                  {showStreak ? (
-                    <View style={styles.fireContainer}>
-                      <Flame size={32} color="#FACC15" fill="#FACC15" strokeWidth={2.5} />
+                  {isCurrentWeek && weekStreak > 0 ? (
+                    <View style={styles.currentWeekIndicator}>
+                      <Flame size={20} color={COLORS.accent.primary} fill={COLORS.accent.primary} strokeWidth={2} />
                     </View>
+                  ) : hasWorkoutThisWeek ? (
+                    <View style={styles.weekCircleFilled} />
                   ) : (
-                    <View style={[
-                      styles.weekCircle,
-                      hasWorkoutThisWeek && !isFutureWeek && styles.weekCircleFilled
-                    ]} />
+                    <View style={styles.weekCircle} />
                   )}
                 </View>
               </View>
@@ -201,22 +283,21 @@ export default function CalendarScreen({ navigation }) {
           })}
         </View>
 
-        {/* Quick Stats */}
-        <View style={styles.statsCard}>
-          <View style={styles.statItem}>
-            <Flame size={24} color="#FACC15" />
-            <Text style={styles.statValue}>{weekStreak}</Text>
-            <Text style={styles.statLabel}>Week Streak</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Calendar size={24} color="#9CA3AF" />
-            <Text style={styles.statValue}>{workouts.length}</Text>
-            <Text style={styles.statLabel}>Total Workouts</Text>
+        {/* Legend */}
+        <View style={styles.legendCard}>
+          <Text style={styles.legendTitle}>WORKOUT TYPES</Text>
+          <View style={styles.legendItems}>
+            {Object.entries(COLORS.workoutTypes).map(([type, color]) => (
+              <View key={type} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: color }]} />
+                <Text style={styles.legendText}>{type}</Text>
+              </View>
+            ))}
           </View>
         </View>
       </View>
 
-      {/* Workout Detail Modal (View Only) */}
+      {/* Workout Detail Modal */}
       {selectedWorkout && (
         <Modal
           visible={true}
@@ -226,22 +307,24 @@ export default function CalendarScreen({ navigation }) {
         >
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <View style={styles.modalIconContainer}>
+              <View style={[styles.modalIconContainer, { backgroundColor: getWorkoutColor(selectedWorkout.type) + '20' }]}>
                 {React.createElement(getWorkoutIcon(selectedWorkout.type), {
                   size: 28,
-                  color: '#1F2937',
-                  strokeWidth: 2
+                  color: getWorkoutColor(selectedWorkout.type),
+                  strokeWidth: 2.5
                 })}
               </View>
               <View style={styles.modalHeaderText}>
                 <Text style={styles.modalTitle}>{selectedWorkout.name}</Text>
-                <Text style={styles.modalSubtitle}>{selectedWorkout.date} • {selectedWorkout.type}</Text>
+                <Text style={styles.modalSubtitle}>
+                  {selectedWorkout.date} • {selectedWorkout.type}
+                </Text>
               </View>
               <Pressable
                 onPress={() => setSelectedWorkout(null)}
                 style={styles.closeButton}
               >
-                <Text style={styles.closeButtonText}>✕</Text>
+                <Text style={styles.closeButtonText}>Done</Text>
               </Pressable>
             </View>
 
@@ -251,7 +334,7 @@ export default function CalendarScreen({ navigation }) {
                   <Text style={styles.exerciseName}>{exercise.name}</Text>
                   {exercise.sets?.map((set, setIdx) => (
                     <View key={setIdx} style={styles.setRow}>
-                      <Text style={styles.setLabel}>Set {setIdx + 1}</Text>
+                      <Text style={styles.setLabel}>SET {setIdx + 1}</Text>
                       <Text style={styles.setValue}>
                         {set.distance > 0 && set.time > 0
                           ? `${set.distance} mi • ${set.time} min`
@@ -272,46 +355,116 @@ export default function CalendarScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.background.primary,
   },
   content: {
-    padding: 16,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xxxl,
   },
-  card: {
-    backgroundColor: '#374151',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+
+  // Hero Section
+  heroSection: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.xl,
+    marginBottom: SPACING.lg,
+    alignItems: 'center',
+  },
+  heroStatLarge: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  streakContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  heroNumber: {
+    ...TYPOGRAPHY.stat,
+    color: COLORS.text.primary,
+  },
+  heroLabel: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.secondary,
+    marginTop: SPACING.sm,
+  },
+  heroDivider: {
+    width: 1,
+    height: 60,
+    backgroundColor: COLORS.surface.border,
+    marginHorizontal: SPACING.lg,
+  },
+
+  // Calendar Card
+  calendarCard: {
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
   },
   monthNav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   navButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.background.elevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
   },
   monthText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
+    ...TYPOGRAPHY.h3,
+    color: COLORS.text.primary,
+    letterSpacing: 1,
   },
+  monthBadge: {
+    backgroundColor: COLORS.accent.primaryDim,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+  },
+  monthBadgeText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.accent.primary,
+    fontWeight: '700',
+  },
+
+  // Day Headers
   dayHeaders: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
+    alignItems: 'center',
   },
   dayHeader: {
-    flex: 1,
+    width: DAY_SIZE,
     textAlign: 'center',
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#D1D5DB',
-    paddingVertical: 4,
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.tertiary,
+    marginHorizontal: 1,
   },
+  weekHeaderSpacer: {
+    width: 36,
+    marginLeft: SPACING.md,
+  },
+
+  // Week Row
   weekRow: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: SPACING.xs,
     alignItems: 'center',
   },
   daysRow: {
@@ -319,169 +472,178 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   dayButton: {
-    flex: 1,
-    aspectRatio: 1,
+    width: DAY_SIZE,
+    height: DAY_SIZE,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 100,
-    marginHorizontal: 2,
+    borderRadius: RADIUS.md,
+    marginHorizontal: 1,
   },
   dayInvisible: {
     opacity: 0,
   },
   dayToday: {
-    backgroundColor: '#111827',
+    backgroundColor: COLORS.accent.primary,
   },
   dayWithWorkout: {
-    backgroundColor: '#fff',
-  },
-  dayPast: {
-    backgroundColor: '#4B5563',
-  },
-  dayFuture: {
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#4B5563',
   },
   dayText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.secondary,
   },
   dayTextToday: {
-    color: '#fff',
-  },
-  dayTextPast: {
-    color: '#fff',
+    color: COLORS.text.inverse,
   },
   dayTextFuture: {
-    color: '#fff',
+    color: COLORS.text.tertiary,
   },
+  dayTextPast: {
+    color: COLORS.text.secondary,
+  },
+  workoutIconBg: {
+    width: DAY_SIZE - 4,
+    height: DAY_SIZE - 4,
+    borderRadius: RADIUS.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Week Indicator
   weekIndicator: {
-    width: 32,
-    marginLeft: 12,
+    width: 36,
+    marginLeft: SPACING.md,
     justifyContent: 'center',
     alignItems: 'center',
   },
   weekCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#4B5563',
+    borderColor: COLORS.surface.border,
   },
   weekCircleFilled: {
-    backgroundColor: '#FACC15',
-    borderWidth: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: COLORS.accent.primary,
   },
-  fireContainer: {
-    width: 32,
-    height: 32,
+  currentWeekIndicator: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.accent.primaryDim,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  fireNumber: {
-    position: 'absolute',
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 4,
+
+  // Legend
+  legendCard: {
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.md,
   },
-  statsCard: {
+  legendTitle: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.tertiary,
+    marginBottom: SPACING.sm,
+  },
+  legendItems: {
     flexDirection: 'row',
-    backgroundColor: '#374151',
-    borderRadius: 16,
-    padding: 16,
+    flexWrap: 'wrap',
+    gap: SPACING.md,
   },
-  statItem: {
-    flex: 1,
+  legendItem: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: SPACING.xs,
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 8,
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  statLabel: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 4,
+  legendText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
   },
+
+  // Modal
   modalContainer: {
     flex: 1,
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.background.primary,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    paddingTop: 60,
-    backgroundColor: '#111827',
+    padding: SPACING.lg,
+    paddingTop: SPACING.xxxl,
+    backgroundColor: COLORS.background.secondary,
     borderBottomWidth: 1,
-    borderBottomColor: '#4B5563',
+    borderBottomColor: COLORS.surface.border,
   },
   modalIconContainer: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   modalHeaderText: {
     flex: 1,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
+    ...TYPOGRAPHY.h3,
+    color: COLORS.text.primary,
   },
   modalSubtitle: {
-    fontSize: 14,
-    color: '#9CA3AF',
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
     marginTop: 2,
   },
   closeButton: {
-    padding: 8,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
   },
   closeButtonText: {
-    fontSize: 24,
-    color: '#9CA3AF',
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.accent.primary,
   },
   modalScroll: {
-    padding: 20,
+    padding: SPACING.lg,
   },
   exerciseCard: {
-    backgroundColor: '#374151',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
   },
   exerciseName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 12,
+    ...TYPOGRAPHY.h4,
+    color: COLORS.text.primary,
+    marginBottom: SPACING.md,
   },
   setRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#4B5563',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.sm,
+    padding: SPACING.md,
+    marginBottom: SPACING.xs,
   },
   setLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#D1D5DB',
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.tertiary,
   },
   setValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
   },
 });

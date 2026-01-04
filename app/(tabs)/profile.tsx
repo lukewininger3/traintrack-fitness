@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
-import { Calendar, Database, LogOut, Mail, Settings, Trash2, User as UserIcon } from 'lucide-react-native';
-import React, { useState } from 'react';
+import { Calendar, ChevronRight, Database, LogOut, Mail, Settings, Trash2, Trophy, User as UserIcon } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { getPRStats } from '../../src/utils/personalRecords';
 import {
   ActivityIndicator,
   Alert,
@@ -14,37 +15,41 @@ import { supabase } from '../../src/config/supabase';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { initializeSampleData } from '../../src/utils/initSampleData';
 import { clearLocalWorkouts } from '../../src/utils/storage';
+import { formatDateLong } from '../../src/utils/dateFormatter';
+import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../src/theme/design';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const [loadingSample, setLoadingSample] = useState(false);
+  const [prStats, setPRStats] = useState<{ totalPRs: number; recentPRs: number } | null>(null);
+
+  useEffect(() => {
+    loadPRStats();
+  }, []);
+
+  const loadPRStats = async () => {
+    const stats = await getPRStats();
+    setPRStats(stats);
+  };
+
   const handleClearAllData = async () => {
     Alert.alert(
       'Clear All Data',
       'This will delete all workouts from cloud and local storage. Continue?',
       [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete Everything',
           style: 'destructive',
           onPress: async () => {
             try {
               setLoadingSample(true);
-              
-              // Delete from Supabase cloud
               const { error: cloudError } = await supabase
                 .from('workouts')
                 .delete()
                 .eq('user_id', (user as any)?.id);
-
               if (cloudError) throw cloudError;
-
-              // Clear local cache
               await clearLocalWorkouts();
-
               Alert.alert('Success', 'All data cleared! Restart the app to see changes.');
               setLoadingSample(false);
             } catch (error) {
@@ -57,15 +62,13 @@ export default function ProfileScreen() {
       ]
     );
   };
+
   const handleSignOut = () => {
     Alert.alert(
       'Sign Out',
       'Are you sure you want to sign out?',
       [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Sign Out',
           style: 'destructive',
@@ -87,10 +90,7 @@ export default function ProfileScreen() {
       'Load Sample Data',
       'This will create sample workouts for testing. Continue?',
       [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Load Sample Data',
           onPress: async () => {
@@ -108,111 +108,149 @@ export default function ProfileScreen() {
     );
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
-
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.content}>
+        {/* Profile Header */}
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
-            <UserIcon size={48} color="#fff" strokeWidth={2} />
+            <UserIcon size={40} color={COLORS.accent.primary} strokeWidth={2} />
           </View>
-          <Text style={styles.title}>Profile</Text>
+          <Text style={styles.title}>PROFILE</Text>
           <Text style={styles.subtitle}>Manage your account</Text>
         </View>
 
+        {/* Account Info Card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Account Information</Text>
+            <Text style={styles.cardTitle}>ACCOUNT INFO</Text>
           </View>
 
           <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <Mail size={20} color="#3B82F6" strokeWidth={2} />
+            <View style={[styles.infoIcon, { backgroundColor: COLORS.tertiary.dim }]}>
+              <Mail size={18} color={COLORS.tertiary.primary} strokeWidth={2} />
             </View>
             <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Email</Text>
+              <Text style={styles.infoLabel}>EMAIL</Text>
               <Text style={styles.infoValue}>{(user as any)?.email || 'Not available'}</Text>
             </View>
           </View>
 
           <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <Calendar size={20} color="#10B981" strokeWidth={2} />
+            <View style={[styles.infoIcon, { backgroundColor: COLORS.accent.primaryDim }]}>
+              <Calendar size={18} color={COLORS.accent.primary} strokeWidth={2} />
             </View>
             <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Member Since</Text>
+              <Text style={styles.infoLabel}>MEMBER SINCE</Text>
               <Text style={styles.infoValue}>
-                {(user as any)?.created_at ? formatDate((user as any).created_at) : 'Unknown'}
+                {(user as any)?.created_at ? formatDateLong((user as any).created_at) : 'Unknown'}
               </Text>
             </View>
           </View>
 
           <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <UserIcon size={20} color="#8B5CF6" strokeWidth={2} />
+            <View style={[styles.infoIcon, { backgroundColor: COLORS.secondary.dim }]}>
+              <UserIcon size={18} color={COLORS.secondary.primary} strokeWidth={2} />
             </View>
             <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>User ID</Text>
+              <Text style={styles.infoLabel}>USER ID</Text>
               <Text style={styles.infoValueSmall}>
-                {(user as any)?.id?.substring(0, 8) || 'Unknown'}...
+                {(user as any)?.id?.substring(0, 12) || 'Unknown'}...
               </Text>
             </View>
           </View>
         </View>
 
+        {/* Personal Records Card */}
+        <Pressable
+          style={styles.card}
+          onPress={() => router.push('/personal-records' as any)}
+        >
+          <View style={styles.prCardContent}>
+            <View style={styles.prIconContainer}>
+              <Trophy size={28} color={COLORS.warning} strokeWidth={2} />
+            </View>
+            <View style={styles.prTextContent}>
+              <Text style={styles.prTitle}>PERSONAL RECORDS</Text>
+              <Text style={styles.prSubtitle}>
+                {prStats?.totalPRs ? `${prStats.totalPRs} PRs tracked` : 'Track your best lifts'}
+              </Text>
+            </View>
+            <View style={styles.prStatsContainer}>
+              {prStats?.recentPRs ? (
+                <View style={styles.prBadge}>
+                  <Text style={styles.prBadgeText}>+{prStats.recentPRs}</Text>
+                  <Text style={styles.prBadgeLabel}>THIS MONTH</Text>
+                </View>
+              ) : null}
+              <ChevronRight size={20} color={COLORS.text.tertiary} strokeWidth={2} />
+            </View>
+          </View>
+        </Pressable>
+
+        {/* Developer Settings */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Developer Settings</Text>
+            <Text style={styles.cardTitle}>DEVELOPER</Text>
           </View>
 
-          <Pressable 
+          <Pressable
             style={styles.settingRow}
             onPress={handleLoadSampleData}
             disabled={loadingSample}
           >
-            <Database size={20} color="#F59E0B" strokeWidth={2} />
+            <View style={[styles.settingIcon, { backgroundColor: COLORS.warning + '20' }]}>
+              <Database size={18} color={COLORS.warning} strokeWidth={2} />
+            </View>
             <Text style={styles.settingText}>Load Sample Data</Text>
-            {loadingSample && <ActivityIndicator size="small" color="#F59E0B" />}
+            {loadingSample ? (
+              <ActivityIndicator size="small" color={COLORS.warning} />
+            ) : (
+              <ChevronRight size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+            )}
           </Pressable>
 
           <View style={styles.divider} />
-          <View style={styles.divider} />
 
-          <Pressable 
+          <Pressable
             style={styles.settingRow}
             onPress={handleClearAllData}
             disabled={loadingSample}
           >
-            <Trash2 size={20} color="#EF4444" strokeWidth={2} />
-            <Text style={[styles.settingText, { color: '#EF4444' }]}>Clear All Data</Text>
-            {loadingSample && <ActivityIndicator size="small" color="#EF4444" />}
+            <View style={[styles.settingIcon, { backgroundColor: 'rgba(255, 59, 59, 0.15)' }]}>
+              <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
+            </View>
+            <Text style={[styles.settingText, { color: COLORS.error }]}>Clear All Data</Text>
+            {loadingSample ? (
+              <ActivityIndicator size="small" color={COLORS.error} />
+            ) : (
+              <ChevronRight size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+            )}
           </Pressable>
 
           <View style={styles.divider} />
 
-          <Pressable style={styles.settingRow}>
-            <Settings size={20} color="#9CA3AF" strokeWidth={2} />
+          <Pressable style={[styles.settingRow, { opacity: 0.5 }]} disabled>
+            <View style={[styles.settingIcon, { backgroundColor: COLORS.surface.card }]}>
+              <Settings size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+            </View>
             <Text style={styles.settingText}>App Preferences</Text>
-            <Text style={styles.comingSoon}>Coming Soon</Text>
+            <View style={styles.comingSoonBadge}>
+              <Text style={styles.comingSoonText}>SOON</Text>
+            </View>
           </Pressable>
         </View>
 
+        {/* Sign Out Button */}
         <Pressable style={styles.signOutButton} onPress={handleSignOut}>
-          <LogOut size={20} color="#fff" strokeWidth={2} />
-          <Text style={styles.signOutText}>Sign Out</Text>
+          <LogOut size={20} color={COLORS.text.inverse} strokeWidth={2.5} />
+          <Text style={styles.signOutText}>SIGN OUT</Text>
         </Pressable>
 
+        {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>TrainTracks v1.0.0</Text>
-          <Text style={styles.footerSubtext}>Made with 💪 for fitness tracking</Text>
+          <Text style={styles.footerVersion}>TrainTrack v1.0.0</Text>
+          <Text style={styles.footerText}>Built for athletes</Text>
         </View>
       </View>
     </ScrollView>
@@ -222,132 +260,208 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.background.primary,
   },
   content: {
-    padding: 16,
+    padding: SPACING.lg,
+    paddingTop: SPACING.xxxl,
+    paddingBottom: SPACING.xxxl,
   },
+
+  // Header
   header: {
     alignItems: 'center',
-    marginBottom: 32,
-    marginTop: 20,
+    marginBottom: SPACING.xl,
   },
   avatarContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: '#374151',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: COLORS.accent.primaryDim,
+    borderWidth: 2,
+    borderColor: COLORS.accent.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
+    ...TYPOGRAPHY.h2,
+    color: COLORS.text.primary,
+    letterSpacing: 2,
+    marginBottom: SPACING.xs,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#9CA3AF',
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.secondary,
   },
+
+  // Card
   card: {
-    backgroundColor: '#374151',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
   },
   cardHeader: {
-    marginBottom: 16,
-    paddingBottom: 12,
+    marginBottom: SPACING.lg,
+    paddingBottom: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#4B5563',
+    borderBottomColor: COLORS.surface.border,
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.secondary,
   },
+
+  // Info Row
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.md,
+  },
+
+  // PR Card
+  prCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  prIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: RADIUS.lg,
+    backgroundColor: 'rgba(255, 214, 0, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  prTextContent: {
+    flex: 1,
+  },
+  prTitle: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.primary,
+    marginBottom: 2,
+  },
+  prSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
+  },
+  prStatsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  prBadge: {
+    backgroundColor: COLORS.accent.primaryDim,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.sm,
+    alignItems: 'center',
+  },
+  prBadgeText: {
+    ...TYPOGRAPHY.statSmall,
+    fontSize: 14,
+    color: COLORS.accent.primary,
+  },
+  prBadgeLabel: {
+    ...TYPOGRAPHY.label,
+    fontSize: 8,
+    color: COLORS.accent.primary,
   },
   infoIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#4B5563',
+    borderRadius: RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   infoContent: {
     flex: 1,
   },
   infoLabel: {
-    fontSize: 12,
-    color: '#9CA3AF',
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.tertiary,
+    fontSize: 10,
     marginBottom: 2,
   },
   infoValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
   },
   infoValueSmall: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#fff',
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.secondary,
+    fontSize: 13,
   },
+
+  // Setting Row
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: SPACING.md,
+  },
+  settingIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
   },
   settingText: {
-    fontSize: 16,
-    color: '#fff',
-    marginLeft: 12,
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.primary,
     flex: 1,
-  },
-  comingSoon: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontStyle: 'italic',
   },
   divider: {
     height: 1,
-    backgroundColor: '#4B5563',
-    marginVertical: 8,
+    backgroundColor: COLORS.surface.border,
   },
+  comingSoonBadge: {
+    backgroundColor: COLORS.surface.card,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+  },
+  comingSoonText: {
+    ...TYPOGRAPHY.label,
+    fontSize: 9,
+    color: COLORS.text.tertiary,
+  },
+
+  // Sign Out
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EF4444',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 8,
-    marginBottom: 32,
+    backgroundColor: COLORS.error,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    gap: SPACING.sm,
+    marginBottom: SPACING.xl,
   },
   signOutText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
+    ...TYPOGRAPHY.h4,
+    color: COLORS.text.primary,
+    letterSpacing: 1,
   },
+
+  // Footer
   footer: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: SPACING.lg,
+  },
+  footerVersion: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    marginBottom: SPACING.xs,
   },
   footerText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  footerSubtext: {
-    fontSize: 12,
-    color: '#4B5563',
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    fontSize: 11,
   },
 });

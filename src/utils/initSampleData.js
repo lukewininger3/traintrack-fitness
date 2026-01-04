@@ -1,12 +1,5 @@
 import { saveWorkouts } from './storage';
-
-// Helper function to format date as YYYY-MM-DD
-const formatDate = (date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+import { formatDateForStorage } from './dateFormatter';
 
 // Helper function to get date N days ago
 const getDateDaysAgo = (daysAgo) => {
@@ -249,10 +242,10 @@ export const initializeSampleData = async () => {
       const daysAgo = (weekIndex * 7) + dayOffset;
       const date = getDateDaysAgo(daysAgo);
       const template = workoutTemplates[templateIndex];
-      
+
       workouts.push({
         id: workoutId++,
-        date: formatDate(date),
+        date: formatDateForStorage(date),
         name: template.name,
         type: template.type,
         exercises: template.exercises.map(ex => ({
@@ -279,7 +272,7 @@ export const initializeSampleData = async () => {
   ];
 
   additionalWorkouts.forEach(({ daysAgo, templateIndex }) => {
-    const date = formatDate(getDateDaysAgo(daysAgo));
+    const date = formatDateForStorage(getDateDaysAgo(daysAgo));
     const exists = workouts.some(w => w.date === date);
     
     if (!exists) {
@@ -300,10 +293,6 @@ export const initializeSampleData = async () => {
   });
 
   workouts.sort((a, b) => new Date(b.date) - new Date(a.date));
-  
+
   await saveWorkouts(workouts);
-  console.log(`Sample data initialized with ${workouts.length} workouts!`);
-  console.log('INCREASING: Bench Press, Squat, Deadlift, Dumbbell Bench, Tricep Pushdown, Leg Press');
-  console.log('DECREASING: Overhead Press, Barbell Row, Dumbbell Shoulder Press');
-  console.log('STABLE: Pull-Ups, Walking Lunges, Barbell Curl, Cable Flyes, Lateral Raises, Plank');
 };

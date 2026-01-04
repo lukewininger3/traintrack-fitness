@@ -45,7 +45,6 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
-      console.error('Sign up error:', error);
       return { data: null, error };
     }
   };
@@ -64,14 +63,13 @@ export const AuthProvider = ({ children }) => {
         // Import the migration function
         const { migrateLocalToCloud } = await import('../utils/storage');
         // Run migration in background (don't wait)
-        migrateLocalToCloud().catch(err => 
-          console.error('Migration error:', err)
-        );
+        migrateLocalToCloud().catch(() => {
+          // Migration error
+        });
       }
       
       return { data, error: null };
     } catch (error) {
-      console.error('Sign in error:', error);
       return { data: null, error };
     }
   };
@@ -82,7 +80,6 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error;
       return { error: null };
     } catch (error) {
-      console.error('Sign out error:', error);
       return { error };
     }
   };
@@ -96,7 +93,6 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
-      console.error('Password reset error:', error);
       return { data: null, error };
     }
   };

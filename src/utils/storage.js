@@ -37,7 +37,7 @@ export const saveWorkouts = async (workouts) => {
         .eq('user_id', user.id);
 
       if (deleteError) {
-        console.error('Error deleting old workouts:', deleteError);
+        // Error deleting old workouts
       }
 
       // Insert all workouts
@@ -46,7 +46,6 @@ export const saveWorkouts = async (workouts) => {
         .insert(workoutsToSave);
 
       if (insertError) {
-        console.error('Error saving to cloud:', insertError);
         // Still save locally even if cloud fails
       }
     }
@@ -54,12 +53,11 @@ export const saveWorkouts = async (workouts) => {
     // Always save to local cache (works offline)
     await AsyncStorage.setItem(STORAGE_KEYS.WORKOUTS, JSON.stringify(workouts));
   } catch (error) {
-    console.error('Error saving workouts:', error);
     // Fallback: save locally even if cloud sync fails
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.WORKOUTS, JSON.stringify(workouts));
     } catch (localError) {
-      console.error('Error saving locally:', localError);
+      // Error saving locally
     }
   }
 };
@@ -78,7 +76,6 @@ export const loadWorkouts = async () => {
         .order('date', { ascending: false });
 
       if (error) {
-        console.error('Error loading from cloud:', error);
         // Fallback to local cache
         return await loadFromLocalCache();
       }
@@ -105,7 +102,6 @@ export const loadWorkouts = async () => {
     // No user or no data - load from local cache
     return await loadFromLocalCache();
   } catch (error) {
-    console.error('Error loading workouts:', error);
     // Fallback to local cache
     return await loadFromLocalCache();
   }
@@ -117,7 +113,6 @@ const loadFromLocalCache = async () => {
     const data = await AsyncStorage.getItem(STORAGE_KEYS.WORKOUTS);
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('Error loading from cache:', error);
     return [];
   }
 };
@@ -132,8 +127,6 @@ export const migrateLocalToCloud = async () => {
     const localWorkouts = await loadFromLocalCache();
     
     if (localWorkouts.length === 0) return;
-
-    console.log(`Migrating ${localWorkouts.length} local workouts to cloud...`);
 
     // Check if user already has workouts in cloud
     const { data: existingCloudWorkouts } = await supabase
@@ -163,31 +156,20 @@ export const migrateLocalToCloud = async () => {
         .insert(workoutsToMigrate);
 
       if (error) {
-        console.error('Error migrating workouts:', error);
-      } else {
-        console.log(`Successfully migrated ${workoutsToMigrate.length} workouts to cloud!`);
+        // Error migrating workouts
       }
-    } else {
-      console.log('No new workouts to migrate');
     }
   } catch (error) {
-    console.error('Error during migration:', error);
+    // Error during migration
   }
 };
 
-export const getTodayString = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+export { getTodayString } from './dateFormatter';
 
 export const clearLocalWorkouts = async () => {
   try {
     await AsyncStorage.removeItem(STORAGE_KEYS.WORKOUTS);
-    console.log('Local workouts cleared');
   } catch (error) {
-    console.error('Error clearing local workouts:', error);
+    // Error clearing local workouts
   }
 };

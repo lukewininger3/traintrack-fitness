@@ -1,86 +1,163 @@
 import { Tabs } from 'expo-router';
 import { Activity, BarChart3, Calendar, TrendingUp, Trophy } from 'lucide-react-native';
+import { View, StyleSheet, Platform } from 'react-native';
+import { COLORS, SPACING, RADIUS } from '../../src/theme/design';
 
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
         headerStyle: {
-          backgroundColor: '#111827',
+          backgroundColor: COLORS.background.primary,
+          borderBottomWidth: 0,
+          shadowOpacity: 0,
+          elevation: 0,
         },
-        headerTintColor: '#fff',
+        headerTintColor: COLORS.text.primary,
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontWeight: '800',
+          fontSize: 20,
+          letterSpacing: -0.5,
         },
+        headerShadowVisible: false,
         tabBarStyle: {
-          backgroundColor: '#111827',
-          borderTopColor: '#374151',
-          paddingBottom: 34,
-          paddingTop: 8,
-          height: 88,
+          backgroundColor: COLORS.background.primary,
+          borderTopWidth: 1,
+          borderTopColor: COLORS.surface.border,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+          paddingTop: 12,
+          height: Platform.OS === 'ios' ? 88 : 70,
         },
-        tabBarActiveTintColor: '#fff',
-        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarActiveTintColor: COLORS.accent.primary,
+        tabBarInactiveTintColor: COLORS.text.tertiary,
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: '600',
+          letterSpacing: 0.5,
+          marginTop: 4,
+        },
+        tabBarItemStyle: {
+          paddingTop: 4,
         },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'TrainTracks',
-          tabBarLabel: 'Calendar',
+          title: 'TRAINTRACK',
+          tabBarLabel: 'Home',
+          headerTitleStyle: {
+            fontWeight: '800',
+            fontSize: 18,
+            letterSpacing: 2,
+          },
           tabBarIcon: ({ color, focused }) => (
-            <Calendar size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+            <View style={focused ? styles.activeIconContainer : undefined}>
+              <Calendar
+                size={22}
+                color={color}
+                strokeWidth={focused ? 2.5 : 2}
+              />
+            </View>
           ),
         }}
       />
       <Tabs.Screen
         name="activities"
         options={{
-          title: 'Activities',
+          title: 'ACTIVITIES',
+          headerTitleStyle: {
+            fontWeight: '800',
+            fontSize: 18,
+            letterSpacing: 2,
+          },
           tabBarIcon: ({ color, focused }) => (
-            <Activity size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+            <View style={focused ? styles.activeIconContainer : undefined}>
+              <Activity
+                size={22}
+                color={color}
+                strokeWidth={focused ? 2.5 : 2}
+              />
+            </View>
           ),
         }}
       />
       <Tabs.Screen
         name="analytics"
         options={{
-          title: 'Analytics',
+          title: 'ANALYTICS',
+          headerTitleStyle: {
+            fontWeight: '800',
+            fontSize: 18,
+            letterSpacing: 2,
+          },
           tabBarIcon: ({ color, focused }) => (
-            <BarChart3 size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+            <View style={focused ? styles.activeIconContainer : undefined}>
+              <BarChart3
+                size={22}
+                color={color}
+                strokeWidth={focused ? 2.5 : 2}
+              />
+            </View>
           ),
         }}
       />
       <Tabs.Screen
         name="progress"
         options={{
-          title: 'Progress',
+          title: 'PROGRESS',
+          headerTitleStyle: {
+            fontWeight: '800',
+            fontSize: 18,
+            letterSpacing: 2,
+          },
           tabBarIcon: ({ color, focused }) => (
-            <TrendingUp size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+            <View style={focused ? styles.activeIconContainer : undefined}>
+              <TrendingUp
+                size={22}
+                color={color}
+                strokeWidth={focused ? 2.5 : 2}
+              />
+            </View>
           ),
         }}
       />
       <Tabs.Screen
         name="trophy"
         options={{
-          title: 'Trophy Case',
+          title: 'TROPHIES',
+          headerTitleStyle: {
+            fontWeight: '800',
+            fontSize: 18,
+            letterSpacing: 2,
+          },
           tabBarIcon: ({ color, focused }) => (
-            <Trophy size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+            <View style={focused ? styles.activeIconContainer : undefined}>
+              <Trophy
+                size={22}
+                color={color}
+                strokeWidth={focused ? 2.5 : 2}
+              />
+            </View>
           ),
         }}
       />
-      {/* Profile is hidden from tabs - accessible via header button */}
       <Tabs.Screen
         name="profile"
         options={{
-          href: null, // This hides it from tabs
+          href: null,
           headerShown: false,
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  activeIconContainer: {
+    backgroundColor: COLORS.accent.primaryDim,
+    borderRadius: RADIUS.md,
+    padding: 6,
+    marginBottom: -4,
+  },
+});

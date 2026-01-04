@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { Activity, Bike, Dumbbell, Edit2, Plus, Trash2 } from 'lucide-react-native';
+import { Activity, Bike, Dumbbell, Edit2, FileText, Plus, Trash2 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
@@ -11,6 +11,8 @@ import {
   View
 } from 'react-native';
 import { loadWorkouts, saveWorkouts } from '../utils/storage';
+import { formatDateShort } from '../utils/dateFormatter';
+import { COLORS, TYPOGRAPHY, SPACING, RADIUS, SHADOWS } from '../theme/design';
 
 export default function ActivitiesScreen() {
   const [sections, setSections] = useState([]);
@@ -29,14 +31,13 @@ export default function ActivitiesScreen() {
   const loadData = async () => {
     const data = await loadWorkouts();
     const sorted = data.sort((a, b) => new Date(b.date) - new Date(a.date));
-    
-    // Group workouts by month
+
     const grouped = {};
     sorted.forEach(workout => {
       const date = new Date(workout.date);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const monthName = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
-      
+      const monthName = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' }).toUpperCase();
+
       if (!grouped[monthKey]) {
         grouped[monthKey] = {
           title: monthName,
@@ -45,14 +46,13 @@ export default function ActivitiesScreen() {
       }
       grouped[monthKey].data.push(workout);
     });
-    
-    // Convert to array and sort by date (newest first)
+
     const sectionsArray = Object.values(grouped).sort((a, b) => {
       const dateA = new Date(a.data[0].date);
       const dateB = new Date(b.data[0].date);
       return dateB - dateA;
     });
-    
+
     setSections(sectionsArray);
   };
 
@@ -65,6 +65,10 @@ export default function ActivitiesScreen() {
       'Other': Activity
     };
     return icons[type] || Activity;
+  };
+
+  const getWorkoutColor = (type) => {
+    return COLORS.workoutTypes[type] || COLORS.text.tertiary;
   };
 
   const deleteWorkout = async (workoutId) => {
@@ -88,47 +92,50 @@ export default function ActivitiesScreen() {
     );
   };
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
-
-  const renderSectionHeader = ({ section: { title } }) => (
+  const renderSectionHeader = ({ section: { title, data } }) => (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionHeaderText}>{title}</Text>
+      <View style={styles.sectionBadge}>
+        <Text style={styles.sectionBadgeText}>{data.length}</Text>
+      </View>
     </View>
   );
 
-  const renderWorkout = ({ item: workout }) => (
-    <Pressable
-      onPress={() => setSelectedWorkout(workout)}
-      style={styles.workoutCard}
-    >
-      <View style={styles.workoutIconContainer}>
-        {React.createElement(getWorkoutIcon(workout.type), {
-          size: 24,
-          color: '#fff',
-          strokeWidth: 2
-        })}
-      </View>
-      <View style={styles.workoutInfo}>
-        <Text style={styles.workoutName}>{workout.name}</Text>
-        <Text style={styles.workoutMeta}>
-          {formatDate(workout.date)} • {workout.exercises?.length || 0} exercises
-        </Text>
-      </View>
+  const renderWorkout = ({ item: workout }) => {
+    const Icon = getWorkoutIcon(workout.type);
+    const color = getWorkoutColor(workout.type);
+
+    return (
       <Pressable
-        onPress={() => deleteWorkout(workout.id)}
-        style={styles.deleteButton}
+        onPress={() => setSelectedWorkout(workout)}
+        style={styles.workoutCard}
       >
-        <Trash2 size={20} color="#EF4444" strokeWidth={2} />
+        <View style={[styles.workoutAccent, { backgroundColor: color }]} />
+        <View style={styles.workoutContent}>
+          <View style={[styles.workoutIconContainer, { backgroundColor: color + '15' }]}>
+            <Icon size={22} color={color} strokeWidth={2.5} />
+          </View>
+          <View style={styles.workoutInfo}>
+            <Text style={styles.workoutName}>{workout.name}</Text>
+            <View style={styles.workoutMetaRow}>
+              <Text style={styles.workoutDate}>{formatDateShort(workout.date)}</Text>
+              <View style={styles.metaDot} />
+              <Text style={styles.workoutExercises}>
+                {workout.exercises?.length || 0} exercises
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            onPress={() => deleteWorkout(workout.id)}
+            style={styles.deleteButton}
+            hitSlop={8}
+          >
+            <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
+          </Pressable>
+        </View>
       </Pressable>
-    </Pressable>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -139,10 +146,16 @@ export default function ActivitiesScreen() {
         renderSectionHeader={renderSectionHeader}
         stickySectionHeadersEnabled={true}
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No workouts yet</Text>
-            <Text style={styles.emptySubtext}>Tap the + button to add your first workout</Text>
+            <View style={styles.emptyIconContainer}>
+              <Activity size={48} color={COLORS.text.tertiary} strokeWidth={1.5} />
+            </View>
+            <Text style={styles.emptyTitle}>NO WORKOUTS YET</Text>
+            <Text style={styles.emptySubtext}>
+              Tap the button below to log your first workout
+            </Text>
           </View>
         }
       />
@@ -155,12 +168,16 @@ export default function ActivitiesScreen() {
             onPress={() => setSelectedWorkout(null)}
           />
           <View style={styles.modalContent}>
+            <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
-              <View style={styles.modalIconContainer}>
+              <View style={[
+                styles.modalIconContainer,
+                { backgroundColor: getWorkoutColor(selectedWorkout.type) + '15' }
+              ]}>
                 {React.createElement(getWorkoutIcon(selectedWorkout.type), {
                   size: 28,
-                  color: '#1F2937',
-                  strokeWidth: 2
+                  color: getWorkoutColor(selectedWorkout.type),
+                  strokeWidth: 2.5
                 })}
               </View>
               <View style={styles.modalHeaderText}>
@@ -175,21 +192,15 @@ export default function ActivitiesScreen() {
                     setSelectedWorkout(null);
                     router.push({
                       pathname: '/workout-builder',
-                      params: { 
+                      params: {
                         workoutId: selectedWorkout.id,
-                        returnTo: 'activities' 
+                        returnTo: 'activities'
                       }
                     });
                   }}
                   style={styles.editButton}
                 >
-                  <Edit2 size={20} color="#3B82F6" strokeWidth={2} />
-                </Pressable>
-                <Pressable
-                  onPress={() => setSelectedWorkout(null)}
-                  style={styles.closeButton}
-                >
-                  <Text style={styles.closeButtonText}>✕</Text>
+                  <Edit2 size={20} color={COLORS.accent.primary} strokeWidth={2} />
                 </Pressable>
               </View>
             </View>
@@ -200,7 +211,7 @@ export default function ActivitiesScreen() {
                   <Text style={styles.exerciseName}>{exercise.name}</Text>
                   {exercise.sets?.map((set, setIdx) => (
                     <View key={setIdx} style={styles.setRow}>
-                      <Text style={styles.setLabel}>Set {setIdx + 1}</Text>
+                      <Text style={styles.setLabel}>SET {setIdx + 1}</Text>
                       <Text style={styles.setValue}>
                         {set.distance > 0 && set.time > 0
                           ? `${set.distance} mi • ${set.time} min${set.pace > 0 ? ` • ${set.pace} min/mi` : ''}`
@@ -215,14 +226,22 @@ export default function ActivitiesScreen() {
         </View>
       )}
 
-      {/* Floating Add Button */}
+      {/* Floating Action Buttons */}
       {!selectedWorkout && (
-        <Pressable
-          style={styles.fab}
-          onPress={() => router.push('/workout-builder')}
-        >
-          <Plus size={28} color="#fff" strokeWidth={2.5} />
-        </Pressable>
+        <View style={styles.fabContainer}>
+          <Pressable
+            style={styles.fabSecondary}
+            onPress={() => router.push('/templates')}
+          >
+            <FileText size={22} color={COLORS.tertiary.primary} strokeWidth={2.5} />
+          </Pressable>
+          <Pressable
+            style={styles.fab}
+            onPress={() => router.push('/workout-builder')}
+          >
+            <Plus size={28} color={COLORS.text.inverse} strokeWidth={2.5} />
+          </Pressable>
+        </View>
       )}
     </View>
   );
@@ -231,73 +250,125 @@ export default function ActivitiesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.background.primary,
   },
   listContent: {
-    paddingBottom: 100,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: 120,
   },
+
+  // Section Header
   sectionHeader: {
-    backgroundColor: '#111827',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
-  },
-  sectionHeaderText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  workoutCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#374151',
-    marginHorizontal: 16,
-    marginVertical: 6,
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: COLORS.background.primary,
+    paddingVertical: SPACING.md,
+    paddingTop: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  sectionHeaderText: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.secondary,
+  },
+  sectionBadge: {
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+  },
+  sectionBadgeText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    fontWeight: '700',
+  },
+
+  // Workout Card
+  workoutCard: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    marginBottom: SPACING.sm,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+  },
+  workoutAccent: {
+    width: 4,
+  },
+  workoutContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+    paddingLeft: SPACING.md,
+    gap: SPACING.md,
   },
   workoutIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#4B5563',
+    width: 44,
+    height: 44,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
   workoutInfo: {
     flex: 1,
   },
   workoutName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+    ...TYPOGRAPHY.h4,
+    color: COLORS.text.primary,
     marginBottom: 4,
   },
-  workoutMeta: {
-    fontSize: 14,
-    color: '#9CA3AF',
+  workoutMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  workoutDate: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
+  },
+  metaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: COLORS.text.tertiary,
+    marginHorizontal: SPACING.sm,
+  },
+  workoutExercises: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
   },
   deleteButton: {
-    padding: 8,
+    padding: SPACING.sm,
   },
+
+  // Empty State
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 80,
+    paddingVertical: 120,
   },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    marginBottom: 8,
+  emptyIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: COLORS.surface.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
+  },
+  emptyTitle: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.text.secondary,
+    marginBottom: SPACING.sm,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#6B7280',
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.tertiary,
+    textAlign: 'center',
   },
+
+  // Modal
   modal: {
     position: 'absolute',
     top: 0,
@@ -312,106 +383,124 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   modalContent: {
-    backgroundColor: '#374151',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: COLORS.background.secondary,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
     maxHeight: '80%',
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.surface.border,
+    alignSelf: 'center',
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
+    padding: SPACING.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#4B5563',
+    borderBottomColor: COLORS.surface.border,
   },
   modalIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#D1D5DB',
+    width: 52,
+    height: 52,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   modalHeaderText: {
     flex: 1,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
+    ...TYPOGRAPHY.h3,
+    color: COLORS.text.primary,
   },
   modalSubtitle: {
-    fontSize: 14,
-    color: '#9CA3AF',
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
+    marginTop: 2,
   },
   modalActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: SPACING.sm,
   },
   editButton: {
-    padding: 8,
-  },
-  closeButton: {
-    padding: 8,
-  },
-  closeButtonText: {
-    fontSize: 24,
-    color: '#9CA3AF',
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.accent.primaryDim,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalScroll: {
-    padding: 20,
+    padding: SPACING.lg,
     paddingBottom: 100,
   },
   exerciseCard: {
-    backgroundColor: '#4B5563',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
   },
   exerciseName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 12,
+    ...TYPOGRAPHY.h4,
+    color: COLORS.text.primary,
+    marginBottom: SPACING.md,
   },
   setRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#374151',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 6,
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.sm,
+    padding: SPACING.md,
+    marginBottom: SPACING.xs,
   },
   setLabel: {
-    color: '#D1D5DB',
-    fontSize: 14,
-    fontWeight: '500',
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.tertiary,
   },
   setValue: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
   },
-  fab: {
+
+  // FAB
+  fabContainer: {
     position: 'absolute',
-    right: 16,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#3B82F6',
+    right: SPACING.lg,
+    bottom: SPACING.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  fabSecondary: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.tertiary.dim,
+    borderWidth: 1,
+    borderColor: COLORS.tertiary.primary + '40',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    ...SHADOWS.md,
+  },
+  fab: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: COLORS.accent.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.lg,
   },
 });

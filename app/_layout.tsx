@@ -2,6 +2,8 @@ import { router, Slot, useRootNavigationState, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
+import { TimerProvider } from '../src/contexts/TimerContext';
+import ErrorBoundary from '../src/components/ErrorBoundary';
 
 function RootLayoutNav() {
   const { user, loading } = useAuth();
@@ -37,9 +39,13 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootLayoutNav />
-    </AuthProvider>
+    <ErrorBoundary fallbackMessage="The app encountered an error. Please restart the app.">
+      <AuthProvider>
+        <TimerProvider>
+          <RootLayoutNav />
+        </TimerProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
