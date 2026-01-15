@@ -43,49 +43,99 @@ export const saveAsTemplate = async (workout, templateName) => {
   }
 };
 
-// Save all templates to cloud and local
-export const saveTemplates = async (templates) => {
+// Background cloud sync for templates
+const syncTemplatesToCloud = async (templates) => {
   try {
     const user = await getCurrentUser();
+    if (!user) return;
 
-    if (user) {
-      // Delete existing templates for this user
-      await supabase
-        .from('workout_templates')
-        .delete()
-        .eq('user_id', user.id);
+    // Get existing template IDs from cloud
+    const { data: cloudTemplates, error: fetchError } = await supabase
+      .from('workout_templates')
+      .select('template_id')
+      .eq('user_id', user.id);
 
-      // Insert all templates
-      if (templates.length > 0) {
-        const templatesToSave = templates.map(template => ({
-          user_id: user.id,
-          template_id: template.id,
-          name: template.name,
-          type: template.type,
-          exercises: template.exercises,
-          created_at: template.createdAt,
-          updated_at: template.updatedAt
-        }));
+    if (fetchError) {
+      console.error('Failed to fetch cloud templates:', fetchError);
+      return;
+    }
 
-        const { error } = await supabase
-          .from('workout_templates')
-          .insert(templatesToSave);
+    const cloudIds = new Set((cloudTemplates || []).map(t => String(t.template_id)));
+    const localIds = new Set(templates.map(t => String(t.id)));
 
-        if (error) {
-          console.error('Error saving templates to cloud:', error);
-        }
+    // Prepare data for batch operations
+    const toInsert = [];
+    const toUpsert = [];
+
+    for (const template of templates) {
+      const templateData = {
+        user_id: user.id,
+        template_id: template.id,
+        name: template.name,
+        type: template.type,
+        exercises: template.exercises,
+        created_at: template.createdAt,
+        updated_at: template.updatedAt
+      };
+
+      if (cloudIds.has(String(template.id))) {
+        toUpsert.push(templateData);
+      } else {
+        toInsert.push(templateData);
       }
     }
 
-    // Always save locally
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
-  } catch (error) {
-    // Fallback to local storage
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
-    } catch (localError) {
-      console.error('Error saving templates locally:', localError);
+    // Batch insert new templates
+    if (toInsert.length > 0) {
+      const { error: insertError } = await supabase
+        .from('workout_templates')
+        .insert(toInsert);
+
+      if (insertError) {
+        console.error('Insert templates failed:', insertError);
+      }
     }
+
+    // Update existing templates (parallel updates for speed)
+    if (toUpsert.length > 0) {
+      await Promise.all(toUpsert.map(template =>
+        supabase
+          .from('workout_templates')
+          .update(template)
+          .eq('user_id', template.user_id)
+          .eq('template_id', template.template_id)
+          .then(({ error }) => {
+            if (error) console.error('Update template failed:', template.template_id, error);
+          })
+      ));
+    }
+
+    // Delete templates that are no longer in local list
+    const idsToDelete = [...cloudIds].filter(id => !localIds.has(id));
+    if (idsToDelete.length > 0) {
+      await supabase
+        .from('workout_templates')
+        .delete()
+        .eq('user_id', user.id)
+        .in('template_id', idsToDelete);
+    }
+  } catch (error) {
+    console.error('Template cloud sync error:', error);
+  }
+};
+
+// Save all templates - LOCAL FIRST, then background cloud sync
+export const saveTemplates = async (templates) => {
+  try {
+    // STEP 1: Save locally FIRST (instant)
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
+
+    // STEP 2: Trigger cloud sync in background (non-blocking)
+    syncTemplatesToCloud(templates).catch(err => {
+      console.error('Background template sync failed:', err);
+    });
+  } catch (error) {
+    console.error('Error saving templates locally:', error);
   }
 };
 
@@ -106,8 +156,9 @@ export const loadTemplates = async () => {
       }
 
       if (data && data.length > 0) {
+        // Ensure ID is a number for consistency (template_id may come as string from Supabase)
         const templates = data.map(t => ({
-          id: t.template_id,
+          id: typeof t.template_id === 'string' ? parseInt(t.template_id, 10) : t.template_id,
           name: t.name,
           type: t.type,
           exercises: t.exercises,

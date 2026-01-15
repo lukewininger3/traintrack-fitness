@@ -92,9 +92,9 @@ export async function getPRForExercise(exerciseName) {
 
   if (exercisePRs.length === 0) return null;
 
-  // Return the one with highest estimated 1RM
+  // Return the one with highest weight lifted
   return exercisePRs.reduce((best, current) =>
-    current.estimatedOneRepMax > best.estimatedOneRepMax ? current : best
+    current.weight > best.weight ? current : best
   );
 }
 
@@ -129,18 +129,17 @@ export async function checkAndUpdatePRs(workout) {
     if (!exercise.sets || exercise.sets.length === 0) continue;
     if (exercise.sets[0].distance !== undefined && exercise.sets[0].distance > 0) continue;
 
-    // Find best set in this exercise (highest estimated 1RM)
+    // Find best set in this exercise (highest weight lifted)
     let bestSet = null;
-    let bestE1RM = 0;
+    let bestWeight = 0;
 
     for (const set of exercise.sets) {
       const weight = parseFloat(set.weight) || 0;
       const reps = parseInt(set.reps) || 0;
 
       if (weight > 0 && reps > 0) {
-        const e1rm = calculateOneRepMax(weight, reps);
-        if (e1rm > bestE1RM) {
-          bestE1RM = e1rm;
+        if (weight > bestWeight) {
+          bestWeight = weight;
           bestSet = { weight, reps };
         }
       }
@@ -150,65 +149,88 @@ export async function checkAndUpdatePRs(workout) {
 
     // Check against current PR for this exercise
     const currentPR = currentRecords.find(pr => pr.exercise === exercise.name);
-    const currentBestE1RM = currentPR?.estimatedOneRepMax || 0;
 
-    // New PR if better than current
-    if (bestE1RM > currentBestE1RM) {
-      const newPR = {
-        id: Date.now() + Math.random(),
-        exercise: exercise.name,
-        weight: bestSet.weight,
-        reps: bestSet.reps,
-        estimatedOneRepMax: bestE1RM,
-        date: workout.date,
-        workoutId: workout.id,
-        workoutName: workout.name,
-        previousWeight: currentPR?.weight || null,
-        previousReps: currentPR?.reps || null,
-        previousE1RM: currentBestE1RM || null,
-      };
+    // Create record data for this exercise
+    const recordData = {
+      id: Date.now() + Math.random(),
+      exercise: exercise.name,
+      weight: bestSet.weight,
+      reps: bestSet.reps,
+      estimatedOneRepMax: calculateOneRepMax(bestSet.weight, bestSet.reps),
+      date: workout.date,
+      workoutId: workout.id,
+      workoutName: workout.name,
+      previousWeight: currentPR?.weight || null,
+      previousReps: currentPR?.reps || null,
+    };
 
-      newPRs.push(newPR);
-
-      // Update or add to records
-      if (currentPR) {
+    if (currentPR) {
+      // Exercise was done before - check if this beats the record
+      if (bestWeight > currentPR.weight) {
+        // This is a real PR - beat an existing record!
+        newPRs.push(recordData);
         const index = currentRecords.findIndex(pr => pr.exercise === exercise.name);
-        currentRecords[index] = newPR;
-      } else {
-        currentRecords.push(newPR);
+        currentRecords[index] = recordData;
       }
+    } else {
+      // First time doing this exercise - save for tracking but NOT a celebratory PR
+      currentRecords.push(recordData);
     }
   }
 
-  // Save updated records
-  if (newPRs.length > 0) {
+  // Save updated records if anything changed
+  const recordsChanged = currentRecords.length > 0;
+  if (recordsChanged) {
+    // STEP 1: Save locally (instant)
     await savePersonalRecords(currentRecords);
 
-    // Try to sync to Supabase
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        for (const pr of newPRs) {
-          await supabase.from('personal_records').upsert({
-            user_id: user.id,
-            exercise: pr.exercise,
-            weight: pr.weight,
-            reps: pr.reps,
-            estimated_one_rep_max: pr.estimatedOneRepMax,
-            date: pr.date,
-            workout_id: pr.workoutId,
-            workout_name: pr.workoutName,
-          }, {
-            onConflict: 'user_id,exercise'
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error syncing PRs to cloud:', error);
+    // STEP 2: Sync celebration-worthy PRs to cloud in background
+    if (newPRs.length > 0) {
+      syncPRsToCloud(newPRs).catch(err => {
+        console.error('Background PR sync failed:', err);
+      });
     }
   }
 
   return newPRs;
+}
+
+// Background cloud sync for PRs
+async function syncPRsToCloud(newPRs) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Sync PRs in parallel - delete old then insert new for each exercise
+    await Promise.all(newPRs.map(async (pr) => {
+      // Delete existing PR for this exercise (if any)
+      await supabase
+        .from('personal_records')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('exercise', pr.exercise);
+
+      // Insert new PR
+      const { error } = await supabase
+        .from('personal_records')
+        .insert({
+          user_id: user.id,
+          exercise: pr.exercise,
+          weight: pr.weight,
+          reps: pr.reps,
+          estimated_one_rep_max: pr.estimatedOneRepMax,
+          date: pr.date,
+          workout_id: pr.workoutId,
+          workout_name: pr.workoutName,
+        });
+
+      if (error) {
+        console.error('Error syncing PR to cloud:', pr.exercise, error);
+      }
+    }));
+  } catch (error) {
+    console.error('Error syncing PRs to cloud:', error);
+  }
 }
 
 /**
@@ -237,9 +259,9 @@ export async function getPRsByCategory() {
     grouped[category].push(pr);
   }
 
-  // Sort each category by estimated 1RM
+  // Sort each category by weight lifted
   for (const category of Object.keys(grouped)) {
-    grouped[category].sort((a, b) => b.estimatedOneRepMax - a.estimatedOneRepMax);
+    grouped[category].sort((a, b) => b.weight - a.weight);
   }
 
   return grouped;
@@ -266,9 +288,9 @@ export async function getPRStats() {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const recentPRs = records.filter(pr => new Date(pr.date) >= thirtyDaysAgo).length;
 
-  // Find top exercise by estimated 1RM
+  // Find top exercise by weight lifted
   const topExercise = records.reduce((best, current) =>
-    current.estimatedOneRepMax > (best?.estimatedOneRepMax || 0) ? current : best
+    current.weight > (best?.weight || 0) ? current : best
   , null);
 
   // Total weight across all PRs

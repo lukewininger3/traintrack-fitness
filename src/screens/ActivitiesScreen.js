@@ -1,32 +1,45 @@
-import { useFocusEffect } from '@react-navigation/native';
-import { router } from 'expo-router';
-import { Activity, Bike, Dumbbell, Edit2, FileText, Plus, Trash2 } from 'lucide-react-native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Activity, Bike, Bookmark, Dumbbell, Edit2, FileText, MessageSquare, Plus, RotateCcw, Trash2 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   SectionList,
+  ScrollView,
   StyleSheet,
   Text,
-  View
+  TextInput,
+  View,
+  Modal
 } from 'react-native';
 import { loadWorkouts, saveWorkouts } from '../utils/storage';
 import { formatDateShort } from '../utils/dateFormatter';
+import { saveAsTemplate } from '../utils/workoutTemplates';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS, SHADOWS } from '../theme/design';
 
 export default function ActivitiesScreen() {
+  const params = useLocalSearchParams();
+  const isFocused = useIsFocused();
   const [sections, setSections] = useState([]);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
+  const [showNewWorkoutSheet, setShowNewWorkoutSheet] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templateName, setTemplateName] = useState('');
 
+  // Load data on mount
   useEffect(() => {
     loadData();
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
+  // Reload when screen becomes focused OR when refresh param changes
+  useEffect(() => {
+    if (isFocused) {
       loadData();
-    }, [])
-  );
+    }
+  }, [isFocused, params.refresh]);
 
   const loadData = async () => {
     const data = await loadWorkouts();
@@ -80,16 +93,76 @@ export default function ActivitiesScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
+          onPress: () => {
+            // Close modal immediately
+            setSelectedWorkout(null);
+
+            // Get current workouts and filter
             const allWorkouts = sections.flatMap(s => s.data);
             const updated = allWorkouts.filter(w => w.id !== workoutId);
-            await saveWorkouts(updated);
-            loadData();
-            setSelectedWorkout(null);
+
+            // Update UI immediately by filtering sections
+            setSections(prevSections =>
+              prevSections.map(section => ({
+                ...section,
+                data: section.data.filter(w => w.id !== workoutId)
+              })).filter(section => section.data.length > 0)
+            );
+
+            // Persist to storage (runs in background)
+            saveWorkouts(updated);
           }
         }
       ]
     );
+  };
+
+  const handleSaveAsTemplate = () => {
+    setTemplateName(selectedWorkout?.name || '');
+    setShowTemplateModal(true);
+  };
+
+  const confirmSaveAsTemplate = async () => {
+    if (!templateName?.trim()) {
+      Alert.alert('Error', 'Please enter a template name');
+      return;
+    }
+    try {
+      await saveAsTemplate(selectedWorkout, templateName.trim());
+      setShowTemplateModal(false);
+      setTemplateName('');
+      Alert.alert('Success', 'Template saved! You can find it when starting a new workout.');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save template');
+    }
+  };
+
+  const repeatWorkout = (workout) => {
+    // Clone the workout data for a new workout
+    const workoutData = JSON.stringify({
+      name: workout.name,
+      type: workout.type,
+      exercises: workout.exercises.map(ex => ({
+        name: ex.name,
+        sets: ex.sets.map(set => ({
+          weight: set.weight || 0,
+          reps: set.reps || 0,
+          distance: set.distance || 0,
+          time: set.time || 0,
+          pace: set.pace || 0
+        })),
+        notes: ex.notes || ''
+      }))
+    });
+
+    setSelectedWorkout(null);
+    router.push({
+      pathname: '/workout-builder',
+      params: {
+        repeatData: workoutData,
+        returnTo: 'activities'
+      }
+    });
   };
 
   const renderSectionHeader = ({ section: { title, data } }) => (
@@ -109,6 +182,9 @@ export default function ActivitiesScreen() {
       <Pressable
         onPress={() => setSelectedWorkout(workout)}
         style={styles.workoutCard}
+        accessibilityLabel={`${workout.name}, ${workout.type}, ${workout.exercises?.length || 0} exercises`}
+        accessibilityRole="button"
+        accessibilityHint="Opens workout details"
       >
         <View style={[styles.workoutAccent, { backgroundColor: color }]} />
         <View style={styles.workoutContent}>
@@ -129,6 +205,9 @@ export default function ActivitiesScreen() {
             onPress={() => deleteWorkout(workout.id)}
             style={styles.deleteButton}
             hitSlop={8}
+            accessibilityLabel={`Delete ${workout.name}`}
+            accessibilityRole="button"
+            accessibilityHint="Permanently removes this workout"
           >
             <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
           </Pressable>
@@ -169,6 +248,8 @@ export default function ActivitiesScreen() {
           />
           <View style={styles.modalContent}>
             <View style={styles.modalHandle} />
+
+            {/* Header - Clean, no buttons */}
             <View style={styles.modalHeader}>
               <View style={[
                 styles.modalIconContainer,
@@ -183,32 +264,32 @@ export default function ActivitiesScreen() {
               <View style={styles.modalHeaderText}>
                 <Text style={styles.modalTitle}>{selectedWorkout.name}</Text>
                 <Text style={styles.modalSubtitle}>
-                  {selectedWorkout.date} • {selectedWorkout.type}
+                  {selectedWorkout.date} • {selectedWorkout.type} • {selectedWorkout.exercises?.length || 0} exercises
                 </Text>
               </View>
-              <View style={styles.modalActions}>
-                <Pressable
-                  onPress={() => {
-                    setSelectedWorkout(null);
-                    router.push({
-                      pathname: '/workout-builder',
-                      params: {
-                        workoutId: selectedWorkout.id,
-                        returnTo: 'activities'
-                      }
-                    });
-                  }}
-                  style={styles.editButton}
-                >
-                  <Edit2 size={20} color={COLORS.accent.primary} strokeWidth={2} />
-                </Pressable>
-              </View>
+              <Pressable
+                onPress={() => setSelectedWorkout(null)}
+                style={styles.closeModalButton}
+              >
+                <Text style={styles.closeModalText}>Done</Text>
+              </Pressable>
             </View>
 
-            <View style={styles.modalScroll}>
+            {/* Scrollable Exercise List */}
+            <ScrollView
+              style={styles.modalScrollView}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={true}
+            >
               {selectedWorkout.exercises?.map((exercise, idx) => (
                 <View key={idx} style={styles.exerciseCard}>
                   <Text style={styles.exerciseName}>{exercise.name}</Text>
+                  {exercise.notes && (
+                    <View style={styles.exerciseNotesRow}>
+                      <MessageSquare size={14} color={COLORS.text.tertiary} strokeWidth={2} />
+                      <Text style={styles.exerciseNotesText}>{exercise.notes}</Text>
+                    </View>
+                  )}
                   {exercise.sets?.map((set, setIdx) => (
                     <View key={setIdx} style={styles.setRow}>
                       <Text style={styles.setLabel}>SET {setIdx + 1}</Text>
@@ -221,28 +302,175 @@ export default function ActivitiesScreen() {
                   ))}
                 </View>
               ))}
+            </ScrollView>
+
+            {/* Action Buttons - Bottom */}
+            <View style={styles.modalActionBar}>
+              <Pressable
+                onPress={handleSaveAsTemplate}
+                style={styles.actionButtonTertiary}
+                accessibilityLabel="Save as template"
+                accessibilityRole="button"
+                accessibilityHint="Saves this workout as a reusable template"
+              >
+                <Bookmark size={20} color={COLORS.tertiary.primary} strokeWidth={2.5} />
+                <Text style={styles.actionButtonTertiaryText}>Save</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => repeatWorkout(selectedWorkout)}
+                style={styles.actionButtonPrimary}
+                accessibilityLabel="Repeat workout"
+                accessibilityRole="button"
+                accessibilityHint="Creates a new workout with the same exercises"
+              >
+                <RotateCcw size={20} color={COLORS.text.inverse} strokeWidth={2.5} />
+                <Text style={styles.actionButtonPrimaryText}>Repeat</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setSelectedWorkout(null);
+                  router.push({
+                    pathname: '/workout-builder',
+                    params: {
+                      workoutId: selectedWorkout.id,
+                      returnTo: 'activities'
+                    }
+                  });
+                }}
+                style={styles.actionButtonSecondary}
+                accessibilityLabel="Edit workout"
+                accessibilityRole="button"
+                accessibilityHint="Opens workout for editing"
+              >
+                <Edit2 size={18} color={COLORS.accent.primary} strokeWidth={2} />
+                <Text style={styles.actionButtonSecondaryText}>Edit</Text>
+              </Pressable>
             </View>
           </View>
         </View>
       )}
 
-      {/* Floating Action Buttons */}
+      {/* Floating Action Button */}
       {!selectedWorkout && (
-        <View style={styles.fabContainer}>
-          <Pressable
-            style={styles.fabSecondary}
-            onPress={() => router.push('/templates')}
-          >
-            <FileText size={22} color={COLORS.tertiary.primary} strokeWidth={2.5} />
-          </Pressable>
-          <Pressable
-            style={styles.fab}
-            onPress={() => router.push('/workout-builder')}
-          >
-            <Plus size={28} color={COLORS.text.inverse} strokeWidth={2.5} />
-          </Pressable>
-        </View>
+        <Pressable
+          style={styles.fab}
+          onPress={() => setShowNewWorkoutSheet(true)}
+          accessibilityLabel="Add new workout"
+          accessibilityRole="button"
+          accessibilityHint="Opens options to start a new workout or use a template"
+        >
+          <Plus size={28} color={COLORS.text.inverse} strokeWidth={2.5} />
+        </Pressable>
       )}
+
+      {/* New Workout Bottom Sheet */}
+      <Modal
+        visible={showNewWorkoutSheet}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNewWorkoutSheet(false)}
+      >
+        <Pressable
+          style={styles.sheetOverlay}
+          onPress={() => setShowNewWorkoutSheet(false)}
+        >
+          <View style={styles.sheetContent}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>START WORKOUT</Text>
+
+            <Pressable
+              style={styles.sheetOption}
+              onPress={() => {
+                setShowNewWorkoutSheet(false);
+                router.push('/workout-builder');
+              }}
+              accessibilityLabel="New Workout"
+              accessibilityRole="button"
+              accessibilityHint="Start a fresh workout from scratch"
+            >
+              <View style={[styles.sheetOptionIcon, { backgroundColor: COLORS.accent.primaryDim }]}>
+                <Plus size={24} color={COLORS.accent.primary} strokeWidth={2.5} />
+              </View>
+              <View style={styles.sheetOptionText}>
+                <Text style={styles.sheetOptionTitle}>New Workout</Text>
+                <Text style={styles.sheetOptionDescription}>Start fresh with a blank workout</Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              style={styles.sheetOption}
+              onPress={() => {
+                setShowNewWorkoutSheet(false);
+                router.push('/templates');
+              }}
+              accessibilityLabel="From Template"
+              accessibilityRole="button"
+              accessibilityHint="Choose from your saved workout templates"
+            >
+              <View style={[styles.sheetOptionIcon, { backgroundColor: COLORS.tertiary.dim }]}>
+                <FileText size={24} color={COLORS.tertiary.primary} strokeWidth={2.5} />
+              </View>
+              <View style={styles.sheetOptionText}>
+                <Text style={styles.sheetOptionTitle}>From Template</Text>
+                <Text style={styles.sheetOptionDescription}>Use a saved workout template</Text>
+              </View>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Save as Template Modal */}
+      <Modal
+        visible={showTemplateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTemplateModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.templateModalOverlay}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <Pressable
+            style={styles.templateModalDismiss}
+            onPress={() => setShowTemplateModal(false)}
+          />
+          <View style={styles.templateModalContent}>
+            <Text style={styles.templateModalTitle}>Save as Template</Text>
+            <Text style={styles.templateModalSubtitle}>Enter a name for this template</Text>
+            <TextInput
+              style={styles.templateModalInput}
+              value={templateName}
+              onChangeText={setTemplateName}
+              placeholder="Template name"
+              placeholderTextColor={COLORS.text.tertiary}
+              autoFocus
+            />
+            <View style={styles.templateModalButtons}>
+              <Pressable
+                style={styles.templateModalCancel}
+                onPress={() => {
+                  setShowTemplateModal(false);
+                  setTemplateName('');
+                }}
+              >
+                <Text style={styles.templateModalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.templateModalSave}
+                onPress={confirmSaveAsTemplate}
+              >
+                <Bookmark size={18} color={COLORS.text.inverse} strokeWidth={2.5} />
+                <Text style={styles.templateModalSaveText}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+          <Pressable
+            style={styles.templateModalDismiss}
+            onPress={() => setShowTemplateModal(false)}
+          />
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -389,7 +617,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background.secondary,
     borderTopLeftRadius: RADIUS.xl,
     borderTopRightRadius: RADIUS.xl,
-    maxHeight: '80%',
+    maxHeight: '85%',
+    overflow: 'hidden',
   },
   modalHandle: {
     width: 40,
@@ -427,22 +656,146 @@ const styles = StyleSheet.create({
     color: COLORS.text.secondary,
     marginTop: 2,
   },
-  modalActions: {
+  closeModalButton: {
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+  },
+  closeModalText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.accent.primary,
+  },
+  modalScrollView: {
+    minHeight: 100,
+    maxHeight: 400,
+  },
+  modalScrollContent: {
+    padding: SPACING.lg,
+    paddingBottom: SPACING.md,
+  },
+  modalActionBar: {
+    flexDirection: 'row',
+    padding: SPACING.lg,
+    paddingTop: SPACING.md,
+    gap: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surface.border,
+    backgroundColor: COLORS.background.secondary,
+  },
+  actionButtonPrimary: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accent.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    gap: SPACING.sm,
+  },
+  actionButtonPrimaryText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.inverse,
+  },
+  actionButtonSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    paddingVertical: SPACING.md,
+    gap: SPACING.xs,
+  },
+  actionButtonSecondaryText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.accent.primary,
+  },
+  actionButtonTertiary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.tertiary.dim,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.tertiary.primary + '40',
+    paddingVertical: SPACING.md,
+    gap: SPACING.xs,
+  },
+  actionButtonTertiaryText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.tertiary.primary,
+  },
+
+  // Template Modal
+  templateModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    padding: SPACING.lg,
+  },
+  templateModalDismiss: {
+    flex: 1,
+  },
+  templateModalContent: {
+    backgroundColor: COLORS.background.secondary,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+  },
+  templateModalTitle: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.text.primary,
+    textAlign: 'center',
+    marginBottom: SPACING.xs,
+  },
+  templateModalSubtitle: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.secondary,
+    textAlign: 'center',
+    marginBottom: SPACING.lg,
+  },
+  templateModalInput: {
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.md,
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.primary,
+    marginBottom: SPACING.lg,
+  },
+  templateModalButtons: {
     flexDirection: 'row',
     gap: SPACING.sm,
   },
-  editButton: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.accent.primaryDim,
+  templateModalCancel: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
   },
-  modalScroll: {
-    padding: SPACING.lg,
-    paddingBottom: 100,
+  templateModalCancelText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.secondary,
   },
+  templateModalSave: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.tertiary.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    gap: SPACING.xs,
+  },
+  templateModalSaveText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.inverse,
+  },
+
   exerciseCard: {
     backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.lg,
@@ -454,7 +807,22 @@ const styles = StyleSheet.create({
   exerciseName: {
     ...TYPOGRAPHY.h4,
     color: COLORS.text.primary,
+    marginBottom: SPACING.sm,
+  },
+  exerciseNotesRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.sm,
+    padding: SPACING.sm,
     marginBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  exerciseNotesText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
+    flex: 1,
+    lineHeight: 18,
   },
   setRow: {
     flexDirection: 'row',
@@ -475,26 +843,10 @@ const styles = StyleSheet.create({
   },
 
   // FAB
-  fabContainer: {
+  fab: {
     position: 'absolute',
     right: SPACING.lg,
     bottom: SPACING.xl,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.md,
-  },
-  fabSecondary: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.tertiary.dim,
-    borderWidth: 1,
-    borderColor: COLORS.tertiary.primary + '40',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.md,
-  },
-  fab: {
     width: 60,
     height: 60,
     borderRadius: 30,
@@ -502,5 +854,62 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.lg,
+  },
+
+  // Bottom Sheet
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  sheetContent: {
+    backgroundColor: COLORS.background.secondary,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xxxl,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.surface.border,
+    alignSelf: 'center',
+    marginBottom: SPACING.lg,
+  },
+  sheetTitle: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.secondary,
+    marginBottom: SPACING.lg,
+  },
+  sheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    gap: SPACING.md,
+  },
+  sheetOptionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetOptionText: {
+    flex: 1,
+  },
+  sheetOptionTitle: {
+    ...TYPOGRAPHY.h4,
+    color: COLORS.text.primary,
+    marginBottom: 2,
+  },
+  sheetOptionDescription: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
   },
 });

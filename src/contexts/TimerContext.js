@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
-import { loadTimerSettings, saveTimerSettings } from '../utils/timerStorage';
+import { loadTimerSettings, saveTimerSettings, TIMER_MODES } from '../utils/timerStorage';
 
 const TimerContext = createContext(null);
 
@@ -13,6 +13,7 @@ export function TimerProvider({ children }) {
   const [settings, setSettings] = useState({
     hapticEnabled: true,
     autoStart: false,
+    timerMode: TIMER_MODES.MANUAL,
   });
   const intervalRef = useRef(null);
 
@@ -130,10 +131,11 @@ export function TimerProvider({ children }) {
     saveTimerSettings({ lastUsedDuration: newDuration });
   }, [settings.hapticEnabled]);
 
-  // Format time as MM:SS
+  // Format time as MM:SS (with bounds checking)
   const formatTime = useCallback((seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const safeSeconds = Math.max(0, Math.floor(seconds || 0));
+    const mins = Math.floor(safeSeconds / 60);
+    const secs = safeSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }, []);
 
@@ -144,8 +146,34 @@ export function TimerProvider({ children }) {
     await saveTimerSettings(newSettings);
   }, [settings]);
 
-  // Calculate progress percentage (0-1)
-  const progress = duration > 0 ? (duration - timeRemaining) / duration : 0;
+  // Called when a set is logged - auto-starts timer if in auto mode
+  const onSetLogged = useCallback(() => {
+    if (settings.timerMode === TIMER_MODES.AUTO) {
+      // Reset and start the timer with current duration
+      if (settings.hapticEnabled) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      setTimeRemaining(duration);
+      setIsComplete(false);
+      setIsRunning(true);
+    }
+  }, [settings.timerMode, settings.hapticEnabled, duration]);
+
+  // Toggle timer mode between auto and manual
+  const toggleTimerMode = useCallback(async () => {
+    const newMode = settings.timerMode === TIMER_MODES.AUTO ? TIMER_MODES.MANUAL : TIMER_MODES.AUTO;
+    const newSettings = { ...settings, timerMode: newMode };
+    setSettings(newSettings);
+    await saveTimerSettings(newSettings);
+  }, [settings]);
+
+  // Check if timer is in auto mode
+  const isAutoMode = settings.timerMode === TIMER_MODES.AUTO;
+
+  // Calculate progress percentage (0-1) with bounds checking
+  const safeTimeRemaining = Math.max(0, timeRemaining);
+  const safeDuration = Math.max(1, duration); // Avoid division by zero
+  const progress = Math.min(1, Math.max(0, (safeDuration - safeTimeRemaining) / safeDuration));
 
   const value = {
     // State
@@ -157,6 +185,7 @@ export function TimerProvider({ children }) {
     progress,
     formattedTime: formatTime(timeRemaining),
     settings,
+    isAutoMode,
 
     // Actions
     start,
@@ -168,6 +197,8 @@ export function TimerProvider({ children }) {
     formatTime,
     setIsExpanded,
     updateSetting,
+    onSetLogged,
+    toggleTimerMode,
   };
 
   return (
@@ -185,4 +216,5 @@ export function useTimer() {
   return context;
 }
 
+export { TIMER_MODES };
 export default TimerContext;

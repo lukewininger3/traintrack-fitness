@@ -3,9 +3,9 @@ import { router } from 'expo-router';
 import { User } from 'lucide-react-native';
 import { useEffect } from 'react';
 import { Pressable } from 'react-native';
-import CalendarScreen from '../../src/screens/CalendarScreen';
+import DashboardScreen from '../../src/screens/DashboardScreen';
 
-export default function CalendarTab() {
+export default function DashboardTab() {
   const navigation = useNavigation();
 
   useEffect(() => {
@@ -26,5 +26,5 @@ export default function CalendarTab() {
     });
   }, [navigation]);
 
-  return <CalendarScreen navigation={navigation} />;
+  return <DashboardScreen navigation={navigation} />;
 }

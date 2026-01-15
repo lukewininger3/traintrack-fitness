@@ -1,11 +1,11 @@
-import { TrendingUp } from 'lucide-react-native';
+import { MessageSquare, TrendingUp } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../../theme/design';
 
 /**
  * Banner showing previous workout session data
- * @param {Object} previousSession - Previous session data { date, sets, workoutName }
+ * @param {Object} previousSession - Previous session data { date, sets, notes, workoutName }
  * @param {boolean} isCardio - Whether this is a cardio exercise
  */
 export default function PreviousSessionBanner({ previousSession, isCardio = false }) {
@@ -20,6 +20,12 @@ export default function PreviousSessionBanner({ previousSession, isCardio = fals
         <Text style={styles.title}>PREVIOUS SESSION</Text>
         <Text style={styles.date}>{previousSession.date}</Text>
       </View>
+      {previousSession.notes && (
+        <View style={styles.notesRow}>
+          <MessageSquare size={12} color={COLORS.text.tertiary} strokeWidth={2} />
+          <Text style={styles.notesText}>{previousSession.notes}</Text>
+        </View>
+      )}
       <View style={styles.setsContainer}>
         {previousSession.sets.map((set, idx) => {
           if (isCardio) {
@@ -79,6 +85,22 @@ const styles = StyleSheet.create({
   date: {
     ...TYPOGRAPHY.caption,
     color: COLORS.text.secondary,
+  },
+  notesRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    marginLeft: SPACING.xl + SPACING.sm,
+    marginBottom: SPACING.sm,
+    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+    borderRadius: RADIUS.sm,
+    padding: SPACING.sm,
+  },
+  notesText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
+    flex: 1,
+    fontStyle: 'italic',
   },
   setsContainer: {
     marginLeft: SPACING.xl + SPACING.sm,

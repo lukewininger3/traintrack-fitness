@@ -1,6 +1,7 @@
 import { ChevronDown, Search, TrendingUp, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   Modal,
   Pressable,
@@ -28,6 +29,7 @@ export default function ProgressScreen() {
   const [isTouchingChart, setIsTouchingChart] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const scrollViewRef = useRef(null);
 
   useEffect(() => {
@@ -35,37 +37,49 @@ export default function ProgressScreen() {
   }, []);
 
   const loadData = async () => {
-    const data = await loadWorkouts();
-    setWorkouts(data);
+    try {
+      setIsLoading(true);
+      const data = await loadWorkouts({ silent: true });
+      setWorkouts(data || []);
 
-    const exerciseMap = {};
-    data.forEach(workout => {
-      workout.exercises?.forEach(exercise => {
-        const maxSet = exercise.sets.reduce((max, set) =>
-          set.weight > max.weight ? set : max, exercise.sets[0]
-        );
+      const exerciseMap = {};
+      (data || []).forEach(workout => {
+        const exercises = workout?.exercises || [];
+        exercises.forEach(exercise => {
+          const sets = exercise?.sets || [];
+          if (sets.length === 0) return;
 
-        if (maxSet.weight > 0) {
-          if (!exerciseMap[exercise.name]) {
-            exerciseMap[exercise.name] = [];
+          const maxSet = sets.reduce((max, set) =>
+            (set?.weight || 0) > (max?.weight || 0) ? set : max, sets[0]
+          );
+
+          if (maxSet && maxSet.weight > 0) {
+            if (!exerciseMap[exercise.name]) {
+              exerciseMap[exercise.name] = [];
+            }
+            exerciseMap[exercise.name].push({
+              date: workout.date,
+              weight: maxSet.weight,
+              reps: maxSet.reps || 0,
+              workoutId: workout.id
+            });
           }
-          exerciseMap[exercise.name].push({
-            date: workout.date,
-            weight: maxSet.weight,
-            reps: maxSet.reps,
-            workoutId: workout.id
-          });
-        }
+        });
       });
-    });
 
-    Object.keys(exerciseMap).forEach(exerciseName => {
-      exerciseMap[exerciseName].sort((a, b) =>
-        new Date(a.date) - new Date(b.date)
-      );
-    });
+      Object.keys(exerciseMap).forEach(exerciseName => {
+        exerciseMap[exerciseName].sort((a, b) =>
+          new Date(a.date) - new Date(b.date)
+        );
+      });
 
-    setExercises(exerciseMap);
+      setExercises(exerciseMap);
+    } catch (error) {
+      console.error('Failed to load progress data:', error);
+      setExercises({});
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const exerciseList = Object.keys(exercises).sort();
@@ -106,13 +120,15 @@ export default function ProgressScreen() {
     }
 
     const records = exercises[selectedExercise];
-    return records.map((record, index) => ({
-      x: index + 1,
-      y: record.weight,
-      date: record.date,
-      reps: record.reps,
-      weight: record.weight
-    }));
+    return records.map((record, index) => {
+      return {
+        x: index + 1,
+        y: record.weight,
+        date: record.date,
+        reps: record.reps,
+        weight: record.weight,
+      };
+    });
   }, [selectedExercise, exercises]);
 
   const chartMetrics = useMemo(() => {
@@ -125,19 +141,30 @@ export default function ProgressScreen() {
 
     const maxWeight = Math.max(...chartData.map(d => d.y));
     const minWeight = Math.min(...chartData.map(d => d.y));
-    const weightRange = maxWeight - minWeight || 1;
-    const weightPadding = weightRange * 0.1;
+    const actualRange = maxWeight - minWeight;
 
-    const availableWidth = CHART_WIDTH - padding.left - padding.right - (pointRadius * 2);
+    // Enforce minimum range of 10 lbs to ensure labels are distinct
+    const minRange = 10;
+    const weightPadding = actualRange < minRange
+      ? (minRange - actualRange) / 2 + 2  // Center small ranges with extra padding
+      : actualRange * 0.1;
+
+    // Fixed: Calculate available width WITHOUT subtracting pointRadius
+    // Points will be positioned within padding.left to (CHART_WIDTH - padding.right)
+    const availableWidth = chartWidth - (pointRadius * 2); // Account for point radius on edges
     const xScale = chartData.length === 1 ? 0 : availableWidth / Math.max(chartData.length - 1, 1);
-    const yScale = chartHeight / (maxWeight - minWeight + weightPadding * 2);
+
+    const adjustedMin = minWeight - weightPadding;
+    const adjustedMax = maxWeight + weightPadding;
+    const yScale = chartHeight / (adjustedMax - adjustedMin);
 
     return {
       padding,
       chartWidth,
       chartHeight,
-      minWeight: minWeight - weightPadding,
-      maxWeight: maxWeight + weightPadding,
+      minWeight: adjustedMin,
+      maxWeight: adjustedMax,
+      actualRange, // Store actual range for label formatting
       xScale,
       yScale,
       pointRadius
@@ -148,9 +175,16 @@ export default function ProgressScreen() {
     if (!chartMetrics || chartData.length === 0) return [];
 
     return chartData.map((point, index) => {
-      const x = chartData.length === 1
-        ? chartMetrics.padding.left + (CHART_WIDTH - chartMetrics.padding.left - chartMetrics.padding.right) / 2
-        : chartMetrics.padding.left + chartMetrics.pointRadius + (point.x - 1) * chartMetrics.xScale;
+      // Fixed: Consistent positioning that keeps points within chart bounds
+      let x;
+      if (chartData.length === 1) {
+        // Single point: center it
+        x = chartMetrics.padding.left + chartMetrics.chartWidth / 2;
+      } else {
+        // Multiple points: start at padding.left + pointRadius, end at padding.left + chartWidth - pointRadius
+        x = chartMetrics.padding.left + chartMetrics.pointRadius + (index * chartMetrics.xScale);
+      }
+
       const y = chartMetrics.padding.top + chartMetrics.chartHeight -
                 (point.y - chartMetrics.minWeight) * chartMetrics.yScale;
       return { ...point, svgX: x, svgY: y };
@@ -225,6 +259,16 @@ export default function ProgressScreen() {
     setSearchQuery('');
     setSelectedCategory(null);
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.accent.primary} />
+        <Text style={styles.loadingText}>Loading progress data...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -336,26 +380,39 @@ export default function ProgressScreen() {
                             );
                           })}
 
-                          {/* Y-axis labels */}
-                          {[0, 1, 2, 3, 4].map(i => {
-                            const weight = chartMetrics.minWeight +
-                                         (chartMetrics.maxWeight - chartMetrics.minWeight) * (1 - i / 4);
-                            const y = chartMetrics.padding.top + (chartMetrics.chartHeight / 4) * i;
-                            return (
-                              <G key={`y-label-${i}`}>
-                                <SvgText
-                                  x={chartMetrics.padding.left - 10}
-                                  y={y + 4}
-                                  fontSize="11"
-                                  fill={COLORS.text.tertiary}
-                                  textAnchor="end"
-                                  fontWeight="600"
-                                >
-                                  {Math.round(weight)}
-                                </SvgText>
-                              </G>
-                            );
-                          })}
+                          {/* Y-axis labels - smart formatting based on range */}
+                          {(() => {
+                            const range = chartMetrics.maxWeight - chartMetrics.minWeight;
+                            // Use fewer labels (3) when range is small to avoid duplicates
+                            const labelCount = range < 10 ? 3 : 5;
+                            const labelIndices = labelCount === 3 ? [0, 2, 4] : [0, 1, 2, 3, 4];
+
+                            return labelIndices.map(i => {
+                              const weight = chartMetrics.minWeight +
+                                           (chartMetrics.maxWeight - chartMetrics.minWeight) * (1 - i / 4);
+                              const y = chartMetrics.padding.top + (chartMetrics.chartHeight / 4) * i;
+
+                              // Show decimals when range is very small (< 5 lbs)
+                              const displayWeight = range < 5
+                                ? weight.toFixed(1)
+                                : Math.round(weight).toString();
+
+                              return (
+                                <G key={`y-label-${i}`}>
+                                  <SvgText
+                                    x={chartMetrics.padding.left - 10}
+                                    y={y + 4}
+                                    fontSize="11"
+                                    fill={COLORS.text.tertiary}
+                                    textAnchor="end"
+                                    fontWeight="600"
+                                  >
+                                    {displayWeight}
+                                  </SvgText>
+                                </G>
+                              );
+                            });
+                          })()}
 
                           {/* Y-axis title */}
                           <SvgText
@@ -447,7 +504,7 @@ export default function ProgressScreen() {
                               {
                                 position: 'absolute',
                                 left: Math.max(10, Math.min(tooltipData.svgX - 70, CHART_WIDTH - 150)),
-                                top: tooltipData.svgY - 85,
+                                top: tooltipData.svgY - 80,
                               }
                             ]}
                           >
@@ -456,7 +513,7 @@ export default function ProgressScreen() {
                             </Text>
                             <View style={styles.tooltipRow}>
                               <Text style={styles.tooltipLabel}>Weight</Text>
-                              <Text style={styles.tooltipValue}>{tooltipData.weight} lbs</Text>
+                              <Text style={styles.tooltipValueHighlight}>{tooltipData.weight} lbs</Text>
                             </View>
                             <View style={styles.tooltipRow}>
                               <Text style={styles.tooltipLabel}>Reps</Text>
@@ -623,6 +680,19 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
 
+  // Loading State
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.md,
+  },
+  loadingText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.tertiary,
+  },
+
   // Empty State
   emptyState: {
     alignItems: 'center',
@@ -755,7 +825,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     padding: SPACING.sm,
     position: 'relative',
-    overflow: 'visible',
+    overflow: 'hidden', // Prevent chart elements from overflowing
   },
   hintText: {
     ...TYPOGRAPHY.caption,
@@ -798,6 +868,17 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     fontWeight: '700',
     color: COLORS.text.primary,
+  },
+  tooltipRowHighlight: {
+    marginTop: SPACING.xs,
+    paddingTop: SPACING.xs,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surface.border,
+  },
+  tooltipValueHighlight: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '700',
+    color: COLORS.accent.primary,
   },
 
   // Empty Chart

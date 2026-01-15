@@ -1,4 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
 import {
   Award,
   Trophy,
@@ -16,7 +17,7 @@ import {
   Lock,
   CheckCircle
 } from 'lucide-react-native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -24,8 +25,22 @@ import {
   View,
   Pressable
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withDelay,
+  withSequence,
+  Easing,
+  withTiming,
+  interpolate,
+  FadeIn,
+  FadeInDown,
+} from 'react-native-reanimated';
 import { loadWorkouts } from '../utils/storage';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const TIER_COLORS = {
   bronze: { primary: '#CD7F32', dim: 'rgba(205, 127, 50, 0.15)' },
@@ -183,26 +198,35 @@ export default function TrophyScreen() {
   const totalUnlocked = unlockedWorkout + unlockedConsistency + unlockedSpecial;
   const totalBadges = workoutBadges.length + consistencyBadges.length + specialBadges.length;
 
-  const renderBadgeCard = (badge, earned, progress = null, threshold = null) => {
+  const renderBadgeCard = (badge, earned, progress = null, threshold = null, index = 0) => {
     const tierColor = TIER_COLORS[badge.tier];
     const Icon = badge.Icon;
 
+    const handlePress = () => {
+      if (earned) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      setSelectedBadge({ ...badge, earned, progress, threshold });
+    };
+
     return (
-      <Pressable
+      <AnimatedPressable
         key={badge.id}
-        onPress={() => setSelectedBadge({ ...badge, earned, progress, threshold })}
+        onPress={handlePress}
+        entering={FadeInDown.delay(index * 50).springify().damping(15)}
         style={[styles.badgeCard, earned && styles.badgeCardEarned]}
       >
-        <View style={[
+        <Animated.View style={[
           styles.badgeIconContainer,
-          { backgroundColor: earned ? tierColor.dim : COLORS.background.elevated }
+          { backgroundColor: earned ? tierColor.dim : COLORS.background.elevated },
+          earned && { shadowColor: tierColor.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 8 }
         ]}>
           {earned ? (
             <Icon size={28} color={tierColor.primary} strokeWidth={2.5} />
           ) : (
             <Lock size={22} color={COLORS.text.tertiary} strokeWidth={2} />
           )}
-        </View>
+        </Animated.View>
         <Text style={[styles.badgeTitle, earned && styles.badgeTitleEarned]} numberOfLines={1}>
           {badge.title}
         </Text>
@@ -217,32 +241,41 @@ export default function TrophyScreen() {
             {progress}/{threshold}
           </Text>
         )}
-      </Pressable>
+      </AnimatedPressable>
     );
   };
 
-  const renderSpecialBadge = (badge) => {
+  const renderSpecialBadge = (badge, index = 0) => {
     const tierColor = TIER_COLORS[badge.tier];
     const Icon = badge.Icon;
 
+    const handlePress = () => {
+      if (badge.earned) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      setSelectedBadge({ ...badge, threshold: badge.total });
+    };
+
     return (
-      <Pressable
+      <AnimatedPressable
         key={badge.id}
-        onPress={() => setSelectedBadge({ ...badge, threshold: badge.total })}
+        onPress={handlePress}
+        entering={FadeInDown.delay(index * 80).springify().damping(15)}
         style={[styles.specialBadgeCard, badge.earned && styles.specialBadgeCardEarned]}
       >
         <View style={[styles.specialAccent, { backgroundColor: badge.earned ? tierColor.primary : COLORS.surface.border }]} />
         <View style={styles.specialContent}>
-          <View style={[
+          <Animated.View style={[
             styles.specialIconContainer,
-            { backgroundColor: badge.earned ? tierColor.dim : COLORS.background.elevated }
+            { backgroundColor: badge.earned ? tierColor.dim : COLORS.background.elevated },
+            badge.earned && { shadowColor: tierColor.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 10 }
           ]}>
             {badge.earned ? (
               <Icon size={32} color={tierColor.primary} strokeWidth={2.5} />
             ) : (
               <Lock size={24} color={COLORS.text.tertiary} strokeWidth={2} />
             )}
-          </View>
+          </Animated.View>
           <View style={styles.specialInfo}>
             <Text style={[styles.specialTitle, badge.earned && styles.specialTitleEarned]}>
               {badge.title}
@@ -257,7 +290,7 @@ export default function TrophyScreen() {
             <Text style={styles.specialProgress}>{badge.progress}/{badge.total}</Text>
           )}
         </View>
-      </Pressable>
+      </AnimatedPressable>
     );
   };
 
@@ -265,11 +298,17 @@ export default function TrophyScreen() {
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.content}>
         {/* Hero Stats */}
-        <View style={styles.heroCard}>
+        <Animated.View
+          entering={FadeIn.delay(100).springify()}
+          style={styles.heroCard}
+        >
           <View style={styles.heroTop}>
-            <View style={styles.heroIconContainer}>
+            <Animated.View
+              entering={FadeInDown.delay(200).springify().damping(12)}
+              style={styles.heroIconContainer}
+            >
               <Crown size={36} color={COLORS.accent.primary} fill={COLORS.accent.primary} strokeWidth={2} />
-            </View>
+            </Animated.View>
             <View style={styles.heroStats}>
               <Text style={styles.heroNumber}>{totalUnlocked}</Text>
               <Text style={styles.heroLabel}>/ {totalBadges} BADGES</Text>
@@ -277,13 +316,16 @@ export default function TrophyScreen() {
           </View>
           <View style={styles.progressContainer}>
             <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${(totalUnlocked / totalBadges) * 100}%` }]} />
+              <Animated.View
+                entering={FadeIn.delay(400)}
+                style={[styles.progressFill, { width: `${(totalUnlocked / totalBadges) * 100}%` }]}
+              />
             </View>
             <Text style={styles.progressText}>
               {Math.round((totalUnlocked / totalBadges) * 100)}% Complete
             </Text>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Workout Milestones */}
         <View style={styles.section}>
@@ -295,12 +337,13 @@ export default function TrophyScreen() {
             </View>
           </View>
           <View style={styles.badgeGrid}>
-            {workoutBadges.map(badge =>
+            {workoutBadges.map((badge, index) =>
               renderBadgeCard(
                 badge,
                 badges.totalWorkouts >= badge.threshold,
                 badges.totalWorkouts,
-                badge.threshold
+                badge.threshold,
+                index
               )
             )}
           </View>
@@ -316,12 +359,13 @@ export default function TrophyScreen() {
             </View>
           </View>
           <View style={styles.badgeGrid}>
-            {consistencyBadges.map(badge =>
+            {consistencyBadges.map((badge, index) =>
               renderBadgeCard(
                 badge,
                 badges.consecutiveWeeks >= badge.weeks,
                 badges.consecutiveWeeks,
-                badge.weeks
+                badge.weeks,
+                index
               )
             )}
           </View>
@@ -337,7 +381,7 @@ export default function TrophyScreen() {
             </View>
           </View>
           <View style={styles.specialBadgesContainer}>
-            {specialBadges.map(badge => renderSpecialBadge(badge))}
+            {specialBadges.map((badge, index) => renderSpecialBadge(badge, index))}
           </View>
         </View>
       </View>

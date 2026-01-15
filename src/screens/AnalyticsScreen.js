@@ -4,15 +4,24 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable
+  Pressable,
+  ActivityIndicator
 } from 'react-native';
-import { Calendar, TrendingUp, Dumbbell, Activity, Award, ArrowUp, ArrowDown, Zap, Target } from 'lucide-react-native';
+import { Calendar, TrendingUp, Dumbbell, Activity, Award, ArrowUp, ArrowDown, Zap, Target, Clock, BarChart3 } from 'lucide-react-native';
 import { loadWorkouts } from '../utils/storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import {
+  MUSCLE_GROUPS,
+  MUSCLE_GROUP_LABELS,
+  MUSCLE_GROUP_COLORS,
+  analyzeMuscleGroupCoverage,
+  getRecoveryStatus,
+} from '../utils/muscleGroups';
 
 export default function AnalyticsScreen() {
   const [workouts, setWorkouts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState('month');
   const [consistencyStats, setConsistencyStats] = useState({
     daysThisMonth: 0,
@@ -27,6 +36,7 @@ export default function AnalyticsScreen() {
     topGainers: [],
     declining: []
   });
+  const [muscleGroupData, setMuscleGroupData] = useState({});
 
   useEffect(() => {
     loadData();
@@ -45,9 +55,17 @@ export default function AnalyticsScreen() {
   }, [timeFilter, workouts]);
 
   const loadData = async () => {
-    const data = await loadWorkouts();
-    setWorkouts(data);
-    calculateStats(data);
+    try {
+      setIsLoading(true);
+      const data = await loadWorkouts({ silent: true });
+      setWorkouts(data || []);
+      calculateStats(data || []);
+    } catch (error) {
+      console.error('Failed to load analytics data:', error);
+      setWorkouts([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const calculateStats = (data) => {
@@ -119,6 +137,10 @@ export default function AnalyticsScreen() {
 
     setWorkoutTypeBreakdown(breakdown);
     calculateSessionProgression(data);
+
+    // Calculate muscle group coverage
+    const muscleData = analyzeMuscleGroupCoverage(data, 14); // Last 14 days
+    setMuscleGroupData(muscleData);
   };
 
   const calculateSessionProgression = (workouts) => {
@@ -189,6 +211,31 @@ export default function AnalyticsScreen() {
 
   const workoutChange = consistencyStats.totalWorkoutsThisMonth - consistencyStats.totalWorkoutsLastMonth;
   const isPositiveChange = workoutChange >= 0;
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.accent.primary} />
+        <Text style={styles.loadingText}>Loading analytics...</Text>
+      </View>
+    );
+  }
+
+  // Empty state - no workouts yet
+  if (workouts.length === 0) {
+    return (
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyIconContainer}>
+          <BarChart3 size={48} color={COLORS.text.tertiary} strokeWidth={1.5} />
+        </View>
+        <Text style={styles.emptyTitle}>No Analytics Yet</Text>
+        <Text style={styles.emptyDescription}>
+          Complete your first workout to start tracking your progress and see detailed analytics.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -375,6 +422,90 @@ export default function AnalyticsScreen() {
           )}
         </View>
 
+        {/* Muscle Group Coverage */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardIconContainer}>
+              <Target size={20} color={COLORS.tertiary.primary} strokeWidth={2.5} />
+            </View>
+            <View style={styles.cardHeaderText}>
+              <Text style={styles.cardTitle}>MUSCLE COVERAGE</Text>
+              <Text style={styles.cardSubtitle}>Last 14 days training frequency</Text>
+            </View>
+          </View>
+
+          <View style={styles.muscleGrid}>
+            {MUSCLE_GROUPS.map((muscle) => {
+              const data = muscleGroupData[muscle] || { count: 0 };
+              const maxCount = Math.max(...Object.values(muscleGroupData).map(d => d?.count || 0), 1);
+              const intensity = Math.min(data.count / maxCount, 1);
+
+              return (
+                <View key={muscle} style={styles.muscleItem}>
+                  <View
+                    style={[
+                      styles.muscleBox,
+                      {
+                        backgroundColor: `${MUSCLE_GROUP_COLORS[muscle]}${Math.floor(intensity * 0.7 * 255 + 0.1 * 255).toString(16).padStart(2, '0')}`,
+                        borderColor: intensity > 0 ? MUSCLE_GROUP_COLORS[muscle] : COLORS.surface.border,
+                      }
+                    ]}
+                  >
+                    <Text style={[
+                      styles.muscleCount,
+                      { color: intensity > 0.3 ? COLORS.text.primary : COLORS.text.tertiary }
+                    ]}>
+                      {Math.round(data.count)}
+                    </Text>
+                  </View>
+                  <Text style={styles.muscleLabel}>{MUSCLE_GROUP_LABELS[muscle]}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Recovery Status */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardIconContainer}>
+              <Clock size={20} color={COLORS.warning} strokeWidth={2.5} />
+            </View>
+            <View style={styles.cardHeaderText}>
+              <Text style={styles.cardTitle}>RECOVERY STATUS</Text>
+              <Text style={styles.cardSubtitle}>Days since last training</Text>
+            </View>
+          </View>
+
+          <View style={styles.recoveryList}>
+            {MUSCLE_GROUPS.map((muscle) => {
+              const data = muscleGroupData[muscle] || {};
+              const status = getRecoveryStatus(data.daysSinceTraining);
+              const statusColors = {
+                recovered: { bg: 'rgba(0, 255, 136, 0.15)', text: COLORS.success, label: 'Recovered' },
+                recent: { bg: 'rgba(255, 214, 0, 0.15)', text: COLORS.warning, label: 'Recent' },
+                fatigued: { bg: 'rgba(255, 59, 59, 0.15)', text: COLORS.error, label: 'Rest' },
+                untrained: { bg: COLORS.surface.card, text: COLORS.text.tertiary, label: 'No data' },
+              };
+              const colors = statusColors[status];
+
+              return (
+                <View key={muscle} style={styles.recoveryRow}>
+                  <View style={[styles.recoveryDot, { backgroundColor: MUSCLE_GROUP_COLORS[muscle] }]} />
+                  <Text style={styles.recoveryMuscle}>{MUSCLE_GROUP_LABELS[muscle]}</Text>
+                  <View style={[styles.recoveryBadge, { backgroundColor: colors.bg }]}>
+                    <Text style={[styles.recoveryBadgeText, { color: colors.text }]}>
+                      {data.daysSinceTraining !== null
+                        ? `${data.daysSinceTraining}d`
+                        : '—'}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
         {/* All-Time Stats */}
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>ALL-TIME</Text>
@@ -405,6 +536,48 @@ const styles = StyleSheet.create({
   content: {
     padding: SPACING.lg,
     paddingBottom: SPACING.xxxl,
+  },
+
+  // Loading State
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.md,
+  },
+  loadingText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.tertiary,
+  },
+
+  // Empty State
+  emptyContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.xxl,
+  },
+  emptyIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: COLORS.surface.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
+  },
+  emptyTitle: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.text.primary,
+    marginBottom: SPACING.sm,
+  },
+  emptyDescription: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.tertiary,
+    textAlign: 'center',
+    maxWidth: 280,
   },
 
   // Hero Card
@@ -729,5 +902,69 @@ const styles = StyleSheet.create({
   emptyText: {
     ...TYPOGRAPHY.body,
     color: COLORS.text.tertiary,
+  },
+
+  // Muscle Group Coverage
+  muscleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+  },
+  muscleItem: {
+    width: '18%',
+    alignItems: 'center',
+  },
+  muscleBox: {
+    width: 48,
+    height: 48,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.xs,
+  },
+  muscleCount: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 16,
+  },
+  muscleLabel: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 10,
+    color: COLORS.text.tertiary,
+    textAlign: 'center',
+  },
+
+  // Recovery Status
+  recoveryList: {
+    gap: SPACING.sm,
+  },
+  recoveryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+  },
+  recoveryDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: SPACING.md,
+  },
+  recoveryMuscle: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
+    flex: 1,
+  },
+  recoveryBadge: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.sm,
+    minWidth: 48,
+    alignItems: 'center',
+  },
+  recoveryBadgeText: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '700',
   },
 });

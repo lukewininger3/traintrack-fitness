@@ -99,9 +99,6 @@ export default function PersonalRecordsScreen() {
                 <Text style={styles.topExerciseValue}>
                   {stats.topExercise.weight} lbs × {stats.topExercise.reps} reps
                 </Text>
-                <Text style={styles.topExerciseE1RM}>
-                  Est. 1RM: {stats.topExercise.estimatedOneRepMax} lbs
-                </Text>
               </View>
             )}
           </View>
@@ -188,11 +185,6 @@ export default function PersonalRecordsScreen() {
                   <View style={styles.prStats}>
                     <Text style={styles.prWeight}>{pr.weight} lbs</Text>
                     <Text style={styles.prReps}>× {pr.reps} reps</Text>
-                    <View style={styles.e1rmBadge}>
-                      <Text style={styles.e1rmText}>
-                        1RM: {pr.estimatedOneRepMax}
-                      </Text>
-                    </View>
                   </View>
                 </View>
               ))}
@@ -203,13 +195,11 @@ export default function PersonalRecordsScreen() {
         {/* Info Card */}
         {prs.length > 0 && (
           <View style={styles.infoCard}>
-            <Text style={styles.infoTitle}>How PRs are calculated</Text>
+            <Text style={styles.infoTitle}>How PRs are tracked</Text>
             <Text style={styles.infoText}>
-              Personal records are tracked using your estimated one-rep max (1RM),
-              calculated with the Epley formula. This allows comparison across
-              different rep ranges.
+              Personal records are based on the heaviest weight you've lifted for each exercise.
+              Keep pushing to set new PRs!
             </Text>
-            <Text style={styles.infoFormula}>1RM = weight × (1 + reps/30)</Text>
           </View>
         )}
       </ScrollView>
@@ -318,11 +308,6 @@ const styles = StyleSheet.create({
   topExerciseValue: {
     ...TYPOGRAPHY.body,
     color: COLORS.text.secondary,
-  },
-  topExerciseE1RM: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.accent.primary,
-    marginTop: SPACING.xs,
   },
 
   // Empty State
@@ -438,19 +423,6 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     color: COLORS.text.secondary,
   },
-  e1rmBadge: {
-    backgroundColor: COLORS.accent.primaryDim,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: RADIUS.sm,
-    marginTop: SPACING.xs,
-  },
-  e1rmText: {
-    ...TYPOGRAPHY.caption,
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.accent.primary,
-  },
 
   // Info Card
   infoCard: {
@@ -469,12 +441,5 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     color: COLORS.text.secondary,
     lineHeight: 18,
-  },
-  infoFormula: {
-    ...TYPOGRAPHY.caption,
-    fontWeight: '600',
-    color: COLORS.tertiary.primary,
-    marginTop: SPACING.sm,
-    fontStyle: 'italic',
   },
 });

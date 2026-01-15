@@ -1,5 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { Award, FileText, MessageSquare, Plus, Trash2, Trophy, X } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -13,35 +14,49 @@ import {
   TextInput,
   View
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withSequence,
+  withDelay,
+} from 'react-native-reanimated';
 import { EXERCISE_DATABASE, WORKOUT_TYPES, getAllCategories, searchBuiltInExercises } from '../constants/workoutTypes';
 import { exerciseExists, loadCustomExercises, saveCustomExercise } from '../utils/customExercises';
-import { checkAndUpdatePRs } from '../utils/personalRecords';
-import { getTodayString, loadWorkouts, saveWorkouts } from '../utils/storage';
-import { loadTemplates, saveAsTemplate } from '../utils/workoutTemplates';
+import { saveAsTemplate } from '../utils/workoutTemplates';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import RestTimerButton from '../components/RestTimer';
+import { useTimer } from '../contexts/TimerContext';
 import CustomExerciseForm from './WorkoutBuilder/components/CustomExerciseForm';
+import ExerciseCard from './WorkoutBuilder/components/ExerciseCard';
 import ExerciseSetInput from './WorkoutBuilder/components/ExerciseSetInput';
 import PreviousSessionBanner from './WorkoutBuilder/components/PreviousSessionBanner';
 import WorkoutFormFields from './WorkoutBuilder/components/WorkoutFormFields';
+import { useWorkoutForm } from './WorkoutBuilder/hooks/useWorkoutForm';
 
 export default function WorkoutBuilderScreen() {
   const params = useLocalSearchParams();
   const editingWorkoutId = params?.workoutId;
   const templateId = params?.templateId;
-  const isEditing = !!editingWorkoutId;
-  const isFromTemplate = !!templateId;
+  const repeatData = params?.repeatData;
   const scrollViewRef = useRef(null);
   const setRefs = useRef([]);
 
-  const [workout, setWorkout] = useState({
-    name: '',
-    type: 'Strength',
-    date: getTodayString(),
-    time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-    notes: '',
-    exercises: []
-  });
+  // Use the workout form hook for state management
+  const {
+    workout,
+    isEditing,
+    isSaving,
+    isCardioWorkoutType,
+    isCardioExercise,
+    setWorkout,
+    handleTypeChange: handleTypeChangeFromHook,
+    saveWorkoutData,
+    findPreviousSession,
+  } = useWorkoutForm({ editingWorkoutId, templateId, repeatData });
+
+  // Timer for auto-start after logging sets
+  const { onSetLogged } = useTimer();
 
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [selectedMuscleGroup, setSelectedMuscleGroup] = useState(null);
@@ -68,28 +83,101 @@ export default function WorkoutBuilderScreen() {
   const [showPRCelebration, setShowPRCelebration] = useState(false);
   const [newPRs, setNewPRs] = useState([]);
 
+  // PR celebration animation values
+  const trophyScale = useSharedValue(0);
+  const trophyRotate = useSharedValue(0);
+  const trophyGlow = useSharedValue(0);
+  const titleScale = useSharedValue(0);
+  const prListOpacity = useSharedValue(0);
+
+  const trophyAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: trophyScale.value },
+      { rotate: `${trophyRotate.value}deg` },
+    ],
+  }));
+
+  const trophyGlowStyle = useAnimatedStyle(() => ({
+    shadowOpacity: trophyGlow.value,
+    shadowRadius: 20 * trophyGlow.value,
+  }));
+
+  const titleAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: titleScale.value }],
+    opacity: titleScale.value,
+  }));
+
+  const prListAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: prListOpacity.value,
+  }));
+
+  const triggerPRCelebration = () => {
+    // Trigger haptic feedback
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // Animate trophy with bounce
+    trophyScale.value = withSequence(
+      withSpring(1.2, { damping: 8, stiffness: 200 }),
+      withSpring(1, { damping: 10, stiffness: 150 })
+    );
+
+    // Slight wobble effect
+    trophyRotate.value = withSequence(
+      withDelay(100, withSpring(-5, { damping: 10 })),
+      withSpring(5, { damping: 10 }),
+      withSpring(0, { damping: 15 })
+    );
+
+    // Glow pulse
+    trophyGlow.value = withSequence(
+      withSpring(0.8, { damping: 10 }),
+      withSpring(0.4, { damping: 15 })
+    );
+
+    // Title bounce in
+    titleScale.value = withDelay(150, withSequence(
+      withSpring(1.1, { damping: 10, stiffness: 200 }),
+      withSpring(1, { damping: 15 })
+    ));
+
+    // Fade in the PR list
+    prListOpacity.value = withDelay(300, withSpring(1));
+  };
+
+  const resetPRCelebration = () => {
+    trophyScale.value = 0;
+    trophyRotate.value = 0;
+    trophyGlow.value = 0;
+    titleScale.value = 0;
+    prListOpacity.value = 0;
+  };
+
+  const closePRCelebration = () => {
+    setShowPRCelebration(false);
+    resetPRCelebration();
+    // Small delay to ensure modal fully closes before navigation
+    setTimeout(() => {
+      navigateToActivities();
+    }, 100);
+  };
+
   const navigateBack = () => {
-    // Always return to activities after saving or closing
-    router.replace('/activities');
-  };
-
-  const findPreviousSession = async (exerciseName) => {
-    const allWorkouts = await loadWorkouts();
-    const sorted = allWorkouts.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    for (const w of sorted) {
-      if (isEditing && w.id === parseInt(editingWorkoutId)) continue;
-      const exercise = w.exercises?.find(e => e.name === exerciseName);
-      if (exercise) {
-        return {
-          date: w.date,
-          sets: exercise.sets,
-          workoutName: w.name
-        };
-      }
+    // Go back to previous screen (for Cancel)
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/activities');
     }
-    return null;
   };
+
+  const navigateToActivities = () => {
+    // Always go to Activities after saving, with refresh param to trigger reload
+    router.replace({
+      pathname: '/activities',
+      params: { refresh: Date.now() }
+    });
+  };
+
 
   const handleSaveCustomExercise = async (name, category) => {
     if (!name.trim()) {
@@ -154,49 +242,6 @@ export default function WorkoutBuilderScreen() {
     }
   };
 
-  useEffect(() => {
-    if (isEditing) {
-      loadEditingWorkout();
-    } else if (isFromTemplate) {
-      loadFromTemplate();
-    } else {
-      const now = new Date();
-      setWorkout({
-        name: '',
-        type: 'Strength',
-        date: getTodayString(),
-        time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        notes: '',
-        exercises: []
-      });
-    }
-  }, [editingWorkoutId, templateId]);
-
-  const loadFromTemplate = async () => {
-    const templates = await loadTemplates();
-    const template = templates.find(t => t.id === parseInt(templateId));
-    if (template) {
-      const now = new Date();
-      setWorkout({
-        name: template.name,
-        type: template.type,
-        date: getTodayString(),
-        time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        notes: '',
-        exercises: template.exercises.map(ex => ({
-          name: ex.name,
-          sets: ex.sets.map(set => ({
-            weight: set.weight || 0,
-            reps: set.reps || 0,
-            distance: set.distance || 0,
-            time: set.time || 0,
-            pace: set.pace || 0
-          })),
-          notes: ex.notes || ''
-        }))
-      });
-    }
-  };
 
   useEffect(() => {
     loadCustomExercisesData();
@@ -207,57 +252,8 @@ export default function WorkoutBuilderScreen() {
     setCustomExercises(customs);
   };
 
-  const loadEditingWorkout = async () => {
-    const workouts = await loadWorkouts();
-    const workoutToEdit = workouts.find(w => w.id === parseInt(editingWorkoutId));
-    if (workoutToEdit) {
-      setWorkout({
-        ...workoutToEdit,
-        time: workoutToEdit.time || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        notes: workoutToEdit.notes || ''
-      });
-    }
-  };
-
-  const isCardioWorkoutType = (type) => {
-    return type === 'Running' || type === 'Cycling' || type === 'Swimming';
-  };
-
-  const isCardioExercise = (exerciseName) => {
-    return EXERCISE_DATABASE.Cardio?.includes(exerciseName);
-  };
-
   const handleTypeChange = (newType) => {
-    const oldIsCardio = isCardioWorkoutType(workout.type);
-    const newIsCardio = isCardioWorkoutType(newType);
-
-    if (workout.exercises.length > 0 && oldIsCardio !== newIsCardio) {
-      Alert.alert(
-        'Warning: Data Will Be Lost',
-        `Changing from ${oldIsCardio ? 'cardio' : 'strength'} to ${newIsCardio ? 'cardio' : 'strength'} will delete all ${oldIsCardio ? 'sessions' : 'exercises'} you've added. Continue?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Continue',
-            style: 'destructive',
-            onPress: () => {
-              setWorkout({
-                ...workout,
-                type: newType,
-                exercises: []
-              });
-              setShowTypePicker(false);
-            }
-          }
-        ]
-      );
-    } else {
-      setWorkout({
-        ...workout,
-        type: newType,
-      });
-      setShowTypePicker(false);
-    }
+    handleTypeChangeFromHook(newType, () => setShowTypePicker(false));
   };
 
   const calculatePace = (distance, time) => {
@@ -304,49 +300,27 @@ export default function WorkoutBuilderScreen() {
   };
 
   const saveWorkout = async () => {
-    if (!workout.name.trim()) {
-      Alert.alert('Missing Name', 'Please enter a workout name');
-      return;
-    }
+    try {
+      const result = await saveWorkoutData();
 
-    if (workout.exercises.length === 0) {
-      const label = isCardioWorkoutType(workout.type) ? 'sessions' : 'exercises';
-      Alert.alert('No ' + label.charAt(0).toUpperCase() + label.slice(1), `Please add at least one ${label.slice(0, -1)}`);
-      return;
-    }
+      if (!result.success) {
+        return;
+      }
 
-    const workouts = await loadWorkouts();
-
-    const workoutToSave = {
-      ...workout,
-      type: workout.type
-    };
-
-    let savedWorkout;
-
-    if (isEditing) {
-      savedWorkout = { ...workoutToSave, id: parseInt(editingWorkoutId) };
-      const updated = workouts.map(w =>
-        w.id === parseInt(editingWorkoutId) ? { ...w, ...workoutToSave } : w
-      );
-      await saveWorkouts(updated);
-    } else {
-      savedWorkout = {
-        ...workoutToSave,
-        id: Date.now()
-      };
-      await saveWorkouts([...workouts, savedWorkout]);
-    }
-
-    // Check for new PRs (only for strength workouts)
-    const achievedPRs = await checkAndUpdatePRs(savedWorkout);
-
-    if (achievedPRs.length > 0) {
-      // Show celebration modal
-      setNewPRs(achievedPRs);
-      setShowPRCelebration(true);
-    } else {
-      navigateBack();
+      if (result.achievedPRs && result.achievedPRs.length > 0) {
+        // Show celebration modal
+        setNewPRs(result.achievedPRs);
+        setShowPRCelebration(true);
+        // Trigger animation after modal renders
+        setTimeout(() => {
+          triggerPRCelebration();
+        }, 100);
+      } else {
+        navigateToActivities();
+      }
+    } catch (error) {
+      console.error('Error in saveWorkout:', error);
+      Alert.alert('Error', 'Something went wrong while saving. Please try again.');
     }
   };
 
@@ -450,27 +424,14 @@ export default function WorkoutBuilderScreen() {
       setWorkout({ ...workout, exercises: [...workout.exercises, exercise] });
     }
 
+    // Trigger auto-timer if enabled (only for strength exercises, not cardio)
+    if (!isCardioEntry && validSets.length > 0) {
+      onSetLogged();
+    }
+
     closeExerciseModal();
   };
 
-  const deleteExercise = (index) => {
-    const label = isCardioWorkoutType(workout.type) ? 'Session' : 'Exercise';
-    Alert.alert(
-      `Delete ${label}`,
-      'Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            const updated = workout.exercises.filter((_, i) => i !== index);
-            setWorkout({ ...workout, exercises: updated });
-          }
-        }
-      ]
-    );
-  };
 
   const addSet = () => {
     setCurrentExercise({
@@ -533,18 +494,6 @@ export default function WorkoutBuilderScreen() {
   const isCurrentCardioWorkout = isCardioWorkoutType(workout.type);
   const displayType = workout.type;
 
-  const formatSetDisplay = (set) => {
-    if (set.distance > 0 || set.time > 0 || set.pace > 0) {
-      const parts = [];
-      if (set.distance > 0) parts.push(`${set.distance} mi`);
-      if (set.time > 0) parts.push(`${set.time} min`);
-      if (set.pace > 0) parts.push(`${set.pace} min/mi`);
-      return parts.join(' • ');
-    } else {
-      return `${set.weight} lbs × ${set.reps} reps`;
-    }
-  };
-
   const sectionLabel = isCurrentCardioWorkout ? 'Sessions' : 'Exercises';
   const addButtonLabel = isCurrentCardioWorkout ? 'Add Session' : 'Add Exercise';
   const emptyStateText = isCurrentCardioWorkout ? 'No sessions yet' : 'No exercises yet';
@@ -552,12 +501,22 @@ export default function WorkoutBuilderScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.replace('/activities')} style={styles.headerButton}>
-          <Text style={styles.headerButtonText}>Cancel</Text>
+        <Pressable
+          onPress={navigateBack}
+          style={styles.headerButton}
+          disabled={isSaving}
+        >
+          <Text style={[styles.headerButtonText, isSaving && { opacity: 0.5 }]}>Cancel</Text>
         </Pressable>
         <Text style={styles.headerTitle}>{isEditing ? 'EDIT WORKOUT' : 'NEW WORKOUT'}</Text>
-        <Pressable onPress={saveWorkout} style={styles.saveButtonContainer}>
-          <Text style={styles.saveButtonText}>Save</Text>
+        <Pressable
+          onPress={saveWorkout}
+          style={[styles.saveButtonContainer, isSaving && styles.saveButtonDisabled]}
+          disabled={isSaving}
+        >
+          <Text style={[styles.saveButtonText, isSaving && styles.saveButtonTextDisabled]}>
+            {isSaving ? 'Saving...' : 'Save'}
+          </Text>
         </Pressable>
       </View>
 
@@ -616,58 +575,37 @@ export default function WorkoutBuilderScreen() {
             </View>
           ) : (
             workout.exercises.map((exercise, index) => (
-              <View key={index} style={styles.exerciseCard}>
-                <View style={styles.exerciseHeader}>
-                  <View style={styles.exerciseNameRow}>
-                    <Text style={styles.exerciseName}>{exercise.name}</Text>
-                    {exercise.notes && (
-                      <Pressable
-                        onPress={() => Alert.alert('Notes', exercise.notes)}
-                        style={styles.noteIndicator}
-                      >
-                        <MessageSquare size={16} color={COLORS.tertiary.primary} fill={COLORS.tertiary.primary} strokeWidth={2} />
-                      </Pressable>
-                    )}
-                  </View>
-                  <View style={styles.exerciseActions}>
-                    <Pressable
-                      onPress={async () => {
-                        setEditingExerciseIndex(index);
+              <ExerciseCard
+                key={index}
+                exercise={exercise}
+                index={index}
+                isCardioWorkout={isCurrentCardioWorkout}
+                onEdit={async (idx) => {
+                  setEditingExerciseIndex(idx);
 
-                        if (isCurrentCardioWorkout) {
-                          const prevSession = await findPreviousSession(workout.type);
-                          setPreviousSession(prevSession);
-                        }
+                  if (isCurrentCardioWorkout) {
+                    const prevSession = await findPreviousSession(workout.type);
+                    setPreviousSession(prevSession);
+                  }
 
-                        setCurrentExercise({
-                          name: exercise.name,
-                          sets: exercise.sets.map(s => ({
-                            weight: s.weight?.toString() || '',
-                            reps: s.reps?.toString() || '',
-                            distance: s.distance?.toString() || '',
-                            time: s.time?.toString() || '',
-                            pace: s.pace?.toString() || ''
-                          })),
-                          notes: exercise.notes || ''
-                        });
-                        setShowExercisePicker(true);
-                      }}
-                      style={styles.editIconButton}
-                    >
-                      <Text style={styles.editText}>Edit</Text>
-                    </Pressable>
-                    <Pressable onPress={() => deleteExercise(index)} style={styles.deleteIconButton}>
-                      <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
-                    </Pressable>
-                  </View>
-                </View>
-                {exercise.sets.map((set, setIdx) => (
-                  <View key={setIdx} style={styles.setRow}>
-                    <Text style={styles.setLabel}>SET {setIdx + 1}</Text>
-                    <Text style={styles.setValue}>{formatSetDisplay(set)}</Text>
-                  </View>
-                ))}
-              </View>
+                  setCurrentExercise({
+                    name: exercise.name,
+                    sets: exercise.sets.map(s => ({
+                      weight: s.weight?.toString() || '',
+                      reps: s.reps?.toString() || '',
+                      distance: s.distance?.toString() || '',
+                      time: s.time?.toString() || '',
+                      pace: s.pace?.toString() || ''
+                    })),
+                    notes: exercise.notes || ''
+                  });
+                  setShowExercisePicker(true);
+                }}
+                onDelete={(idx) => {
+                  const updated = workout.exercises.filter((_, i) => i !== idx);
+                  setWorkout({ ...workout, exercises: updated });
+                }}
+              />
             ))
           )}
         </View>
@@ -774,7 +712,11 @@ export default function WorkoutBuilderScreen() {
                 if (customExerciseScreen === 'manage') {
                   setCustomExerciseScreen(null);
                   setEditingCustomExercise(null);
+                } else if (editingExerciseIndex !== null) {
+                  // When editing an existing exercise, back should close the modal
+                  closeExerciseModal();
                 } else if (currentExercise.name) {
+                  // When adding a new exercise, go back to category selection
                   setCurrentExercise({ ...currentExercise, name: '' });
                   setSearchQuery('');
                 } else {
@@ -783,7 +725,11 @@ export default function WorkoutBuilderScreen() {
               }}
               style={styles.modalBackButton}
             >
-              {customExerciseScreen === 'manage' || currentExercise.name ? (
+              {customExerciseScreen === 'manage' ? (
+                <Text style={styles.modalBackText}>← Back</Text>
+              ) : editingExerciseIndex !== null ? (
+                <X size={24} color={COLORS.text.primary} strokeWidth={2} />
+              ) : currentExercise.name ? (
                 <Text style={styles.modalBackText}>← Back</Text>
               ) : (
                 <X size={24} color={COLORS.text.primary} strokeWidth={2} />
@@ -1102,26 +1048,25 @@ export default function WorkoutBuilderScreen() {
         visible={showPRCelebration}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          setShowPRCelebration(false);
-          navigateBack();
-        }}
+        onRequestClose={closePRCelebration}
       >
         <View style={styles.prModalOverlay}>
           <View style={styles.prModalContainer}>
-            {/* Trophy Icon */}
-            <View style={styles.prTrophyContainer}>
+            {/* Animated Trophy Icon with Glow */}
+            <Animated.View style={[styles.prTrophyContainer, styles.prTrophyGlow, trophyAnimatedStyle, trophyGlowStyle]}>
               <Trophy size={48} color={COLORS.warning} strokeWidth={1.5} fill={COLORS.warning} />
-            </View>
+            </Animated.View>
 
-            {/* Title */}
-            <Text style={styles.prModalTitle}>NEW PR{newPRs.length > 1 ? 's' : ''}!</Text>
-            <Text style={styles.prModalSubtitle}>
-              You crushed {newPRs.length} personal record{newPRs.length > 1 ? 's' : ''}
-            </Text>
+            {/* Animated Title */}
+            <Animated.View style={titleAnimatedStyle}>
+              <Text style={styles.prModalTitle}>NEW PR{newPRs.length > 1 ? 's' : ''}!</Text>
+              <Text style={styles.prModalSubtitle}>
+                You crushed {newPRs.length} personal record{newPRs.length > 1 ? 's' : ''}
+              </Text>
+            </Animated.View>
 
-            {/* PR List */}
-            <View style={styles.prList}>
+            {/* Animated PR List */}
+            <Animated.View style={[styles.prList, prListAnimatedStyle]}>
               {newPRs.map((pr, index) => (
                 <View key={index} style={styles.prListItem}>
                   <View style={styles.prListIcon}>
@@ -1144,16 +1089,13 @@ export default function WorkoutBuilderScreen() {
                   </View>
                 </View>
               ))}
-            </View>
+            </Animated.View>
 
             {/* Buttons */}
             <View style={styles.prModalButtons}>
               <Pressable
                 style={styles.prModalDismiss}
-                onPress={() => {
-                  setShowPRCelebration(false);
-                  navigateBack();
-                }}
+                onPress={closePRCelebration}
               >
                 <Text style={styles.prModalDismissText}>Continue</Text>
               </Pressable>
@@ -1161,6 +1103,7 @@ export default function WorkoutBuilderScreen() {
               <Pressable
                 style={styles.prModalViewAll}
                 onPress={() => {
+                  resetPRCelebration();
                   setShowPRCelebration(false);
                   router.push('/personal-records');
                 }}
@@ -1213,6 +1156,13 @@ const styles = StyleSheet.create({
   saveButtonText: {
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.text.inverse,
+  },
+  saveButtonDisabled: {
+    backgroundColor: COLORS.text.tertiary,
+    opacity: 0.6,
+  },
+  saveButtonTextDisabled: {
+    color: COLORS.text.secondary,
   },
 
   // Content
@@ -1727,6 +1677,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.lg,
+  },
+  prTrophyGlow: {
+    shadowColor: COLORS.warning,
+    shadowOffset: { width: 0, height: 0 },
   },
   prModalTitle: {
     ...TYPOGRAPHY.h1,

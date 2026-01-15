@@ -22,12 +22,22 @@ export const getTodayString = () => {
 };
 
 /**
+ * Parse a YYYY-MM-DD string as local date (avoiding timezone issues)
+ * @param {string} dateString - Date string in YYYY-MM-DD format
+ * @returns {Date} Date object in local timezone
+ */
+const parseLocalDate = (dateString) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+/**
  * Format date for short display (e.g., "Mon, Jan 15")
  * @param {string} dateString - Date string to format
  * @returns {string} Formatted date
  */
 export const formatDateShort = (dateString) => {
-  const date = new Date(dateString);
+  const date = parseLocalDate(dateString);
   return date.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -41,7 +51,7 @@ export const formatDateShort = (dateString) => {
  * @returns {string} Formatted date
  */
 export const formatDateLong = (dateString) => {
-  const date = new Date(dateString);
+  const date = parseLocalDate(dateString);
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',

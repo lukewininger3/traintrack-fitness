@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Activity, BarChart3, Calendar, TrendingUp, Trophy } from 'lucide-react-native';
+import { Activity, LayoutDashboard, TrendingUp, Trophy } from 'lucide-react-native';
 import { View, StyleSheet, Platform } from 'react-native';
 import { COLORS, SPACING, RADIUS } from '../../src/theme/design';
 
@@ -45,7 +45,7 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'TRAINTRACK',
-          tabBarLabel: 'Home',
+          tabBarLabel: 'Dashboard',
           headerTitleStyle: {
             fontWeight: '800',
             fontSize: 18,
@@ -53,7 +53,7 @@ export default function TabsLayout() {
           },
           tabBarIcon: ({ color, focused }) => (
             <View style={focused ? styles.activeIconContainer : undefined}>
-              <Calendar
+              <LayoutDashboard
                 size={22}
                 color={color}
                 strokeWidth={focused ? 2.5 : 2}
@@ -85,21 +85,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="analytics"
         options={{
-          title: 'ANALYTICS',
-          headerTitleStyle: {
-            fontWeight: '800',
-            fontSize: 18,
-            letterSpacing: 2,
-          },
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? styles.activeIconContainer : undefined}>
-              <BarChart3
-                size={22}
-                color={color}
-                strokeWidth={focused ? 2.5 : 2}
-              />
-            </View>
-          ),
+          href: null,
+          headerShown: false,
         }}
       />
       <Tabs.Screen

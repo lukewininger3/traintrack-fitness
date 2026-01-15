@@ -3,6 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const TIMER_SETTINGS_KEY = '@traintrack_timer_settings';
 
 /**
+ * Timer modes
+ */
+export const TIMER_MODES = {
+  MANUAL: 'manual',  // User manually starts timer
+  AUTO: 'auto',      // Timer auto-starts after logging a set
+};
+
+/**
  * Default timer settings
  */
 export const DEFAULT_TIMER_SETTINGS = {
@@ -10,6 +18,7 @@ export const DEFAULT_TIMER_SETTINGS = {
   hapticEnabled: true,
   autoStart: true,
   lastUsedDuration: 90,
+  timerMode: TIMER_MODES.MANUAL, // Default to manual mode
 };
 
 /**

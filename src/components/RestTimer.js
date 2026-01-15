@@ -85,6 +85,28 @@ export default function RestTimerButton() {
             {showSettings && (
               <View style={styles.settingsPanel}>
                 <View style={styles.settingRow}>
+                  <View style={styles.settingInfo}>
+                    <Text style={styles.settingLabel}>Auto-Start Timer</Text>
+                    <Text style={styles.settingDescription}>
+                      Start rest timer automatically after logging a set
+                    </Text>
+                  </View>
+                  <Switch
+                    value={timer.isAutoMode}
+                    onValueChange={() => timer.toggleTimerMode()}
+                    trackColor={{
+                      false: COLORS.surface.border,
+                      true: COLORS.accent.primaryDim,
+                    }}
+                    thumbColor={
+                      timer.isAutoMode
+                        ? COLORS.accent.primary
+                        : COLORS.text.tertiary
+                    }
+                  />
+                </View>
+                <View style={styles.settingDivider} />
+                <View style={styles.settingRow}>
                   <Text style={styles.settingLabel}>Haptic Feedback</Text>
                   <Switch
                     value={timer.settings.hapticEnabled}
@@ -306,9 +328,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: SPACING.sm,
   },
+  settingInfo: {
+    flex: 1,
+    marginRight: SPACING.md,
+  },
   settingLabel: {
     ...TYPOGRAPHY.body,
     color: COLORS.text.primary,
+  },
+  settingDescription: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    marginTop: 2,
+  },
+  settingDivider: {
+    height: 1,
+    backgroundColor: COLORS.surface.border,
+    marginVertical: SPACING.sm,
   },
 
   // Timer Display

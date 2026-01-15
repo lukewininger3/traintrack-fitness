@@ -245,21 +245,20 @@ export default function CalendarScreen({ navigation }) {
                           !day && styles.dayInvisible,
                           day?.isToday && styles.dayToday,
                           day?.hasWorkout && !day?.isToday && styles.dayWithWorkout,
+                          day?.hasWorkout && !day?.isToday && { backgroundColor: workoutColor + '15' },
                         ]}
                       >
-                        {day?.hasWorkout && Icon ? (
-                          <View style={[styles.workoutIconBg, { backgroundColor: workoutColor + '20' }]}>
-                            <Icon size={16} color={workoutColor} strokeWidth={2.5} />
-                          </View>
-                        ) : (
-                          <Text style={[
-                            styles.dayText,
-                            day?.isToday && styles.dayTextToday,
-                            isFutureDay && styles.dayTextFuture,
-                            !isFutureDay && !day?.isToday && styles.dayTextPast
-                          ]}>
-                            {day?.day}
-                          </Text>
+                        <Text style={[
+                          styles.dayText,
+                          day?.isToday && styles.dayTextToday,
+                          day?.hasWorkout && !day?.isToday && { color: workoutColor },
+                          isFutureDay && !day?.hasWorkout && styles.dayTextFuture,
+                          !isFutureDay && !day?.isToday && !day?.hasWorkout && styles.dayTextPast
+                        ]}>
+                          {day?.day}
+                        </Text>
+                        {day?.hasWorkout && (
+                          <View style={[styles.workoutDot, { backgroundColor: workoutColor }]} />
                         )}
                       </Pressable>
                     );
@@ -501,12 +500,12 @@ const styles = StyleSheet.create({
   dayTextPast: {
     color: COLORS.text.secondary,
   },
-  workoutIconBg: {
-    width: DAY_SIZE - 4,
-    height: DAY_SIZE - 4,
-    borderRadius: RADIUS.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
+  workoutDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    position: 'absolute',
+    bottom: 4,
   },
 
   // Week Indicator
