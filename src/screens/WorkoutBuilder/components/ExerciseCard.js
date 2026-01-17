@@ -1,4 +1,4 @@
-import { MessageSquare, Trash2 } from 'lucide-react-native';
+import { GripVertical, MessageSquare, Trash2 } from 'lucide-react-native';
 import React from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../../theme/design';
@@ -19,7 +19,9 @@ export default function ExerciseCard({
   index,
   onEdit,
   onDelete,
-  isCardioWorkout = false
+  isCardioWorkout = false,
+  drag,
+  isActive = false,
 }) {
   const label = isCardioWorkout ? 'Session' : 'Exercise';
 
@@ -35,9 +37,19 @@ export default function ExerciseCard({
   };
 
   return (
-    <View style={styles.exerciseCard}>
+    <View style={[styles.exerciseCard, isActive && styles.exerciseCardDragging]}>
       <View style={styles.exerciseHeader}>
-        <View style={styles.exerciseNameRow}>
+        {/* Drag Handle */}
+        {drag && (
+          <Pressable
+            onLongPress={drag}
+            delayLongPress={100}
+            style={styles.dragHandle}
+          >
+            <GripVertical size={20} color={COLORS.text.tertiary} strokeWidth={2} />
+          </Pressable>
+        )}
+        <View style={[styles.exerciseNameRow, drag && { marginLeft: 0 }]}>
           <Text style={styles.exerciseName}>{exercise.name}</Text>
           {exercise.notes && (
             <Pressable
@@ -54,10 +66,18 @@ export default function ExerciseCard({
           )}
         </View>
         <View style={styles.exerciseActions}>
-          <Pressable onPress={() => onEdit(index)} style={styles.editIconButton}>
+          <Pressable
+            onPress={() => onEdit(index)}
+            style={styles.editIconButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <Text style={styles.editText}>Edit</Text>
           </Pressable>
-          <Pressable onPress={handleDelete} style={styles.deleteIconButton}>
+          <Pressable
+            onPress={handleDelete}
+            style={styles.deleteIconButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
           </Pressable>
         </View>
@@ -81,11 +101,25 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     marginBottom: SPACING.sm
   },
+  exerciseCardDragging: {
+    backgroundColor: COLORS.background.elevated,
+    borderColor: COLORS.accent.primary,
+    shadowColor: COLORS.accent.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
   exerciseHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: SPACING.md
+  },
+  dragHandle: {
+    padding: SPACING.xs,
+    marginRight: SPACING.sm,
+    borderRadius: RADIUS.sm,
   },
   exerciseNameRow: {
     flexDirection: 'row',
@@ -102,13 +136,17 @@ const styles = StyleSheet.create({
   },
   exerciseActions: {
     flexDirection: 'row',
-    gap: SPACING.md
+    gap: SPACING.sm,
+    alignItems: 'center',
   },
   editIconButton: {
-    padding: SPACING.xs
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    backgroundColor: COLORS.accent.primaryDim,
+    borderRadius: RADIUS.sm,
   },
   deleteIconButton: {
-    padding: SPACING.xs
+    padding: SPACING.sm,
   },
   editText: {
     ...TYPOGRAPHY.caption,

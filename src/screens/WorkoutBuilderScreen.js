@@ -1,10 +1,10 @@
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Award, FileText, MessageSquare, Plus, Trash2, Trophy, X } from 'lucide-react-native';
-import React, { useEffect, useRef, useState } from 'react';
+import { Award, FileText, MessageSquare, Pencil, Plus, Trash2, Trophy, X } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -14,6 +14,7 @@ import {
   TextInput,
   View
 } from 'react-native';
+import DraggableFlatList from 'react-native-draggable-flatlist';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -21,7 +22,7 @@ import Animated, {
   withSequence,
   withDelay,
 } from 'react-native-reanimated';
-import { EXERCISE_DATABASE, WORKOUT_TYPES, getAllCategories, searchBuiltInExercises } from '../constants/workoutTypes';
+import { EXERCISE_DATABASE, getAllCategories, searchBuiltInExercises } from '../constants/workoutTypes';
 import { exerciseExists, loadCustomExercises, saveCustomExercise } from '../utils/customExercises';
 import { saveAsTemplate } from '../utils/workoutTemplates';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
@@ -31,7 +32,6 @@ import CustomExerciseForm from './WorkoutBuilder/components/CustomExerciseForm';
 import ExerciseCard from './WorkoutBuilder/components/ExerciseCard';
 import ExerciseSetInput from './WorkoutBuilder/components/ExerciseSetInput';
 import PreviousSessionBanner from './WorkoutBuilder/components/PreviousSessionBanner';
-import WorkoutFormFields from './WorkoutBuilder/components/WorkoutFormFields';
 import { useWorkoutForm } from './WorkoutBuilder/hooks/useWorkoutForm';
 
 export default function WorkoutBuilderScreen() {
@@ -39,24 +39,23 @@ export default function WorkoutBuilderScreen() {
   const editingWorkoutId = params?.workoutId;
   const templateId = params?.templateId;
   const repeatData = params?.repeatData;
+  const workoutDetails = params?.workoutDetails;
   const scrollViewRef = useRef(null);
   const setRefs = useRef([]);
 
   // Use the workout form hook for state management
   const {
     workout,
-    isEditing,
     isSaving,
     isCardioWorkoutType,
     isCardioExercise,
     setWorkout,
-    handleTypeChange: handleTypeChangeFromHook,
     saveWorkoutData,
     findPreviousSession,
-  } = useWorkoutForm({ editingWorkoutId, templateId, repeatData });
+  } = useWorkoutForm({ editingWorkoutId, templateId, repeatData, workoutDetails });
 
   // Timer for auto-start after logging sets
-  const { onSetLogged } = useTimer();
+  const { onSetLogged, reset: resetTimer } = useTimer();
 
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [selectedMuscleGroup, setSelectedMuscleGroup] = useState(null);
@@ -67,11 +66,6 @@ export default function WorkoutBuilderScreen() {
     notes: ''
   });
 
-  const [showTypePicker, setShowTypePicker] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [tempDate, setTempDate] = useState(new Date());
-  const [tempTime, setTempTime] = useState(new Date());
   const [previousSession, setPreviousSession] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -162,16 +156,36 @@ export default function WorkoutBuilderScreen() {
   };
 
   const navigateBack = () => {
-    // Go back to previous screen (for Cancel)
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/activities');
-    }
+    // Cancel exits completely without saving - reset timer and go to activities
+    resetTimer();
+    router.replace('/activities');
+  };
+
+  const navigateToEditDetails = () => {
+    // Navigate back to workout details to edit name/type/date
+    router.push({
+      pathname: '/workout-details',
+      params: {
+        workoutId: editingWorkoutId,
+        templateId: templateId,
+        repeatData: repeatData,
+        // Pass current workout state so details can be edited
+        editingDetails: JSON.stringify({
+          name: workout.name,
+          type: workout.type,
+          date: workout.date,
+          time: workout.time,
+          notes: workout.notes,
+        }),
+        // Pass exercises so save button can appear on details screen
+        existingExercises: JSON.stringify(workout.exercises),
+      }
+    });
   };
 
   const navigateToActivities = () => {
-    // Always go to Activities after saving, with refresh param to trigger reload
+    // Reset timer and go to Activities after saving
+    resetTimer();
     router.replace({
       pathname: '/activities',
       params: { refresh: Date.now() }
@@ -250,10 +264,6 @@ export default function WorkoutBuilderScreen() {
   const loadCustomExercisesData = async () => {
     const customs = await loadCustomExercises();
     setCustomExercises(customs);
-  };
-
-  const handleTypeChange = (newType) => {
-    handleTypeChangeFromHook(newType, () => setShowTypePicker(false));
   };
 
   const calculatePace = (distance, time) => {
@@ -445,74 +455,43 @@ export default function WorkoutBuilderScreen() {
     setCurrentExercise({ ...currentExercise, sets: updated });
   };
 
-  const handleDateChange = (event, selectedDate) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-    if (selectedDate) {
-      setTempDate(selectedDate);
-      if (Platform.OS === 'android') {
-        const dateString = selectedDate.toISOString().split('T')[0];
-        setWorkout({ ...workout, date: dateString });
-      }
-    }
-  };
-
-  const handleTimeChange = (event, selectedTime) => {
-    if (Platform.OS === 'android') {
-      setShowTimePicker(false);
-    }
-    if (selectedTime) {
-      setTempTime(selectedTime);
-      if (Platform.OS === 'android') {
-        const timeString = selectedTime.toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        });
-        setWorkout({ ...workout, time: timeString });
-      }
-    }
-  };
-
-  const confirmDate = () => {
-    const dateString = tempDate.toISOString().split('T')[0];
-    setWorkout({ ...workout, date: dateString });
-    setShowDatePicker(false);
-  };
-
-  const confirmTime = () => {
-    const timeString = tempTime.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-    setWorkout({ ...workout, time: timeString });
-    setShowTimePicker(false);
-  };
-
   const isCurrentCardioWorkout = isCardioWorkoutType(workout.type);
-  const displayType = workout.type;
 
   const sectionLabel = isCurrentCardioWorkout ? 'Sessions' : 'Exercises';
   const addButtonLabel = isCurrentCardioWorkout ? 'Add Session' : 'Add Exercise';
   const emptyStateText = isCurrentCardioWorkout ? 'No sessions yet' : 'No exercises yet';
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+    >
       <View style={styles.header}>
         <Pressable
           onPress={navigateBack}
           style={styles.headerButton}
           disabled={isSaving}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Text style={[styles.headerButtonText, isSaving && { opacity: 0.5 }]}>Cancel</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>{isEditing ? 'EDIT WORKOUT' : 'NEW WORKOUT'}</Text>
+        <Pressable
+          style={styles.headerCenter}
+          onPress={navigateToEditDetails}
+          hitSlop={{ top: 5, bottom: 5, left: 0, right: 0 }}
+        >
+          <View style={styles.headerTitleRow}>
+            <Text style={styles.headerTitle}>{workout.name || 'New Workout'}</Text>
+            <Pencil size={14} color={COLORS.text.secondary} strokeWidth={2} />
+          </View>
+          <Text style={styles.headerSubtitle}>{workout.type} • {workout.date}</Text>
+        </Pressable>
         <Pressable
           onPress={saveWorkout}
           style={[styles.saveButtonContainer, isSaving && styles.saveButtonDisabled]}
           disabled={isSaving}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Text style={[styles.saveButtonText, isSaving && styles.saveButtonTextDisabled]}>
             {isSaving ? 'Saving...' : 'Save'}
@@ -520,20 +499,7 @@ export default function WorkoutBuilderScreen() {
         </Pressable>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <WorkoutFormFields
-          workout={workout}
-          onWorkoutChange={setWorkout}
-          onShowTypePicker={() => setShowTypePicker(true)}
-          onShowDatePicker={() => {
-            const [year, month, day] = workout.date.split('-');
-            setTempDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
-            setShowDatePicker(true);
-          }}
-          onShowTimePicker={() => setShowTimePicker(true)}
-          displayType={displayType}
-        />
-
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{sectionLabel.toUpperCase()}</Text>
@@ -574,39 +540,56 @@ export default function WorkoutBuilderScreen() {
               <Text style={styles.emptySubtext}>Tap the button above to get started</Text>
             </View>
           ) : (
-            workout.exercises.map((exercise, index) => (
-              <ExerciseCard
-                key={index}
-                exercise={exercise}
-                index={index}
-                isCardioWorkout={isCurrentCardioWorkout}
-                onEdit={async (idx) => {
-                  setEditingExerciseIndex(idx);
+            <DraggableFlatList
+              data={workout.exercises}
+              keyExtractor={(item, index) => `exercise-${index}-${item.name}`}
+              onDragBegin={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              }}
+              onDragEnd={({ data }) => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setWorkout({ ...workout, exercises: data });
+              }}
+              renderItem={({ item: exercise, getIndex, drag, isActive }) => {
+                const index = getIndex();
+                return (
+                  <ExerciseCard
+                    exercise={exercise}
+                    index={index}
+                    isCardioWorkout={isCurrentCardioWorkout}
+                    drag={drag}
+                    isActive={isActive}
+                    onEdit={async (idx) => {
+                      setEditingExerciseIndex(idx);
 
-                  if (isCurrentCardioWorkout) {
-                    const prevSession = await findPreviousSession(workout.type);
-                    setPreviousSession(prevSession);
-                  }
+                      if (isCurrentCardioWorkout) {
+                        const prevSession = await findPreviousSession(workout.type);
+                        setPreviousSession(prevSession);
+                      }
 
-                  setCurrentExercise({
-                    name: exercise.name,
-                    sets: exercise.sets.map(s => ({
-                      weight: s.weight?.toString() || '',
-                      reps: s.reps?.toString() || '',
-                      distance: s.distance?.toString() || '',
-                      time: s.time?.toString() || '',
-                      pace: s.pace?.toString() || ''
-                    })),
-                    notes: exercise.notes || ''
-                  });
-                  setShowExercisePicker(true);
-                }}
-                onDelete={(idx) => {
-                  const updated = workout.exercises.filter((_, i) => i !== idx);
-                  setWorkout({ ...workout, exercises: updated });
-                }}
-              />
-            ))
+                      setCurrentExercise({
+                        name: exercise.name,
+                        sets: exercise.sets.map(s => ({
+                          weight: s.weight?.toString() || '',
+                          reps: s.reps?.toString() || '',
+                          distance: s.distance?.toString() || '',
+                          time: s.time?.toString() || '',
+                          pace: s.pace?.toString() || ''
+                        })),
+                        notes: exercise.notes || ''
+                      });
+                      setShowExercisePicker(true);
+                    }}
+                    onDelete={(idx) => {
+                      const updated = workout.exercises.filter((_, i) => i !== idx);
+                      setWorkout({ ...workout, exercises: updated });
+                    }}
+                  />
+                );
+              }}
+              scrollEnabled={false}
+              containerStyle={styles.draggableList}
+            />
           )}
         </View>
 
@@ -618,78 +601,6 @@ export default function WorkoutBuilderScreen() {
           </Pressable>
         )}
       </ScrollView>
-
-      {/* Type Picker Modal */}
-      <Modal visible={showTypePicker} transparent={true} animationType="fade" onRequestClose={() => setShowTypePicker(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowTypePicker(false)}>
-          <View style={styles.pickerModal}>
-            <View style={styles.pickerHandle} />
-            <Text style={styles.pickerTitle}>SELECT TYPE</Text>
-            {WORKOUT_TYPES.map(type => (
-              <Pressable
-                key={type}
-                style={[styles.pickerOption, workout.type === type && styles.pickerOptionSelected]}
-                onPress={() => handleTypeChange(type)}
-              >
-                <Text style={[styles.pickerOptionText, workout.type === type && styles.pickerOptionTextSelected]}>
-                  {type}
-                </Text>
-                {workout.type === type && <View style={styles.selectedDot} />}
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* Date Picker Modal */}
-      {showDatePicker && (
-        <Modal transparent={true} animationType="fade" visible={showDatePicker}>
-          <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
-            <View style={styles.datePickerModal}>
-              <View style={styles.pickerHandle} />
-              <Text style={styles.pickerTitle}>SELECT DATE</Text>
-              <DateTimePicker
-                value={tempDate}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={handleDateChange}
-                textColor={COLORS.text.primary}
-                themeVariant="dark"
-              />
-              {Platform.OS === 'ios' && (
-                <Pressable style={styles.confirmButton} onPress={confirmDate}>
-                  <Text style={styles.confirmButtonText}>Confirm</Text>
-                </Pressable>
-              )}
-            </View>
-          </Pressable>
-        </Modal>
-      )}
-
-      {/* Time Picker Modal */}
-      {showTimePicker && (
-        <Modal transparent={true} animationType="fade" visible={showTimePicker}>
-          <Pressable style={styles.modalOverlay} onPress={() => setShowTimePicker(false)}>
-            <View style={styles.datePickerModal}>
-              <View style={styles.pickerHandle} />
-              <Text style={styles.pickerTitle}>SELECT TIME</Text>
-              <DateTimePicker
-                value={tempTime}
-                mode="time"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={handleTimeChange}
-                textColor={COLORS.text.primary}
-                themeVariant="dark"
-              />
-              {Platform.OS === 'ios' && (
-                <Pressable style={styles.confirmButton} onPress={confirmTime}>
-                  <Text style={styles.confirmButtonText}>Confirm</Text>
-                </Pressable>
-              )}
-            </View>
-          </Pressable>
-        </Modal>
-      )}
 
       {/* Exercise Picker Modal */}
       <Modal
@@ -705,7 +616,11 @@ export default function WorkoutBuilderScreen() {
           }
         }}
       >
-        <View style={styles.exerciseModalContainer}>
+        <KeyboardAvoidingView
+          style={styles.exerciseModalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
           <View style={styles.modalHeader}>
             <Pressable
               onPress={() => {
@@ -826,6 +741,7 @@ export default function WorkoutBuilderScreen() {
               style={styles.modalContent}
               contentContainerStyle={styles.modalContentContainer}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               {currentExercise.name ? (
                 <>
@@ -865,6 +781,7 @@ export default function WorkoutBuilderScreen() {
                         onUpdate={(field, value) => updateSetWithCalculation(index, field, value)}
                         onRemove={() => removeSet(index)}
                         onFocus={() => scrollToSet(index)}
+                        onConfirm={() => onSetLogged()}
                       />
                     </View>
                   ))}
@@ -905,12 +822,24 @@ export default function WorkoutBuilderScreen() {
                     <View>
                       <Text style={styles.searchResultsTitle}>SEARCH RESULTS</Text>
                       {(() => {
-                        const builtInResults = searchBuiltInExercises(searchQuery);
-                        const customResults = customExercises.filter(ex =>
-                          ex.name.toLowerCase().includes(searchQuery.toLowerCase())
-                        );
+                        const builtInResults = searchBuiltInExercises(searchQuery).map(r => ({
+                          ...r,
+                          isCustom: false
+                        }));
+                        const customResults = customExercises
+                          .filter(ex => ex.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                          .map(ex => ({
+                            name: ex.name,
+                            category: ex.category,
+                            id: ex.id,
+                            isCustom: true
+                          }));
 
-                        if (builtInResults.length === 0 && customResults.length === 0) {
+                        // Combine and sort alphabetically
+                        const allResults = [...builtInResults, ...customResults]
+                          .sort((a, b) => a.name.localeCompare(b.name));
+
+                        if (allResults.length === 0) {
                           return (
                             <View style={styles.emptySearchResults}>
                               <Text style={styles.emptySearchText}>No exercises found</Text>
@@ -923,9 +852,9 @@ export default function WorkoutBuilderScreen() {
 
                         return (
                           <>
-                            {builtInResults.map((result, idx) => (
+                            {allResults.map((result, idx) => (
                               <Pressable
-                                key={`built-in-${idx}`}
+                                key={result.isCustom ? `custom-${result.id}` : `built-in-${idx}`}
                                 onPress={async () => {
                                   const prevSession = await findPreviousSession(result.name);
                                   setPreviousSession(prevSession);
@@ -934,28 +863,15 @@ export default function WorkoutBuilderScreen() {
                                 }}
                                 style={styles.exerciseOption}
                               >
-                                <Text style={styles.exerciseOptionText}>{result.name}</Text>
-                                <Text style={styles.exerciseCategoryTag}>{result.category}</Text>
-                              </Pressable>
-                            ))}
-                            {customResults.map((exercise) => (
-                              <Pressable
-                                key={`custom-${exercise.id}`}
-                                onPress={async () => {
-                                  const prevSession = await findPreviousSession(exercise.name);
-                                  setPreviousSession(prevSession);
-                                  setCurrentExercise({ ...currentExercise, name: exercise.name });
-                                  setSearchQuery('');
-                                }}
-                                style={styles.exerciseOption}
-                              >
                                 <View style={styles.exerciseOptionRow}>
-                                  <Text style={styles.exerciseOptionText}>{exercise.name}</Text>
-                                  <View style={styles.customBadge}>
-                                    <Text style={styles.customBadgeText}>CUSTOM</Text>
-                                  </View>
+                                  <Text style={styles.exerciseOptionText}>{result.name}</Text>
+                                  {result.isCustom && (
+                                    <View style={styles.customBadge}>
+                                      <Text style={styles.customBadgeText}>CUSTOM</Text>
+                                    </View>
+                                  )}
                                 </View>
-                                <Text style={styles.exerciseCategoryTag}>{exercise.category}</Text>
+                                <Text style={styles.exerciseCategoryTag}>{result.category}</Text>
                               </Pressable>
                             ))}
                           </>
@@ -988,44 +904,46 @@ export default function WorkoutBuilderScreen() {
                             <Text style={styles.backToCategoriesText}>← Back to categories</Text>
                           </Pressable>
 
-                          <>
-                            {EXERCISE_DATABASE[selectedMuscleGroup].map(exercise => (
+                          {(() => {
+                            // Combine built-in and custom exercises for this category
+                            const builtInExercises = EXERCISE_DATABASE[selectedMuscleGroup].map(name => ({
+                              name,
+                              isCustom: false
+                            }));
+                            const customInCategory = customExercises
+                              .filter(ex => ex.category === selectedMuscleGroup)
+                              .map(ex => ({
+                                name: ex.name,
+                                id: ex.id,
+                                isCustom: true
+                              }));
+
+                            // Combine and sort alphabetically
+                            const allExercises = [...builtInExercises, ...customInCategory]
+                              .sort((a, b) => a.name.localeCompare(b.name));
+
+                            return allExercises.map((exercise, idx) => (
                               <Pressable
-                                key={exercise}
+                                key={exercise.isCustom ? `custom-${exercise.id}` : `built-in-${idx}`}
                                 onPress={async () => {
-                                  const prevSession = await findPreviousSession(exercise);
+                                  const prevSession = await findPreviousSession(exercise.name);
                                   setPreviousSession(prevSession);
-                                  setCurrentExercise({ ...currentExercise, name: exercise });
+                                  setCurrentExercise({ ...currentExercise, name: exercise.name });
                                   setSelectedMuscleGroup(null);
                                 }}
                                 style={styles.exerciseOption}
                               >
-                                <Text style={styles.exerciseOptionText}>{exercise}</Text>
-                              </Pressable>
-                            ))}
-
-                            {customExercises
-                              .filter(ex => ex.category === selectedMuscleGroup)
-                              .map(exercise => (
-                                <Pressable
-                                  key={`custom-${exercise.id}`}
-                                  onPress={async () => {
-                                    const prevSession = await findPreviousSession(exercise.name);
-                                    setPreviousSession(prevSession);
-                                    setCurrentExercise({ ...currentExercise, name: exercise.name });
-                                    setSelectedMuscleGroup(null);
-                                  }}
-                                  style={styles.exerciseOption}
-                                >
-                                  <View style={styles.exerciseOptionRow}>
-                                    <Text style={styles.exerciseOptionText}>{exercise.name}</Text>
+                                <View style={styles.exerciseOptionRow}>
+                                  <Text style={styles.exerciseOptionText}>{exercise.name}</Text>
+                                  {exercise.isCustom && (
                                     <View style={styles.customBadge}>
                                       <Text style={styles.customBadgeText}>CUSTOM</Text>
                                     </View>
-                                  </View>
-                                </Pressable>
-                              ))}
-                          </>
+                                  )}
+                                </View>
+                              </Pressable>
+                            ));
+                          })()}
                         </View>
                       )}
                     </>
@@ -1035,9 +953,9 @@ export default function WorkoutBuilderScreen() {
             </ScrollView>
           )}
 
-          {/* Rest Timer inside the modal */}
+          {/* Rest Timer inside the exercise modal */}
           <RestTimerButton />
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Rest Timer - always visible in bottom-left corner */}
@@ -1114,7 +1032,7 @@ export default function WorkoutBuilderScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -1143,9 +1061,25 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     color: COLORS.text.secondary
   },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   headerTitle: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.text.primary
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
+    textAlign: 'center',
+  },
+  headerSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
+    marginTop: 2,
   },
   saveButtonContainer: {
     backgroundColor: COLORS.accent.primary,
@@ -1198,6 +1132,11 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     fontWeight: '700',
     color: COLORS.text.inverse
+  },
+
+  // Draggable List
+  draggableList: {
+    marginBottom: SPACING.sm,
   },
 
   // Empty State

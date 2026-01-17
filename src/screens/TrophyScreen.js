@@ -15,7 +15,10 @@ import {
   Medal,
   Sparkles,
   Lock,
-  CheckCircle
+  CheckCircle,
+  Heart,
+  ListChecks,
+  CircleCheck
 } from 'lucide-react-native';
 import React, { useCallback, useState, useEffect } from 'react';
 import {
@@ -38,6 +41,8 @@ import Animated, {
   FadeInDown,
 } from 'react-native-reanimated';
 import { loadWorkouts } from '../utils/storage';
+import { loadAllWeeklyGoals } from '../utils/goalsStorage';
+import { loadWeightData, getConsecutiveDaysLogged } from '../utils/weightStorage';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -57,7 +62,17 @@ export default function TrophyScreen() {
     mambaMentality: false,
     blackMamba: false,
     triathlete: false,
-    multiWorkoutDays: 0
+    multiWorkoutDays: 0,
+    // Goal achievements
+    goalsCompleted: 0,
+    perfectWeeks: 0,
+    consecutivePerfectWeeks: 0,
+    // Weight achievements
+    consecutiveWeightDays: 0,
+    weightGoalsReached: 0,
+    // Planning achievements
+    plannedWorkoutsCreated: 0,
+    plannedWorkoutsCompleted: 0
   });
 
   const [selectedBadge, setSelectedBadge] = useState(null);
@@ -70,10 +85,13 @@ export default function TrophyScreen() {
 
   const loadData = async () => {
     const workouts = await loadWorkouts();
-    calculateBadges(workouts);
+    const allGoals = await loadAllWeeklyGoals();
+    const weightData = await loadWeightData();
+    const consecutiveWeightDays = await getConsecutiveDaysLogged();
+    calculateBadges(workouts, allGoals, weightData, consecutiveWeightDays);
   };
 
-  const calculateBadges = (workouts) => {
+  const calculateBadges = (workouts, allGoals = [], weightData = {}, consecutiveWeightDays = 0) => {
     const totalWorkouts = workouts.length;
     const consecutiveWeeks = calculateConsecutiveWeeks(workouts);
 
@@ -89,14 +107,89 @@ export default function TrophyScreen() {
     const workoutTypes = new Set(workouts.map(w => w.type));
     const triathlete = workoutTypes.has('Running') && workoutTypes.has('Cycling') && workoutTypes.has('Swimming');
 
+    // Calculate goal achievements
+    let goalsCompleted = 0;
+    let perfectWeeks = 0;
+    let plannedWorkoutsCreated = 0;
+    let plannedWorkoutsCompleted = 0;
+
+    allGoals.forEach(weekData => {
+      // Count individual goals completed
+      if (weekData.goals) {
+        goalsCompleted += weekData.goals.filter(g => g.completed).length;
+      }
+      // Check if all goals were completed for this week
+      if (weekData.goals && weekData.goals.length > 0 && weekData.goals.every(g => g.completed)) {
+        perfectWeeks++;
+      }
+      // Count planned workouts
+      if (weekData.plannedWorkouts) {
+        plannedWorkoutsCreated += weekData.plannedWorkouts.filter(p => p.workoutType).length;
+        plannedWorkoutsCompleted += weekData.plannedWorkouts.filter(p => p.completed).length;
+      }
+    });
+
+    // Calculate consecutive perfect weeks
+    const consecutivePerfectWeeks = calculateConsecutivePerfectWeeks(allGoals);
+
+    // Calculate weight achievements
+    const weightGoalsReached = weightData.goalsReachedHistory?.length || 0;
+
     setBadges({
       totalWorkouts,
       consecutiveWeeks,
       mambaMentality,
       blackMamba,
       triathlete,
-      multiWorkoutDays
+      multiWorkoutDays,
+      // Goal achievements
+      goalsCompleted,
+      perfectWeeks,
+      consecutivePerfectWeeks,
+      // Weight achievements
+      consecutiveWeightDays,
+      weightGoalsReached,
+      // Planning achievements
+      plannedWorkoutsCreated,
+      plannedWorkoutsCompleted
     });
+  };
+
+  const calculateConsecutivePerfectWeeks = (allGoals) => {
+    if (!allGoals || allGoals.length === 0) return 0;
+
+    // Sort by week start date descending
+    const sorted = [...allGoals]
+      .filter(w => w.goals && w.goals.length > 0)
+      .sort((a, b) => new Date(b.weekStart) - new Date(a.weekStart));
+
+    let consecutive = 0;
+    let currentWeekStart = new Date();
+    // Get the current week's Monday
+    const day = currentWeekStart.getDay();
+    const diff = currentWeekStart.getDate() - day + (day === 0 ? -6 : 1);
+    currentWeekStart.setDate(diff);
+    currentWeekStart.setHours(0, 0, 0, 0);
+
+    for (const weekData of sorted) {
+      const weekStart = new Date(weekData.weekStart);
+      weekStart.setHours(0, 0, 0, 0);
+
+      // Check if this is the expected week
+      const expectedWeek = new Date(currentWeekStart);
+      expectedWeek.setDate(expectedWeek.getDate() - (consecutive * 7));
+
+      const timeDiff = Math.abs(weekStart - expectedWeek);
+      const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
+
+      if (daysDiff <= 1 && weekData.goals.every(g => g.completed)) {
+        consecutive++;
+      } else if (daysDiff > 7) {
+        break;
+      }
+    }
+
+    return consecutive;
   };
 
   const calculateConsecutiveWeeks = (workouts) => {
@@ -191,12 +284,127 @@ export default function TrophyScreen() {
     }
   ];
 
+  // Goal achievement badges
+  const goalBadges = [
+    {
+      id: 'goalGetter',
+      title: 'Goal Getter',
+      description: 'Complete your first weekly goal',
+      Icon: Target,
+      tier: 'bronze',
+      earned: badges.goalsCompleted >= 1,
+      progress: badges.goalsCompleted,
+      total: 1
+    },
+    {
+      id: 'goalCrusher',
+      title: 'Goal Crusher',
+      description: 'Complete all goals in a single week',
+      Icon: CircleCheck,
+      tier: 'silver',
+      earned: badges.perfectWeeks >= 1,
+      progress: badges.perfectWeeks,
+      total: 1
+    },
+    {
+      id: 'consistencyKing',
+      title: 'Consistency King',
+      description: 'Perfect weeks for 4 weeks straight',
+      Icon: Crown,
+      tier: 'gold',
+      earned: badges.consecutivePerfectWeeks >= 4,
+      progress: badges.consecutivePerfectWeeks,
+      total: 4
+    },
+    {
+      id: 'goalMaster',
+      title: 'Goal Master',
+      description: 'Perfect weeks for 12 weeks straight',
+      Icon: Gem,
+      tier: 'platinum',
+      earned: badges.consecutivePerfectWeeks >= 12,
+      progress: badges.consecutivePerfectWeeks,
+      total: 12
+    }
+  ];
+
+  // Weight tracking badges
+  const weightBadges = [
+    {
+      id: 'weightWatcher',
+      title: 'Weight Watcher',
+      description: 'Log weight for 7 consecutive days',
+      Icon: Heart,
+      tier: 'bronze',
+      earned: badges.consecutiveWeightDays >= 7,
+      progress: badges.consecutiveWeightDays,
+      total: 7
+    },
+    {
+      id: 'transformation',
+      title: 'Transformation',
+      description: 'Reach a weight goal',
+      Icon: Medal,
+      tier: 'gold',
+      earned: badges.weightGoalsReached >= 1,
+      progress: badges.weightGoalsReached,
+      total: 1
+    },
+    {
+      id: 'bodyRecomp',
+      title: 'Body Recomp',
+      description: 'Reach 3 different weight goals',
+      Icon: Star,
+      tier: 'platinum',
+      earned: badges.weightGoalsReached >= 3,
+      progress: badges.weightGoalsReached,
+      total: 3
+    }
+  ];
+
+  // Planning badges
+  const planningBadges = [
+    {
+      id: 'planner',
+      title: 'Planner',
+      description: 'Create your first weekly plan',
+      Icon: ListChecks,
+      tier: 'bronze',
+      earned: badges.plannedWorkoutsCreated >= 1,
+      progress: badges.plannedWorkoutsCreated,
+      total: 1
+    },
+    {
+      id: 'organized',
+      title: 'Organized',
+      description: 'Complete 10 planned workouts',
+      Icon: Activity,
+      tier: 'silver',
+      earned: badges.plannedWorkoutsCompleted >= 10,
+      progress: badges.plannedWorkoutsCompleted,
+      total: 10
+    },
+    {
+      id: 'masterPlanner',
+      title: 'Master Planner',
+      description: 'Complete 50 planned workouts',
+      Icon: Award,
+      tier: 'gold',
+      earned: badges.plannedWorkoutsCompleted >= 50,
+      progress: badges.plannedWorkoutsCompleted,
+      total: 50
+    }
+  ];
+
   // Calculate unlocked counts
   const unlockedWorkout = workoutBadges.filter(b => badges.totalWorkouts >= b.threshold).length;
   const unlockedConsistency = consistencyBadges.filter(b => badges.consecutiveWeeks >= b.weeks).length;
   const unlockedSpecial = specialBadges.filter(b => b.earned).length;
-  const totalUnlocked = unlockedWorkout + unlockedConsistency + unlockedSpecial;
-  const totalBadges = workoutBadges.length + consistencyBadges.length + specialBadges.length;
+  const unlockedGoal = goalBadges.filter(b => b.earned).length;
+  const unlockedWeight = weightBadges.filter(b => b.earned).length;
+  const unlockedPlanning = planningBadges.filter(b => b.earned).length;
+  const totalUnlocked = unlockedWorkout + unlockedConsistency + unlockedSpecial + unlockedGoal + unlockedWeight + unlockedPlanning;
+  const totalBadges = workoutBadges.length + consistencyBadges.length + specialBadges.length + goalBadges.length + weightBadges.length + planningBadges.length;
 
   const renderBadgeCard = (badge, earned, progress = null, threshold = null, index = 0) => {
     const tierColor = TIER_COLORS[badge.tier];
@@ -382,6 +590,48 @@ export default function TrophyScreen() {
           </View>
           <View style={styles.specialBadgesContainer}>
             {specialBadges.map((badge, index) => renderSpecialBadge(badge, index))}
+          </View>
+        </View>
+
+        {/* Weekly Goals */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Target size={18} color={COLORS.success} strokeWidth={2.5} />
+            <Text style={styles.sectionTitle}>WEEKLY GOALS</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{unlockedGoal}/{goalBadges.length}</Text>
+            </View>
+          </View>
+          <View style={styles.specialBadgesContainer}>
+            {goalBadges.map((badge, index) => renderSpecialBadge(badge, index))}
+          </View>
+        </View>
+
+        {/* Weight Progress */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Heart size={18} color={COLORS.accent.primary} strokeWidth={2.5} />
+            <Text style={styles.sectionTitle}>WEIGHT PROGRESS</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{unlockedWeight}/{weightBadges.length}</Text>
+            </View>
+          </View>
+          <View style={styles.specialBadgesContainer}>
+            {weightBadges.map((badge, index) => renderSpecialBadge(badge, index))}
+          </View>
+        </View>
+
+        {/* Planning */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ListChecks size={18} color={COLORS.secondary.primary} strokeWidth={2.5} />
+            <Text style={styles.sectionTitle}>PLANNING</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{unlockedPlanning}/{planningBadges.length}</Text>
+            </View>
+          </View>
+          <View style={styles.specialBadgesContainer}>
+            {planningBadges.map((badge, index) => renderSpecialBadge(badge, index))}
           </View>
         </View>
       </View>

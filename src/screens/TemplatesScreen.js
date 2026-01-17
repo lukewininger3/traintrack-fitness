@@ -82,7 +82,7 @@ export default function TemplatesScreen() {
   const handleUseTemplate = (template) => {
     setSelectedTemplate(null);
     router.push({
-      pathname: '/workout-builder',
+      pathname: '/workout-details',
       params: {
         templateId: template.id,
         returnTo: 'templates'

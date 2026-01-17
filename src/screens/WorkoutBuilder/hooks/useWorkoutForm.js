@@ -73,10 +73,11 @@ function workoutReducer(state, action) {
   }
 }
 
-export function useWorkoutForm({ editingWorkoutId, templateId, repeatData }) {
+export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, workoutDetails }) {
   const isEditing = !!editingWorkoutId;
   const isFromTemplate = !!templateId;
   const isRepeating = !!repeatData;
+  const hasWorkoutDetails = !!workoutDetails;
 
   const [workout, dispatch] = useReducer(workoutReducer, initialWorkout);
   const [isSaving, setIsSaving] = useState(false);
@@ -167,9 +168,76 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData }) {
     }
   }, [repeatData]);
 
+  // Load from workout details (from step 1)
+  const loadFromWorkoutDetails = useCallback(async () => {
+    try {
+      const details = JSON.parse(workoutDetails);
+      let exercises = [];
+
+      // If editing, load existing exercises
+      if (isEditing) {
+        const workouts = await loadWorkouts({ skipBackgroundRefresh: true });
+        const existingWorkout = workouts.find(w => w.id === parseInt(editingWorkoutId));
+        if (existingWorkout) {
+          exercises = existingWorkout.exercises || [];
+        }
+      }
+      // If from template, load template exercises
+      else if (isFromTemplate) {
+        const templates = await loadTemplates();
+        const template = templates.find(t => t.id === parseInt(templateId));
+        if (template) {
+          exercises = template.exercises.map(ex => ({
+            name: ex.name,
+            sets: ex.sets.map(set => ({
+              weight: set.weight || 0,
+              reps: set.reps || 0,
+              distance: set.distance || 0,
+              time: set.time || 0,
+              pace: set.pace || 0
+            })),
+            notes: ex.notes || ''
+          }));
+        }
+      }
+      // If repeating, load repeat exercises
+      else if (isRepeating) {
+        const repeatInfo = JSON.parse(repeatData);
+        exercises = repeatInfo.exercises.map(ex => ({
+          name: ex.name,
+          sets: ex.sets.map(set => ({
+            weight: set.weight || 0,
+            reps: set.reps || 0,
+            distance: set.distance || 0,
+            time: set.time || 0,
+            pace: set.pace || 0
+          })),
+          notes: ex.notes || ''
+        }));
+      }
+
+      dispatch({
+        type: ACTIONS.SET_WORKOUT,
+        payload: {
+          name: details.name,
+          type: details.type,
+          date: details.date,
+          time: details.time,
+          notes: details.notes || '',
+          exercises: exercises
+        }
+      });
+    } catch (e) {
+      console.error('Failed to parse workout details:', e);
+    }
+  }, [workoutDetails, isEditing, editingWorkoutId, isFromTemplate, templateId, isRepeating, repeatData]);
+
   // Initialize workout data
   useEffect(() => {
-    if (isEditing) {
+    if (hasWorkoutDetails) {
+      // Coming from step 1 with workout details
+      loadFromWorkoutDetails();
+    } else if (isEditing) {
       loadEditingWorkout();
     } else if (isFromTemplate) {
       loadFromTemplate();
@@ -186,7 +254,7 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData }) {
         }
       });
     }
-  }, [isEditing, isFromTemplate, isRepeating, loadEditingWorkout, loadFromTemplate, loadFromRepeat]);
+  }, [hasWorkoutDetails, isEditing, isFromTemplate, isRepeating, loadFromWorkoutDetails, loadEditingWorkout, loadFromTemplate, loadFromRepeat]);
 
   // Action dispatchers
   const setWorkout = useCallback((workoutData) => {

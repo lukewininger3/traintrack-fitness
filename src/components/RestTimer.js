@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import { useTimer } from '../contexts/TimerContext';
 import { DURATION_PRESETS } from '../utils/timerStorage';
@@ -21,9 +22,6 @@ export default function RestTimerButton() {
   const timer = useTimer();
   const [showSettings, setShowSettings] = useState(false);
 
-  // Calculate progress for circular indicator
-  const progressDegrees = timer.progress * 360;
-
   return (
     <>
       {/* Floating Button (bottom-left corner) */}
@@ -35,6 +33,35 @@ export default function RestTimerButton() {
         ]}
         onPress={() => timer.setIsExpanded(true)}
       >
+        {/* Circular Progress Ring - depletes as time runs down */}
+        {timer.isRunning && (
+          <View style={styles.progressRingContainer}>
+            <Svg width={68} height={68} style={styles.progressSvg}>
+              {/* Background circle */}
+              <Circle
+                cx={34}
+                cy={34}
+                r={30}
+                stroke={COLORS.surface.border}
+                strokeWidth={3}
+                fill="transparent"
+              />
+              {/* Progress circle - starts full and depletes as time runs down */}
+              <Circle
+                cx={34}
+                cy={34}
+                r={30}
+                stroke={COLORS.accent.primary}
+                strokeWidth={3}
+                fill="transparent"
+                strokeDasharray={`${2 * Math.PI * 30}`}
+                strokeDashoffset={`${2 * Math.PI * 30 * timer.progress}`}
+                strokeLinecap="round"
+                transform="rotate(-90, 34, 34)"
+              />
+            </Svg>
+          </View>
+        )}
         <Text
           style={[
             styles.floatingButtonText,
@@ -44,9 +71,6 @@ export default function RestTimerButton() {
         >
           {timer.formattedTime}
         </Text>
-        {timer.isRunning && (
-          <View style={styles.floatingButtonPulse} />
-        )}
       </Pressable>
 
       {/* Expanded Overlay */}
@@ -127,17 +151,32 @@ export default function RestTimerButton() {
 
             {/* Timer Display */}
             <View style={styles.timerContainer}>
-              {/* Progress Ring Background */}
+              {/* Progress Ring with SVG */}
               <View style={styles.progressRing}>
-                {/* Progress Fill */}
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      transform: [{ rotate: `${progressDegrees}deg` }],
-                    },
-                  ]}
-                />
+                <Svg width={200} height={200} style={styles.progressSvgLarge}>
+                  {/* Background circle */}
+                  <Circle
+                    cx={100}
+                    cy={100}
+                    r={96}
+                    stroke={COLORS.surface.border}
+                    strokeWidth={4}
+                    fill="transparent"
+                  />
+                  {/* Progress circle - depletes as time runs down */}
+                  <Circle
+                    cx={100}
+                    cy={100}
+                    r={96}
+                    stroke={timer.isComplete ? COLORS.success : COLORS.accent.primary}
+                    strokeWidth={4}
+                    fill="transparent"
+                    strokeDasharray={`${2 * Math.PI * 96}`}
+                    strokeDashoffset={`${2 * Math.PI * 96 * timer.progress}`}
+                    strokeLinecap="round"
+                    transform="rotate(-90, 100, 100)"
+                  />
+                </Svg>
                 {/* Inner Circle */}
                 <View style={styles.timerInner}>
                   <Text
@@ -186,13 +225,6 @@ export default function RestTimerButton() {
                     style={{ marginLeft: 4 }}
                   />
                 )}
-              </Pressable>
-
-              <Pressable
-                style={styles.controlButton}
-                onPress={() => timer.setIsExpanded(false)}
-              >
-                <X size={24} color={COLORS.text.secondary} strokeWidth={2} />
               </Pressable>
             </View>
 
@@ -265,14 +297,15 @@ const styles = StyleSheet.create({
   floatingButtonTextComplete: {
     color: COLORS.success,
   },
-  floatingButtonPulse: {
+  progressRingContainer: {
     position: 'absolute',
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: COLORS.accent.primary,
-    opacity: 0.5,
+    width: 68,
+    height: 68,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressSvg: {
+    position: 'absolute',
   },
 
   // Overlay
@@ -357,21 +390,11 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 100,
     backgroundColor: COLORS.surface.card,
-    borderWidth: 4,
-    borderColor: COLORS.surface.border,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
-  progressFill: {
+  progressSvgLarge: {
     position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    borderWidth: 4,
-    borderColor: COLORS.accent.primary,
-    borderTopColor: 'transparent',
-    borderRightColor: 'transparent',
   },
   timerInner: {
     width: 180,

@@ -1,4 +1,4 @@
-import { Activity, ArrowDown, ArrowUp, Bike, ChevronLeft, ChevronRight, Dumbbell, Flame, Target, TrendingUp, Waves, Zap } from 'lucide-react-native';
+import { Activity, ArrowDown, ArrowUp, Bike, ChevronLeft, ChevronRight, Dumbbell, Flame, Scale, Target, TrendingUp, Waves, Zap } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
@@ -10,8 +10,10 @@ import {
   View
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { calculateWeekStreak } from '../utils/calculations';
 import { getTodayString, loadWorkouts } from '../utils/storage';
+import { loadWeightData, calculateWeightProgress, formatWeight } from '../utils/weightStorage';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 
 const { width } = Dimensions.get('window');
@@ -19,11 +21,13 @@ const DAY_WIDTH = (width - SPACING.lg * 2 - SPACING.lg * 2 - 52 - 14) / 7;
 const DAY_HEIGHT = DAY_WIDTH + 4; // Slightly taller for icons
 
 export default function DashboardScreen({ navigation }) {
+  const router = useRouter();
   const [workouts, setWorkouts] = useState([]);
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [weekStreak, setWeekStreak] = useState(0);
   const [selectedWorkouts, setSelectedWorkouts] = useState(null);
+  const [weightData, setWeightData] = useState(null);
   const [consistencyStats, setConsistencyStats] = useState({
     daysThisMonth: 0,
     daysPassed: 0,
@@ -54,6 +58,10 @@ export default function DashboardScreen({ navigation }) {
     setWorkouts(data || []);
     setWeekStreak(calculateWeekStreak(data || []));
     calculateStats(data || []);
+
+    // Load weight data
+    const weight = await loadWeightData();
+    setWeightData(weight);
   };
 
   const calculateStats = (data) => {
@@ -527,6 +535,51 @@ export default function DashboardScreen({ navigation }) {
             <Text style={styles.statDetail}>workouts</Text>
           </View>
         </View>
+
+        {/* Weight Tracking Card */}
+        <Pressable
+          style={styles.weightCard}
+          onPress={() => router.push('/(tabs)/goals')}
+        >
+          <View style={styles.weightCardHeader}>
+            <View style={styles.weightCardIcon}>
+              <Scale size={18} color={COLORS.tertiary.primary} strokeWidth={2} />
+            </View>
+            <Text style={styles.weightCardTitle}>WEIGHT</Text>
+          </View>
+          {weightData?.entries?.length > 0 ? (
+            <View style={styles.weightCardContent}>
+              <Text style={styles.weightCardValue}>
+                {formatWeight(weightData.entries[0]?.weight, weightData?.settings?.unit || 'lbs')}
+              </Text>
+              {weightData.goal && (() => {
+                const progress = calculateWeightProgress(weightData);
+                return progress ? (
+                  <View style={styles.weightCardProgress}>
+                    <View style={styles.weightProgressBarSmall}>
+                      <View
+                        style={[
+                          styles.weightProgressFillSmall,
+                          { width: `${progress.progress}%` },
+                          progress.isComplete && styles.weightProgressComplete
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.weightCardGoal}>
+                      Goal: {formatWeight(progress.targetWeight, weightData?.settings?.unit || 'lbs')}
+                    </Text>
+                  </View>
+                ) : null;
+              })()}
+              <Text style={styles.weightCardHint}>Tap to log weight →</Text>
+            </View>
+          ) : (
+            <View style={styles.weightCardEmpty}>
+              <Text style={styles.weightCardEmptyText}>No weight logged yet</Text>
+              <Text style={styles.weightCardHint}>Tap to start tracking →</Text>
+            </View>
+          )}
+        </Pressable>
       </View>
 
       {/* Workout Detail Modal - supports multiple workouts */}
@@ -538,42 +591,32 @@ export default function DashboardScreen({ navigation }) {
           onRequestClose={() => setSelectedWorkouts(null)}
         >
           <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderText}>
-                <Text style={styles.modalTitle}>
-                  {selectedWorkouts.length > 1
-                    ? `${selectedWorkouts.length} Workouts`
-                    : selectedWorkouts[0].name}
-                </Text>
-                <Text style={styles.modalSubtitle}>
-                  {selectedWorkouts[0].date}
-                </Text>
-              </View>
+            <View style={styles.modalHeaderCompact}>
+              <View style={styles.modalHandle} />
               <Pressable
                 onPress={() => setSelectedWorkouts(null)}
-                style={styles.closeButton}
+                style={styles.doneButton}
               >
-                <Text style={styles.closeButtonText}>Done</Text>
+                <Text style={styles.doneButtonText}>Done</Text>
               </Pressable>
             </View>
 
-            <ScrollView style={styles.modalScroll}>
+            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
               {selectedWorkouts.map((workout, wIdx) => (
                 <View key={wIdx} style={styles.workoutSection}>
-                  {selectedWorkouts.length > 1 && (
-                    <View style={styles.workoutSectionHeader}>
-                      <View style={[styles.workoutTypeBadge, { backgroundColor: getWorkoutColor(workout.type) + '20' }]}>
-                        {React.createElement(getWorkoutIcon(workout.type), {
-                          size: 16,
-                          color: getWorkoutColor(workout.type),
-                          strokeWidth: 2.5
-                        })}
-                        <Text style={[styles.workoutTypeBadgeText, { color: getWorkoutColor(workout.type) }]}>
-                          {workout.name}
-                        </Text>
-                      </View>
+                  <View style={styles.workoutHeader}>
+                    <View style={[styles.workoutIconBadge, { backgroundColor: getWorkoutColor(workout.type) + '15' }]}>
+                      {React.createElement(getWorkoutIcon(workout.type), {
+                        size: 22,
+                        color: getWorkoutColor(workout.type),
+                        strokeWidth: 2.5
+                      })}
                     </View>
-                  )}
+                    <View style={styles.workoutHeaderText}>
+                      <Text style={styles.workoutName}>{workout.name}</Text>
+                      <Text style={styles.workoutMeta}>{workout.type} • {workout.date}</Text>
+                    </View>
+                  </View>
                   {workout.exercises?.map((exercise, idx) => (
                     <View key={idx} style={styles.exerciseCard}>
                       <Text style={styles.exerciseName}>{exercise.name}</Text>
@@ -924,34 +967,52 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background.primary,
   },
-  modalHeader: {
+  modalHeaderCompact: {
+    alignItems: 'center',
+    paddingTop: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.sm,
+    backgroundColor: COLORS.background.primary,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.surface.border,
+    marginBottom: SPACING.sm,
+  },
+  doneButton: {
+    alignSelf: 'flex-end',
+    paddingVertical: SPACING.xs,
+  },
+  doneButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.accent.primary,
+  },
+  workoutHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.lg,
-    paddingTop: SPACING.xxxl,
-    backgroundColor: COLORS.background.secondary,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface.border,
+    marginBottom: SPACING.md,
+    gap: SPACING.md,
   },
-  modalHeaderText: {
+  workoutIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  workoutHeaderText: {
     flex: 1,
   },
-  modalTitle: {
-    ...TYPOGRAPHY.h3,
+  workoutName: {
+    ...TYPOGRAPHY.h4,
     color: COLORS.text.primary,
   },
-  modalSubtitle: {
+  workoutMeta: {
     ...TYPOGRAPHY.caption,
     color: COLORS.text.secondary,
     marginTop: 2,
-  },
-  closeButton: {
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-  },
-  closeButtonText: {
-    ...TYPOGRAPHY.bodyBold,
-    color: COLORS.accent.primary,
   },
   modalScroll: {
     padding: SPACING.lg,
@@ -1006,5 +1067,78 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     fontSize: 13,
     color: COLORS.text.primary,
+  },
+
+  // Weight Card
+  weightCard: {
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  weightCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  weightCardIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.tertiary.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weightCardTitle: {
+    ...TYPOGRAPHY.label,
+    fontSize: 10,
+    color: COLORS.text.tertiary,
+  },
+  weightCardContent: {
+    gap: SPACING.xs,
+  },
+  weightCardValue: {
+    ...TYPOGRAPHY.statMedium,
+    fontSize: 28,
+    color: COLORS.text.primary,
+  },
+  weightCardProgress: {
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
+  weightProgressBarSmall: {
+    height: 6,
+    backgroundColor: COLORS.surface.border,
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
+  },
+  weightProgressFillSmall: {
+    height: '100%',
+    backgroundColor: COLORS.tertiary.primary,
+    borderRadius: RADIUS.full,
+  },
+  weightProgressComplete: {
+    backgroundColor: COLORS.success,
+  },
+  weightCardGoal: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 11,
+    color: COLORS.text.tertiary,
+  },
+  weightCardHint: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 11,
+    color: COLORS.tertiary.primary,
+    marginTop: SPACING.xs,
+  },
+  weightCardEmpty: {
+    gap: SPACING.xs,
+  },
+  weightCardEmptyText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.secondary,
   },
 });

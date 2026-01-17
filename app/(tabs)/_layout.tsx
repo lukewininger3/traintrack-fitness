@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Activity, LayoutDashboard, TrendingUp, Trophy } from 'lucide-react-native';
+import { Activity, LayoutDashboard, Target, TrendingUp, Trophy } from 'lucide-react-native';
 import { View, StyleSheet, Platform } from 'react-native';
 import { COLORS, SPACING, RADIUS } from '../../src/theme/design';
 
@@ -74,6 +74,26 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <View style={focused ? styles.activeIconContainer : undefined}>
               <Activity
+                size={22}
+                color={color}
+                strokeWidth={focused ? 2.5 : 2}
+              />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="goals"
+        options={{
+          title: 'GOALS',
+          headerTitleStyle: {
+            fontWeight: '800',
+            fontSize: 18,
+            letterSpacing: 2,
+          },
+          tabBarIcon: ({ color, focused }) => (
+            <View style={focused ? styles.activeIconContainer : undefined}>
+              <Target
                 size={22}
                 color={color}
                 strokeWidth={focused ? 2.5 : 2}

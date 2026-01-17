@@ -1,17 +1,18 @@
-import { Trash2 } from 'lucide-react-native';
-import React from 'react';
+import { Check, Trash2 } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../../theme/design';
 
 /**
  * Input fields for a single exercise set
  * @param {number} setNumber - Set number (1-based)
- * @param {Object} set - Set data { weight, reps, distance, time, pace }
+ * @param {Object} set - Set data { weight, reps, distance, time, pace, confirmed }
  * @param {boolean} isCardio - Whether this is a cardio set
  * @param {boolean} canRemove - Whether the remove button should be shown
  * @param {Function} onUpdate - Callback when a field changes: (field, value) => void
  * @param {Function} onRemove - Callback when remove is pressed
  * @param {Function} onFocus - Callback when an input is focused
+ * @param {Function} onConfirm - Callback when set is confirmed (triggers timer)
  */
 export default function ExerciseSetInput({
   setNumber,
@@ -21,19 +22,56 @@ export default function ExerciseSetInput({
   onUpdate,
   onRemove,
   onFocus,
+  onConfirm,
 }) {
+  const [isConfirmed, setIsConfirmed] = useState(set.confirmed || false);
+
+  // Sync local state with prop when set.confirmed changes (e.g., when editing)
+  useEffect(() => {
+    setIsConfirmed(set.confirmed || false);
+  }, [set.confirmed]);
+
+  const handleConfirm = () => {
+    if (!isConfirmed) {
+      setIsConfirmed(true);
+      onUpdate('confirmed', true);
+      onConfirm?.();
+    }
+  };
+
+  // Check if set has valid data to confirm
+  const canConfirm = isCardio
+    ? (parseFloat(set.distance) > 0 || parseFloat(set.time) > 0)
+    : (parseFloat(set.weight) > 0 && parseFloat(set.reps) > 0);
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isConfirmed && styles.containerConfirmed]}>
       <View style={styles.header}>
-        <View style={styles.setNumberContainer}>
-          <Text style={styles.setNumber}>{setNumber}</Text>
+        <View style={[styles.setNumberContainer, isConfirmed && styles.setNumberConfirmed]}>
+          <Text style={[styles.setNumber, isConfirmed && styles.setNumberTextConfirmed]}>{setNumber}</Text>
         </View>
         <Text style={styles.setLabel}>SET</Text>
-        {canRemove && (
-          <Pressable onPress={onRemove} style={styles.removeButton}>
-            <Trash2 size={16} color={COLORS.error} strokeWidth={2} />
+        <View style={styles.headerActions}>
+          {canRemove && (
+            <Pressable onPress={onRemove} style={styles.removeButton}>
+              <Trash2 size={16} color={COLORS.error} strokeWidth={2} />
+            </Pressable>
+          )}
+          <Pressable
+            onPress={handleConfirm}
+            style={[
+              styles.confirmButton,
+              isConfirmed && styles.confirmButtonActive,
+              !canConfirm && !isConfirmed && styles.confirmButtonDisabled,
+            ]}
+            disabled={!canConfirm && !isConfirmed}
+          >
+            <Check
+              size={18}
+              color={isConfirmed ? COLORS.text.inverse : (canConfirm ? COLORS.success : COLORS.text.tertiary)}
+              strokeWidth={2.5}
+            />
           </Pressable>
-        )}
+        </View>
       </View>
       <View style={styles.inputs}>
         {isCardio ? (
@@ -157,6 +195,39 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
     borderRadius: RADIUS.sm,
     backgroundColor: 'rgba(255, 59, 59, 0.1)',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  confirmButton: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.surface.card,
+    borderWidth: 1,
+    borderColor: COLORS.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmButtonActive: {
+    backgroundColor: COLORS.success,
+    borderColor: COLORS.success,
+  },
+  confirmButtonDisabled: {
+    borderColor: COLORS.surface.border,
+    opacity: 0.5,
+  },
+  containerConfirmed: {
+    borderColor: COLORS.success,
+    backgroundColor: 'rgba(0, 255, 136, 0.05)',
+  },
+  setNumberConfirmed: {
+    backgroundColor: COLORS.success,
+  },
+  setNumberTextConfirmed: {
+    color: COLORS.text.inverse,
   },
   inputs: {
     flexDirection: 'row',

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { supabase } from '../config/supabase';
+import { updateGoalProgress } from './goalsStorage';
 
 const STORAGE_KEYS = {
   WORKOUTS: '@traintrack_workouts',
@@ -171,7 +172,12 @@ export const saveWorkouts = async (workouts, options = {}) => {
     // STEP 1: Save locally FIRST (instant)
     await AsyncStorage.setItem(STORAGE_KEYS.WORKOUTS, JSON.stringify(workouts));
 
-    // STEP 2: Trigger cloud sync in background (non-blocking)
+    // STEP 2: Update goal progress based on workouts (non-blocking)
+    updateGoalProgress(workouts).catch(err => {
+      console.error('Goal progress update failed:', err);
+    });
+
+    // STEP 3: Trigger cloud sync in background (non-blocking)
     // Don't await - let it run in background
     syncToCloud(workouts).catch(err => {
       console.error('Background sync failed:', err);

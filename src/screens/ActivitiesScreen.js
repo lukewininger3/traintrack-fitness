@@ -157,7 +157,7 @@ export default function ActivitiesScreen() {
 
     setSelectedWorkout(null);
     router.push({
-      pathname: '/workout-builder',
+      pathname: '/workout-details',
       params: {
         repeatData: workoutData,
         returnTo: 'activities'
@@ -382,7 +382,7 @@ export default function ActivitiesScreen() {
               style={styles.sheetOption}
               onPress={() => {
                 setShowNewWorkoutSheet(false);
-                router.push('/workout-builder');
+                router.push('/workout-details');
               }}
               accessibilityLabel="New Workout"
               accessibilityRole="button"

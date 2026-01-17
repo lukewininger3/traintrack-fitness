@@ -1,6 +1,7 @@
 import { router, Slot, useRootNavigationState, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
 import { TimerProvider } from '../src/contexts/TimerContext';
 import ErrorBoundary from '../src/components/ErrorBoundary';
@@ -39,13 +40,15 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   return (
-    <ErrorBoundary fallbackMessage="The app encountered an error. Please restart the app.">
-      <AuthProvider>
-        <TimerProvider>
-          <RootLayoutNav />
-        </TimerProvider>
-      </AuthProvider>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary fallbackMessage="The app encountered an error. Please restart the app.">
+        <AuthProvider>
+          <TimerProvider>
+            <RootLayoutNav />
+          </TimerProvider>
+        </AuthProvider>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }
 
