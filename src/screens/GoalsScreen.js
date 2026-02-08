@@ -1,5 +1,5 @@
-import { Calendar, Check, ChevronLeft, ChevronRight, Clock, Plus, Scale, Target, Trash2, X } from 'lucide-react-native';
-import React, { useCallback, useState } from 'react';
+import { BookOpen, Calendar, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, Edit3, Plus, Scale, Search, Target, Trash2, X } from 'lucide-react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Keyboard,
@@ -11,10 +11,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import {
   loadWeeklyGoals,
@@ -27,6 +29,7 @@ import {
   GOAL_PRESETS,
   addPlannedWorkout,
   removePlannedWorkout,
+  updatePlannedWorkout,
   getDateFromDayOfWeek,
 } from '../utils/goalsStorage';
 import WeeklyPlanCard from '../components/WeeklyPlanCard';
@@ -38,21 +41,21 @@ import {
   setWeightGoal,
   calculateWeightProgress,
   formatWeight,
-  formatWeightChange,
-  getRecentWeightEntries,
 } from '../utils/weightStorage';
 import { loadWorkouts } from '../utils/storage';
+import { EXERCISE_DATABASE, getAllCategories } from '../constants/workoutTypes';
+import { loadCustomExercises } from '../utils/customExercises';
 
 export default function GoalsScreen() {
   const [weekStart, setWeekStart] = useState(getWeekStart());
   const [goals, setGoals] = useState(null);
   const [workouts, setWorkouts] = useState([]);
   const [weightData, setWeightData] = useState(null);
-  const [loading, setLoading] = useState(true);
 
   // Modals
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [showPlanDay, setShowPlanDay] = useState(null); // day index
+  const [showWorkoutDetail, setShowWorkoutDetail] = useState(null); // selected planned workout
   const [showWeightEntry, setShowWeightEntry] = useState(false);
   const [showWeightGoal, setShowWeightGoal] = useState(false);
   const [showWeightHistory, setShowWeightHistory] = useState(false);
@@ -63,10 +66,33 @@ export default function GoalsScreen() {
   const [newGoalWorkoutType, setNewGoalWorkoutType] = useState('Strength');
   const [plannedWorkoutName, setPlannedWorkoutName] = useState('');
   const [plannedWorkoutType, setPlannedWorkoutType] = useState('Strength');
+  const [plannedExercises, setPlannedExercises] = useState([]);
   const [weightEntry, setWeightEntry] = useState('');
   const [weightEntryDate, setWeightEntryDate] = useState(new Date());
   const [targetWeight, setTargetWeight] = useState('');
   const [weightDirection, setWeightDirection] = useState('lose');
+
+  // Exercise picker states
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [exerciseSearchQuery, setExerciseSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [customExercises, setCustomExercises] = useState([]);
+  const [editingWorkout, setEditingWorkout] = useState(null); // For editing existing planned workout
+
+  // Refs for scroll behavior
+  const planScrollViewRef = useRef(null);
+
+  // Check if workout type is cardio (needs distance input)
+  const isCardioType = (type) => ['Running', 'Cycling', 'Swimming'].includes(type);
+
+  // Stable date-only comparison for weight entry navigation
+  const isWeightDateToday = (() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const compare = new Date(weightEntryDate);
+    compare.setHours(0, 0, 0, 0);
+    return compare >= today;
+  })();
 
   // Format date for display
   const formatDateDisplay = (date) => {
@@ -89,7 +115,6 @@ export default function GoalsScreen() {
   };
 
   const loadData = useCallback(async () => {
-    setLoading(true);
     try {
       // Load goals
       let goalsData = await loadWeeklyGoals(weekStart);
@@ -116,8 +141,6 @@ export default function GoalsScreen() {
       setWeightData(weight);
     } catch (error) {
       console.error('Error loading goals data:', error);
-    } finally {
-      setLoading(false);
     }
   }, [weekStart]);
 
@@ -188,16 +211,140 @@ export default function GoalsScreen() {
       return;
     }
 
-    await addPlannedWorkout(weekStart, {
-      dayOfWeek: showPlanDay,
-      name: plannedWorkoutName,
-      workoutType: plannedWorkoutType,
-    });
+    if (editingWorkout) {
+      // Update existing planned workout
+      await updatePlannedWorkout(weekStart, editingWorkout.id, {
+        name: plannedWorkoutName,
+        workoutType: plannedWorkoutType,
+        exercises: plannedExercises,
+      });
+    } else {
+      // Add new planned workout
+      await addPlannedWorkout(weekStart, {
+        dayOfWeek: showPlanDay,
+        name: plannedWorkoutName,
+        workoutType: plannedWorkoutType,
+        exercises: plannedExercises,
+      });
+    }
 
     await loadData();
+    closePlanModal();
+  };
+
+  const closePlanModal = () => {
     setShowPlanDay(null);
     setPlannedWorkoutName('');
+    setPlannedWorkoutType('Strength');
+    setPlannedExercises([]);
+    setEditingWorkout(null);
+    setShowExercisePicker(false);
+    setExerciseSearchQuery('');
+    setSelectedCategory(null);
   };
+
+  const openEditWorkout = (workout) => {
+    setEditingWorkout(workout);
+    setPlannedWorkoutName(workout.name || '');
+    setPlannedWorkoutType(workout.workoutType || 'Strength');
+    setPlannedExercises(workout.exercises || []);
+    setShowPlanDay(workout.dayOfWeek);
+    setShowWorkoutDetail(null);
+  };
+
+  // Load custom exercises when exercise picker opens
+  const openExercisePicker = async () => {
+    const custom = await loadCustomExercises();
+    setCustomExercises(custom || []);
+    setShowExercisePicker(true);
+  };
+
+  const addExerciseToPlanned = (exerciseName) => {
+    // Check if already added
+    if (plannedExercises.some(e => e.name === exerciseName)) {
+      Alert.alert('Already Added', 'This exercise is already in your plan');
+      return;
+    }
+    setPlannedExercises([...plannedExercises, { name: exerciseName, distance: null, sets: [] }]);
+    setShowExercisePicker(false);
+    setExerciseSearchQuery('');
+    setSelectedCategory(null);
+    // Auto-scroll to bottom after adding exercise
+    setTimeout(() => {
+      planScrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
+
+  const removeExerciseFromPlanned = (index) => {
+    setPlannedExercises(plannedExercises.filter((_, i) => i !== index));
+  };
+
+  const updateExerciseDistance = (index, distance) => {
+    const updated = [...plannedExercises];
+    updated[index] = { ...updated[index], distance: distance ? parseFloat(distance) : null };
+    setPlannedExercises(updated);
+  };
+
+  // Set management for planned exercises (strength workouts)
+  const addSetToPlannedExercise = (exerciseIndex) => {
+    const updated = [...plannedExercises];
+    const exercise = updated[exerciseIndex];
+    const sets = exercise.sets || [];
+    // Copy weight from last set if available
+    const lastWeight = sets.length > 0 ? sets[sets.length - 1].weight : '';
+    updated[exerciseIndex] = { ...exercise, sets: [...sets, { weight: lastWeight }] };
+    setPlannedExercises(updated);
+  };
+
+  const updatePlannedSetWeight = (exerciseIndex, setIndex, weight) => {
+    const updated = [...plannedExercises];
+    const exercise = updated[exerciseIndex];
+    const sets = [...(exercise.sets || [])];
+    sets[setIndex] = { ...sets[setIndex], weight: weight };
+    updated[exerciseIndex] = { ...exercise, sets };
+    setPlannedExercises(updated);
+  };
+
+  const removeSetFromPlannedExercise = (exerciseIndex, setIndex) => {
+    const updated = [...plannedExercises];
+    const exercise = updated[exerciseIndex];
+    const sets = (exercise.sets || []).filter((_, i) => i !== setIndex);
+    updated[exerciseIndex] = { ...exercise, sets };
+    setPlannedExercises(updated);
+  };
+
+  // Get filtered exercises based on search and category
+  const filteredExercises = useMemo(() => {
+    let exercises = [];
+
+    // Add built-in exercises
+    if (selectedCategory) {
+      exercises = EXERCISE_DATABASE[selectedCategory] || [];
+    } else {
+      Object.values(EXERCISE_DATABASE).forEach(categoryExercises => {
+        exercises = [...exercises, ...categoryExercises];
+      });
+    }
+
+    // Add custom exercises
+    if (customExercises.length > 0) {
+      if (!selectedCategory) {
+        exercises = [...exercises, ...customExercises.map(e => e.name)];
+      } else {
+        const categoryCustom = customExercises.filter(e => e.category === selectedCategory);
+        exercises = [...exercises, ...categoryCustom.map(e => e.name)];
+      }
+    }
+
+    // Filter by search query
+    if (exerciseSearchQuery.trim()) {
+      const query = exerciseSearchQuery.toLowerCase();
+      exercises = exercises.filter(e => e.toLowerCase().includes(query));
+    }
+
+    // Remove duplicates
+    return [...new Set(exercises)].sort();
+  }, [selectedCategory, customExercises, exerciseSearchQuery]);
 
   const handleRemovePlannedWorkout = async (plannedWorkoutId) => {
     await removePlannedWorkout(weekStart, plannedWorkoutId);
@@ -253,11 +400,11 @@ export default function GoalsScreen() {
         <View style={styles.progressRingCard}>
           {/* Week Selector */}
           <View style={styles.weekSelector}>
-            <Pressable onPress={() => navigateWeek(-1)} style={styles.weekArrow}>
+            <Pressable onPress={() => navigateWeek(-1)} style={styles.weekArrow} accessibilityLabel="Previous week" accessibilityRole="button">
               <ChevronLeft size={20} color={COLORS.text.tertiary} />
             </Pressable>
             <Text style={styles.weekText}>{formatWeekRange(weekStart)}</Text>
-            <Pressable onPress={() => navigateWeek(1)} style={styles.weekArrow}>
+            <Pressable onPress={() => navigateWeek(1)} style={styles.weekArrow} accessibilityLabel="Next week" accessibilityRole="button">
               <ChevronRight size={20} color={COLORS.text.tertiary} />
             </Pressable>
           </View>
@@ -273,6 +420,7 @@ export default function GoalsScreen() {
             isCurrentWeek={isCurrentWeek}
             today={today}
             onPlanDay={(dayIndex) => setShowPlanDay(dayIndex)}
+            onWorkoutPress={(workout) => setShowWorkoutDetail(workout)}
             onRemoveWorkout={handleRemovePlannedWorkout}
           />
         </View>
@@ -281,7 +429,7 @@ export default function GoalsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>WORKOUT GOALS</Text>
-            <Pressable onPress={() => setShowAddGoal(true)} style={styles.addButton}>
+            <Pressable onPress={() => setShowAddGoal(true)} style={styles.addButton} accessibilityLabel="Add workout goal" accessibilityRole="button">
               <Plus size={16} color={COLORS.accent.primary} strokeWidth={2.5} />
             </Pressable>
           </View>
@@ -343,7 +491,7 @@ export default function GoalsScreen() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>WEIGHT GOAL</Text>
             {weightData?.goal && (
-              <Pressable onPress={() => setShowWeightEntry(true)} style={styles.addButton}>
+              <Pressable onPress={() => setShowWeightEntry(true)} style={styles.addButton} accessibilityLabel="Log weight" accessibilityRole="button">
                 <Plus size={16} color={COLORS.accent.primary} strokeWidth={2.5} />
               </Pressable>
             )}
@@ -428,6 +576,21 @@ export default function GoalsScreen() {
             </Pressable>
           )}
         </View>
+
+        {/* Planned Workouts */}
+        <Pressable
+          style={styles.programsCard}
+          onPress={() => router.push('/planned-workouts')}
+        >
+          <View style={styles.programsCardIcon}>
+            <Calendar size={20} color={COLORS.accent.primary} strokeWidth={2} />
+          </View>
+          <View style={styles.programsCardInfo}>
+            <Text style={styles.programsCardTitle}>Planned Workouts</Text>
+            <Text style={styles.programsCardSubtitle}>View your weekly workout schedule</Text>
+          </View>
+          <ChevronRight size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+        </Pressable>
 
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -541,29 +704,145 @@ export default function GoalsScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Plan Day Modal */}
+      {/* Plan Day Modal - Full Screen */}
       <Modal
         visible={showPlanDay !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowPlanDay(null)}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closePlanModal}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalOverlay}
-          >
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>
-                    PLAN {showPlanDay !== null ? DAY_NAMES[showPlanDay].toUpperCase() : ''}
-                  </Text>
-                  <Pressable onPress={() => setShowPlanDay(null)}>
+        <View style={styles.planModal}>
+          {/* Conditionally show Exercise Picker or Plan Form */}
+          {showExercisePicker ? (
+            /* Exercise Picker View - shown inside the same modal */
+            <>
+              <View style={styles.exercisePickerHeader}>
+                <View style={styles.modalHandle} />
+                <View style={styles.exercisePickerTitleRow}>
+                  <Text style={styles.planModalTitle}>ADD EXERCISE</Text>
+                  <Pressable
+                    onPress={() => {
+                      setShowExercisePicker(false);
+                      setExerciseSearchQuery('');
+                      setSelectedCategory(null);
+                    }}
+                    style={styles.planModalClose}
+                  >
                     <X size={24} color={COLORS.text.primary} />
                   </Pressable>
                 </View>
 
+                {/* Search Input */}
+                <View style={styles.exerciseSearchContainer}>
+                  <Search size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+                  <TextInput
+                    style={styles.exerciseSearchInput}
+                    placeholder="Search exercises..."
+                    placeholderTextColor={COLORS.text.tertiary}
+                    value={exerciseSearchQuery}
+                    onChangeText={setExerciseSearchQuery}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {exerciseSearchQuery.length > 0 && (
+                    <Pressable onPress={() => setExerciseSearchQuery('')} style={styles.clearSearchButton}>
+                      <X size={16} color={COLORS.text.tertiary} />
+                    </Pressable>
+                  )}
+                </View>
+
+              </View>
+
+              <ScrollView style={styles.exercisePickerList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {exerciseSearchQuery.trim() ? (
+                  // Search Results
+                  <>
+                    <Text style={styles.browseCategoriesTitle}>SEARCH RESULTS</Text>
+                    {filteredExercises.length > 0 ? (
+                      filteredExercises.map((exercise, index) => (
+                        <Pressable
+                          key={index}
+                          style={styles.exercisePickerItem}
+                          onPress={() => addExerciseToPlanned(exercise)}
+                        >
+                          <Text style={styles.exercisePickerItemText}>{exercise}</Text>
+                          <Plus size={18} color={COLORS.accent.primary} />
+                        </Pressable>
+                      ))
+                    ) : (
+                      <View style={styles.noExercisesFound}>
+                        <Text style={styles.noExercisesFoundText}>No exercises found</Text>
+                      </View>
+                    )}
+                  </>
+                ) : !selectedCategory ? (
+                  // Browse by Category Grid
+                  <>
+                    <Text style={styles.browseCategoriesTitle}>BROWSE BY CATEGORY</Text>
+                    <View style={styles.categoryGrid}>
+                      {getAllCategories().map(category => (
+                        <Pressable
+                          key={category}
+                          style={styles.categoryGridButton}
+                          onPress={() => setSelectedCategory(category)}
+                        >
+                          <Text style={styles.categoryGridButtonText}>{category}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </>
+                ) : (
+                  // Exercises in Selected Category
+                  <>
+                    <Pressable
+                      onPress={() => setSelectedCategory(null)}
+                      style={styles.backToCategoriesButton}
+                    >
+                      <Text style={styles.backToCategoriesText}>← Back to categories</Text>
+                    </Pressable>
+                    {filteredExercises.map((exercise, index) => (
+                      <Pressable
+                        key={index}
+                        style={styles.exercisePickerItem}
+                        onPress={() => addExerciseToPlanned(exercise)}
+                      >
+                        <Text style={styles.exercisePickerItemText}>{exercise}</Text>
+                        <Plus size={18} color={COLORS.accent.primary} />
+                      </Pressable>
+                    ))}
+                  </>
+                )}
+                <View style={{ height: 50 }} />
+              </ScrollView>
+            </>
+          ) : (
+            /* Plan Form View */
+            <KeyboardAvoidingView
+              style={{ flex: 1 }}
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              keyboardVerticalOffset={0}
+            >
+              <View style={styles.planModalHeader}>
+                <View style={styles.modalHandle} />
+                <View style={styles.planModalTitleRow}>
+                  <Text style={styles.planModalTitle}>
+                    {editingWorkout ? 'EDIT WORKOUT' : `PLAN ${showPlanDay !== null ? DAY_NAMES[showPlanDay].toUpperCase() : ''}`}
+                  </Text>
+                  <Pressable onPress={closePlanModal} style={styles.planModalClose}>
+                    <X size={24} color={COLORS.text.primary} />
+                  </Pressable>
+                </View>
+              </View>
+
+              <ScrollView
+                ref={planScrollViewRef}
+                style={styles.planModalContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                automaticallyAdjustKeyboardInsets={true}
+                contentContainerStyle={{ paddingBottom: 20 }}
+              >
                 <Text style={styles.inputLabel}>WORKOUT NAME</Text>
                 <TextInput
                   style={styles.input}
@@ -596,12 +875,221 @@ export default function GoalsScreen() {
                   ))}
                 </View>
 
+                {/* Exercises Section */}
+                <View style={styles.exercisesSection}>
+                  <View style={styles.exercisesSectionHeader}>
+                    <Text style={styles.inputLabel}>EXERCISES</Text>
+                    <Text style={styles.exercisesSectionSubtitle}>
+                      {isCardioType(plannedWorkoutType) ? 'Add activities and set distance' : 'Add exercises and optionally set target weights'}
+                    </Text>
+                  </View>
+
+                  {plannedExercises.length > 0 ? (
+                    <View style={styles.plannedExercisesList}>
+                      {plannedExercises.map((exercise, index) => (
+                        <View key={index} style={styles.plannedExerciseItem}>
+                          <View style={styles.plannedExerciseHeader}>
+                            <View style={styles.plannedExerciseInfo}>
+                              <Dumbbell size={16} color={COLORS.accent.primary} strokeWidth={2} />
+                              <Text style={styles.plannedExerciseName}>{exercise.name}</Text>
+                            </View>
+                            <Pressable
+                              onPress={() => removeExerciseFromPlanned(index)}
+                              style={styles.removeExerciseButton}
+                              hitSlop={12}
+                              accessibilityLabel={`Remove ${exercise.name}`}
+                              accessibilityRole="button"
+                            >
+                              <Trash2 size={16} color={COLORS.error} />
+                            </Pressable>
+                          </View>
+                          {isCardioType(plannedWorkoutType) ? (
+                            <View style={styles.distanceInputContainer}>
+                              <TextInput
+                                style={styles.distanceInput}
+                                value={exercise.distance ? exercise.distance.toString() : ''}
+                                onChangeText={(val) => updateExerciseDistance(index, val)}
+                                keyboardType="decimal-pad"
+                                placeholder="0"
+                                placeholderTextColor={COLORS.text.tertiary}
+                              />
+                              <Text style={styles.distanceUnit}>mi</Text>
+                            </View>
+                          ) : (
+                            /* Strength exercise - show sets with weight inputs vertically */
+                            <View style={styles.plannedSetsContainer}>
+                              {(exercise.sets || []).length > 0 && (
+                                <View style={styles.plannedSetsList}>
+                                  {exercise.sets.map((set, setIndex) => (
+                                    <View key={setIndex} style={styles.plannedSetRow}>
+                                      <Text style={styles.plannedSetLabel}>Set {setIndex + 1}</Text>
+                                      <View style={styles.plannedSetInputContainer}>
+                                        <TextInput
+                                          style={styles.plannedSetInput}
+                                          value={set.weight?.toString() || ''}
+                                          onChangeText={(val) => updatePlannedSetWeight(index, setIndex, val)}
+                                          keyboardType="decimal-pad"
+                                          placeholder="0"
+                                          placeholderTextColor={COLORS.text.tertiary}
+                                        />
+                                        <Text style={styles.plannedSetUnit}>lb</Text>
+                                      </View>
+                                      <Pressable
+                                        onPress={() => removeSetFromPlannedExercise(index, setIndex)}
+                                        style={styles.removeSetButton}
+                                        hitSlop={12}
+                                      >
+                                        <X size={14} color={COLORS.text.tertiary} />
+                                      </Pressable>
+                                    </View>
+                                  ))}
+                                </View>
+                              )}
+                              <Pressable
+                                onPress={() => addSetToPlannedExercise(index)}
+                                style={styles.addSetButton}
+                              >
+                                <Plus size={14} color={COLORS.accent.primary} strokeWidth={2.5} />
+                                <Text style={styles.addSetText}>
+                                  {(exercise.sets || []).length === 0 ? 'Add Sets (optional)' : 'Add Set'}
+                                </Text>
+                              </Pressable>
+                            </View>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <View style={styles.noExercisesPlanned}>
+                      <Dumbbell size={24} color={COLORS.text.tertiary} />
+                      <Text style={styles.noExercisesText}>No exercises added yet</Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      openExercisePicker();
+                    }}
+                    style={styles.addExerciseButton}
+                    activeOpacity={0.7}
+                  >
+                    <Plus size={18} color={COLORS.accent.primary} strokeWidth={2.5} />
+                    <Text style={styles.addExerciseButtonText}>Add Exercise</Text>
+                  </TouchableOpacity>
+                </View>
+
+              </ScrollView>
+
+              <View style={styles.planModalFooter}>
                 <Pressable onPress={handlePlanWorkout} style={styles.modalButton}>
-                  <Text style={styles.modalButtonText}>Plan Workout</Text>
+                  <Text style={styles.modalButtonText}>
+                    {editingWorkout ? 'Save Changes' : 'Plan Workout'}
+                  </Text>
                 </Pressable>
               </View>
+            </KeyboardAvoidingView>
+          )}
+        </View>
+      </Modal>
+
+      {/* Workout Detail Modal */}
+      <Modal
+        visible={showWorkoutDetail !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowWorkoutDetail(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setShowWorkoutDetail(null)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>
+                    {showWorkoutDetail?.name?.toUpperCase() || 'WORKOUT'}
+                  </Text>
+                  <Pressable onPress={() => setShowWorkoutDetail(null)}>
+                    <X size={24} color={COLORS.text.primary} />
+                  </Pressable>
+                </View>
+
+                {/* Status */}
+                <View style={styles.workoutDetailStatus}>
+                  <View style={[
+                    styles.statusIndicator,
+                    showWorkoutDetail?.completed && styles.statusIndicatorComplete,
+                  ]}>
+                    {showWorkoutDetail?.completed ? (
+                      <Check size={16} color={COLORS.text.inverse} strokeWidth={3} />
+                    ) : (
+                      <Clock size={16} color={COLORS.text.tertiary} />
+                    )}
+                  </View>
+                  <View style={styles.statusTextContainer}>
+                    <Text style={[
+                      styles.statusText,
+                      showWorkoutDetail?.completed && styles.statusTextComplete,
+                    ]}>
+                      {showWorkoutDetail?.completed ? 'Completed' : 'Not Completed'}
+                    </Text>
+                    <Text style={styles.statusSubtext}>
+                      {showWorkoutDetail?.workoutType} • {showWorkoutDetail?.dayOfWeek !== undefined ? DAY_NAMES[showWorkoutDetail.dayOfWeek] : ''}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Exercises List */}
+                {showWorkoutDetail?.exercises?.length > 0 && (
+                  <View style={styles.detailExercisesList}>
+                    <Text style={styles.detailExercisesTitle}>PLANNED EXERCISES</Text>
+                    {showWorkoutDetail.exercises.map((exercise, idx) => (
+                      <View key={idx} style={styles.detailExerciseItem}>
+                        <Dumbbell size={14} color={COLORS.accent.primary} />
+                        <Text style={styles.detailExerciseName}>{exercise.name}</Text>
+                        {exercise.distance > 0 && (
+                          <Text style={styles.detailExerciseDistance}>{exercise.distance} mi</Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Action Buttons */}
+                <View style={styles.detailActionButtons}>
+                  <Pressable
+                    onPress={() => openEditWorkout(showWorkoutDetail)}
+                    style={styles.editWorkoutButton}
+                  >
+                    <Edit3 size={18} color={COLORS.accent.primary} strokeWidth={2} />
+                    <Text style={styles.editWorkoutText}>Edit Workout</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete Planned Workout',
+                        `Remove "${showWorkoutDetail?.name}" from your weekly plan?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Delete',
+                            style: 'destructive',
+                            onPress: async () => {
+                              await handleRemovePlannedWorkout(showWorkoutDetail?.id);
+                              setShowWorkoutDetail(null);
+                            },
+                          },
+                        ]
+                      );
+                    }}
+                    style={styles.deleteWorkoutButton}
+                  >
+                    <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
+                    <Text style={styles.deleteWorkoutText}>Delete</Text>
+                  </Pressable>
+                </View>
+              </View>
             </TouchableWithoutFeedback>
-          </KeyboardAvoidingView>
+          </View>
         </TouchableWithoutFeedback>
       </Modal>
 
@@ -645,22 +1133,18 @@ export default function GoalsScreen() {
                   <Pressable
                     style={[
                       styles.dateSelectorButton,
-                      weightEntryDate >= new Date() && styles.dateSelectorButtonDisabled
+                      isWeightDateToday && styles.dateSelectorButtonDisabled
                     ]}
                     onPress={() => {
-                      const today = new Date();
-                      today.setHours(23, 59, 59, 999);
-                      if (weightEntryDate < today) {
+                      if (!isWeightDateToday) {
                         const newDate = new Date(weightEntryDate);
                         newDate.setDate(newDate.getDate() + 1);
-                        if (newDate <= today) {
-                          setWeightEntryDate(newDate);
-                        }
+                        setWeightEntryDate(newDate);
                       }
                     }}
-                    disabled={weightEntryDate >= new Date()}
+                    disabled={isWeightDateToday}
                   >
-                    <ChevronRight size={20} color={weightEntryDate >= new Date() ? COLORS.text.tertiary : COLORS.text.secondary} />
+                    <ChevronRight size={20} color={isWeightDateToday ? COLORS.text.tertiary : COLORS.text.secondary} />
                   </Pressable>
                 </View>
 
@@ -836,7 +1320,7 @@ export default function GoalsScreen() {
                         );
                       }}
                       style={styles.historyDelete}
-                      hitSlop={8}
+                      hitSlop={12}
                     >
                       <Trash2 size={16} color={COLORS.text.tertiary} />
                     </Pressable>
@@ -1255,7 +1739,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.surface.border,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.md,
     ...TYPOGRAPHY.body,
     color: COLORS.text.primary,
@@ -1311,14 +1795,68 @@ const styles = StyleSheet.create({
   modalButton: {
     backgroundColor: COLORS.accent.primary,
     borderRadius: RADIUS.md,
-    padding: SPACING.md,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
     alignItems: 'center',
-    marginTop: SPACING.xl,
   },
   modalButtonText: {
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.text.inverse,
   },
+
+  // Workout Detail Modal
+  workoutDetailStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  statusIndicator: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusIndicatorComplete: {
+    backgroundColor: COLORS.success,
+  },
+  statusTextContainer: {
+    flex: 1,
+  },
+  statusText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
+  },
+  statusTextComplete: {
+    color: COLORS.success,
+  },
+  statusSubtext: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
+    marginTop: 2,
+  },
+  deleteWorkoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: 'rgba(255, 77, 79, 0.1)',
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 77, 79, 0.2)',
+  },
+  deleteWorkoutText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.error,
+    fontWeight: '600',
+  },
+
   secondaryButton: {
     backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.md,
@@ -1490,5 +2028,427 @@ const styles = StyleSheet.create({
   historyAddButtonText: {
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.text.inverse,
+  },
+
+  // Modal Handle (for sheet modals)
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.surface.border,
+    alignSelf: 'center',
+  },
+
+  // Plan Modal (Full Screen)
+  planModal: {
+    flex: 1,
+    backgroundColor: COLORS.background.primary,
+  },
+  planModalHeader: {
+    paddingTop: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
+    backgroundColor: COLORS.background.secondary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.surface.border,
+  },
+  planModalTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+  },
+  planModalTitle: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.primary,
+  },
+  planModalClose: {
+    padding: SPACING.xs,
+  },
+  planModalContent: {
+    flex: 1,
+    padding: SPACING.lg,
+  },
+  planModalFooter: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.lg,
+    backgroundColor: COLORS.background.primary,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surface.border,
+  },
+
+  // Exercises Section
+  exercisesSection: {
+    marginTop: SPACING.xl,
+  },
+  exercisesSectionHeader: {
+    marginBottom: SPACING.md,
+  },
+  exercisesSectionSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    marginTop: SPACING.xs,
+  },
+  plannedExercisesList: {
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    overflow: 'hidden',
+  },
+  plannedExerciseItem: {
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.surface.border,
+  },
+  plannedExerciseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.xs,
+  },
+  plannedExerciseInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  plannedExerciseName: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.primary,
+    flex: 1,
+  },
+  distanceInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    width: 80,
+  },
+  distanceInput: {
+    ...TYPOGRAPHY.body,
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    flex: 1,
+    textAlign: 'center',
+    paddingVertical: SPACING.xs,
+  },
+  distanceUnit: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.text.secondary,
+    marginRight: SPACING.xs,
+  },
+  removeExerciseButton: {
+    padding: SPACING.xs,
+  },
+
+  // Planned Sets (for strength exercises)
+  plannedSetsContainer: {
+    marginTop: SPACING.sm,
+  },
+  plannedSetsList: {
+    gap: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
+  plannedSetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  plannedSetLabel: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    width: 40,
+  },
+  plannedSetInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    width: 80,
+  },
+  plannedSetInput: {
+    ...TYPOGRAPHY.body,
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    flex: 1,
+    textAlign: 'center',
+    paddingVertical: SPACING.xs,
+  },
+  plannedSetUnit: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 11,
+    color: COLORS.text.secondary,
+    fontWeight: '600',
+    marginRight: SPACING.xs,
+  },
+  removeSetButton: {
+    padding: SPACING.xs,
+  },
+  addSetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.xs,
+  },
+  addSetText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.accent.primary,
+    fontWeight: '600',
+  },
+
+  noExercisesPlanned: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xl,
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    borderStyle: 'dashed',
+    gap: SPACING.sm,
+  },
+  noExercisesText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.tertiary,
+  },
+  addExerciseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+    paddingVertical: SPACING.md,
+    backgroundColor: COLORS.accent.primaryDim,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.surface.borderAccent,
+  },
+  addExerciseButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.accent.primary,
+  },
+
+  // Exercise Picker Modal
+  exercisePickerModal: {
+    flex: 1,
+    backgroundColor: COLORS.background.primary,
+  },
+  exercisePickerHeader: {
+    paddingTop: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
+    backgroundColor: COLORS.background.secondary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.surface.border,
+  },
+  exercisePickerTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  exerciseSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    gap: SPACING.sm,
+  },
+  exerciseSearchInput: {
+    flex: 1,
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.primary,
+    paddingVertical: SPACING.md,
+  },
+  clearSearchButton: {
+    padding: SPACING.xs,
+  },
+  categoryScroll: {
+    marginTop: SPACING.md,
+  },
+  categoryChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.background.elevated,
+    marginRight: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+  },
+  categoryChipActive: {
+    backgroundColor: COLORS.accent.primaryDim,
+    borderColor: COLORS.surface.borderAccent,
+  },
+  categoryChipText: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '600',
+    color: COLORS.text.secondary,
+  },
+  categoryChipTextActive: {
+    color: COLORS.accent.primary,
+  },
+  exercisePickerList: {
+    flex: 1,
+    padding: SPACING.lg,
+  },
+  exercisePickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  exercisePickerItemText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.primary,
+    flex: 1,
+  },
+  noExercisesFound: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xl,
+  },
+  noExercisesFoundText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.tertiary,
+  },
+
+  // Category Grid Styles (matching WorkoutBuilder)
+  browseCategoriesTitle: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.secondary,
+    marginBottom: SPACING.md,
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+  },
+  categoryGridButton: {
+    backgroundColor: COLORS.surface.card,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    width: '48%',
+  },
+  categoryGridButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
+    textAlign: 'center',
+  },
+  backToCategoriesButton: {
+    marginBottom: SPACING.lg,
+  },
+  backToCategoriesText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.accent.primary,
+  },
+
+  // Workout Detail Modal Updates
+  detailExercisesList: {
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  detailExercisesTitle: {
+    ...TYPOGRAPHY.label,
+    fontSize: 10,
+    color: COLORS.text.tertiary,
+    marginBottom: SPACING.sm,
+  },
+  detailExerciseItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  detailExerciseName: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.primary,
+    flex: 1,
+  },
+  detailExerciseDistance: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.accent.primary,
+    fontWeight: '600',
+  },
+  detailActionButtons: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  editWorkoutButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.accent.primaryDim,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.surface.borderAccent,
+  },
+  editWorkoutText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.accent.primary,
+    fontWeight: '600',
+  },
+
+  // Programs Card
+  programsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.lg,
+    gap: SPACING.md,
+  },
+  programsCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.accent.primaryDim,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  programsCardInfo: {
+    flex: 1,
+  },
+  programsCardTitle: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
+  },
+  programsCardSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    marginTop: 2,
   },
 });

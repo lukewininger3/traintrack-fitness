@@ -4,8 +4,6 @@ import { Activity, Bike, Bookmark, Dumbbell, Edit2, FileText, MessageSquare, Plu
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   SectionList,
   ScrollView,
@@ -13,12 +11,12 @@ import {
   Text,
   TextInput,
   View,
-  Modal
 } from 'react-native';
 import { loadWorkouts, saveWorkouts } from '../utils/storage';
 import { formatDateShort } from '../utils/dateFormatter';
 import { saveAsTemplate } from '../utils/workoutTemplates';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS, SHADOWS } from '../theme/design';
+import BottomSheet from '../components/ui/BottomSheet';
 
 export default function ActivitiesScreen() {
   const params = useLocalSearchParams();
@@ -41,15 +39,24 @@ export default function ActivitiesScreen() {
     }
   }, [isFocused, params.refresh]);
 
+  // Helper to get week number for a date
+  const getWeekNumber = (date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - d.getDay()); // Start of week (Sunday)
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  };
+
   const loadData = async () => {
     const data = await loadWorkouts();
     const sorted = data.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     const grouped = {};
-    sorted.forEach(workout => {
+    sorted.forEach((workout, index) => {
       const date = new Date(workout.date);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const monthName = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' }).toUpperCase();
+      const weekKey = getWeekNumber(workout.date);
 
       if (!grouped[monthKey]) {
         grouped[monthKey] = {
@@ -57,7 +64,12 @@ export default function ActivitiesScreen() {
           data: []
         };
       }
-      grouped[monthKey].data.push(workout);
+
+      // Check if this starts a new week within the month
+      const previousInMonth = grouped[monthKey].data[grouped[monthKey].data.length - 1];
+      const isNewWeek = previousInMonth && getWeekNumber(previousInMonth.date) !== weekKey;
+
+      grouped[monthKey].data.push({ ...workout, isNewWeek });
     });
 
     const sectionsArray = Object.values(grouped).sort((a, b) => {
@@ -179,40 +191,47 @@ export default function ActivitiesScreen() {
     const color = getWorkoutColor(workout.type);
 
     return (
-      <Pressable
-        onPress={() => setSelectedWorkout(workout)}
-        style={styles.workoutCard}
-        accessibilityLabel={`${workout.name}, ${workout.type}, ${workout.exercises?.length || 0} exercises`}
-        accessibilityRole="button"
-        accessibilityHint="Opens workout details"
-      >
-        <View style={[styles.workoutAccent, { backgroundColor: color }]} />
-        <View style={styles.workoutContent}>
-          <View style={[styles.workoutIconContainer, { backgroundColor: color + '15' }]}>
-            <Icon size={22} color={color} strokeWidth={2.5} />
+      <>
+        {workout.isNewWeek && (
+          <View style={styles.weekSeparator}>
+            <View style={styles.weekSeparatorLine} />
           </View>
-          <View style={styles.workoutInfo}>
-            <Text style={styles.workoutName}>{workout.name}</Text>
-            <View style={styles.workoutMetaRow}>
-              <Text style={styles.workoutDate}>{formatDateShort(workout.date)}</Text>
-              <View style={styles.metaDot} />
-              <Text style={styles.workoutExercises}>
-                {workout.exercises?.length || 0} exercises
-              </Text>
+        )}
+        <Pressable
+          onPress={() => setSelectedWorkout(workout)}
+          style={styles.workoutCard}
+          accessibilityLabel={`${workout.name}, ${workout.type}, ${workout.exercises?.length || 0} exercises`}
+          accessibilityRole="button"
+          accessibilityHint="Opens workout details"
+        >
+          <View style={[styles.workoutAccent, { backgroundColor: color }]} />
+          <View style={styles.workoutContent}>
+            <View style={[styles.workoutIconContainer, { backgroundColor: color + '15' }]}>
+              <Icon size={22} color={color} strokeWidth={2.5} />
             </View>
-          </View>
-          <Pressable
-            onPress={() => deleteWorkout(workout.id)}
-            style={styles.deleteButton}
-            hitSlop={8}
-            accessibilityLabel={`Delete ${workout.name}`}
-            accessibilityRole="button"
-            accessibilityHint="Permanently removes this workout"
-          >
-            <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
-          </Pressable>
+            <View style={styles.workoutInfo}>
+              <Text style={styles.workoutName}>{workout.name}</Text>
+              <View style={styles.workoutMetaRow}>
+                <Text style={styles.workoutDate}>{formatDateShort(workout.date)}</Text>
+                <View style={styles.metaDot} />
+                <Text style={styles.workoutExercises}>
+                  {workout.exercises?.length || 0} exercises
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              onPress={() => deleteWorkout(workout.id)}
+              style={styles.deleteButton}
+              hitSlop={12}
+              accessibilityLabel={`Delete ${workout.name}`}
+              accessibilityRole="button"
+              accessibilityHint="Permanently removes this workout"
+            >
+              <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
+            </Pressable>
         </View>
       </Pressable>
+      </>
     );
   };
 
@@ -239,17 +258,16 @@ export default function ActivitiesScreen() {
         }
       />
 
-      {/* Workout Detail Modal */}
-      {selectedWorkout && (
-        <View style={styles.modal}>
-          <Pressable
-            style={styles.modalOverlay}
-            onPress={() => setSelectedWorkout(null)}
-          />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHandle} />
-
-            {/* Header - Clean, no buttons */}
+      {/* Workout Detail Bottom Sheet */}
+      <BottomSheet
+        isVisible={!!selectedWorkout}
+        onClose={() => setSelectedWorkout(null)}
+        height="85%"
+        scrollable={false}
+      >
+        {selectedWorkout && (
+          <View style={styles.sheetInner}>
+            {/* Header */}
             <View style={styles.modalHeader}>
               <View style={[
                 styles.modalIconContainer,
@@ -347,8 +365,8 @@ export default function ActivitiesScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
-      )}
+        )}
+      </BottomSheet>
 
       {/* Floating Action Button */}
       {!selectedWorkout && (
@@ -364,113 +382,87 @@ export default function ActivitiesScreen() {
       )}
 
       {/* New Workout Bottom Sheet */}
-      <Modal
-        visible={showNewWorkoutSheet}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowNewWorkoutSheet(false)}
+      <BottomSheet
+        isVisible={showNewWorkoutSheet}
+        onClose={() => setShowNewWorkoutSheet(false)}
+        height="35%"
       >
+        <Text style={styles.sheetTitle}>START WORKOUT</Text>
+
         <Pressable
-          style={styles.sheetOverlay}
-          onPress={() => setShowNewWorkoutSheet(false)}
+          style={styles.sheetOption}
+          onPress={() => {
+            setShowNewWorkoutSheet(false);
+            router.push('/workout-details');
+          }}
+          accessibilityLabel="New Workout"
+          accessibilityRole="button"
+          accessibilityHint="Start a fresh workout from scratch"
         >
-          <View style={styles.sheetContent}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>START WORKOUT</Text>
-
-            <Pressable
-              style={styles.sheetOption}
-              onPress={() => {
-                setShowNewWorkoutSheet(false);
-                router.push('/workout-details');
-              }}
-              accessibilityLabel="New Workout"
-              accessibilityRole="button"
-              accessibilityHint="Start a fresh workout from scratch"
-            >
-              <View style={[styles.sheetOptionIcon, { backgroundColor: COLORS.accent.primaryDim }]}>
-                <Plus size={24} color={COLORS.accent.primary} strokeWidth={2.5} />
-              </View>
-              <View style={styles.sheetOptionText}>
-                <Text style={styles.sheetOptionTitle}>New Workout</Text>
-                <Text style={styles.sheetOptionDescription}>Start fresh with a blank workout</Text>
-              </View>
-            </Pressable>
-
-            <Pressable
-              style={styles.sheetOption}
-              onPress={() => {
-                setShowNewWorkoutSheet(false);
-                router.push('/templates');
-              }}
-              accessibilityLabel="From Template"
-              accessibilityRole="button"
-              accessibilityHint="Choose from your saved workout templates"
-            >
-              <View style={[styles.sheetOptionIcon, { backgroundColor: COLORS.tertiary.dim }]}>
-                <FileText size={24} color={COLORS.tertiary.primary} strokeWidth={2.5} />
-              </View>
-              <View style={styles.sheetOptionText}>
-                <Text style={styles.sheetOptionTitle}>From Template</Text>
-                <Text style={styles.sheetOptionDescription}>Use a saved workout template</Text>
-              </View>
-            </Pressable>
+          <View style={[styles.sheetOptionIcon, { backgroundColor: COLORS.accent.primaryDim }]}>
+            <Plus size={24} color={COLORS.accent.primary} strokeWidth={2.5} />
+          </View>
+          <View style={styles.sheetOptionText}>
+            <Text style={styles.sheetOptionTitle}>New Workout</Text>
+            <Text style={styles.sheetOptionDescription}>Start fresh with a blank workout</Text>
           </View>
         </Pressable>
-      </Modal>
 
-      {/* Save as Template Modal */}
-      <Modal
-        visible={showTemplateModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowTemplateModal(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.templateModalOverlay}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        <Pressable
+          style={styles.sheetOption}
+          onPress={() => {
+            setShowNewWorkoutSheet(false);
+            router.push('/templates');
+          }}
+          accessibilityLabel="From Template"
+          accessibilityRole="button"
+          accessibilityHint="Choose from your saved workout templates"
         >
-          <Pressable
-            style={styles.templateModalDismiss}
-            onPress={() => setShowTemplateModal(false)}
-          />
-          <View style={styles.templateModalContent}>
-            <Text style={styles.templateModalTitle}>Save as Template</Text>
-            <Text style={styles.templateModalSubtitle}>Enter a name for this template</Text>
-            <TextInput
-              style={styles.templateModalInput}
-              value={templateName}
-              onChangeText={setTemplateName}
-              placeholder="Template name"
-              placeholderTextColor={COLORS.text.tertiary}
-              autoFocus
-            />
-            <View style={styles.templateModalButtons}>
-              <Pressable
-                style={styles.templateModalCancel}
-                onPress={() => {
-                  setShowTemplateModal(false);
-                  setTemplateName('');
-                }}
-              >
-                <Text style={styles.templateModalCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={styles.templateModalSave}
-                onPress={confirmSaveAsTemplate}
-              >
-                <Bookmark size={18} color={COLORS.text.inverse} strokeWidth={2.5} />
-                <Text style={styles.templateModalSaveText}>Save</Text>
-              </Pressable>
-            </View>
+          <View style={[styles.sheetOptionIcon, { backgroundColor: COLORS.tertiary.dim }]}>
+            <FileText size={24} color={COLORS.tertiary.primary} strokeWidth={2.5} />
           </View>
+          <View style={styles.sheetOptionText}>
+            <Text style={styles.sheetOptionTitle}>From Template</Text>
+            <Text style={styles.sheetOptionDescription}>Use a saved workout template</Text>
+          </View>
+        </Pressable>
+      </BottomSheet>
+
+      {/* Save as Template Bottom Sheet */}
+      <BottomSheet
+        isVisible={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        height="35%"
+      >
+        <Text style={styles.templateModalTitle}>Save as Template</Text>
+        <Text style={styles.templateModalSubtitle}>Enter a name for this template</Text>
+        <TextInput
+          style={styles.templateModalInput}
+          value={templateName}
+          onChangeText={setTemplateName}
+          placeholder="Template name"
+          placeholderTextColor={COLORS.text.tertiary}
+          autoFocus
+        />
+        <View style={styles.templateModalButtons}>
           <Pressable
-            style={styles.templateModalDismiss}
-            onPress={() => setShowTemplateModal(false)}
-          />
-        </KeyboardAvoidingView>
-      </Modal>
+            style={styles.templateModalCancel}
+            onPress={() => {
+              setShowTemplateModal(false);
+              setTemplateName('');
+            }}
+          >
+            <Text style={styles.templateModalCancelText}>Cancel</Text>
+          </Pressable>
+          <Pressable
+            style={styles.templateModalSave}
+            onPress={confirmSaveAsTemplate}
+          >
+            <Bookmark size={18} color={COLORS.text.inverse} strokeWidth={2.5} />
+            <Text style={styles.templateModalSaveText}>Save</Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
     </View>
   );
 }
@@ -508,6 +500,17 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     color: COLORS.text.tertiary,
     fontWeight: '700',
+  },
+
+  // Week Separator
+  weekSeparator: {
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.xs,
+  },
+  weekSeparatorLine: {
+    height: 1,
+    backgroundColor: COLORS.surface.border,
+    opacity: 0.6,
   },
 
   // Workout Card
@@ -596,38 +599,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Modal
-  modal: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'flex-end',
-  },
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-  },
-  modalContent: {
-    backgroundColor: COLORS.background.secondary,
-    borderTopLeftRadius: RADIUS.xl,
-    borderTopRightRadius: RADIUS.xl,
-    maxHeight: '85%',
-    overflow: 'hidden',
-  },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.surface.border,
-    alignSelf: 'center',
-    marginTop: SPACING.md,
-    marginBottom: SPACING.sm,
+  // Bottom Sheet Inner
+  sheetInner: {
+    flex: 1,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -728,21 +702,7 @@ const styles = StyleSheet.create({
     color: COLORS.tertiary.primary,
   },
 
-  // Template Modal
-  templateModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
-    padding: SPACING.lg,
-  },
-  templateModalDismiss: {
-    flex: 1,
-  },
-  templateModalContent: {
-    backgroundColor: COLORS.background.secondary,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.xl,
-  },
+  // Template Save Sheet
   templateModalTitle: {
     ...TYPOGRAPHY.h3,
     color: COLORS.text.primary,
@@ -856,27 +816,7 @@ const styles = StyleSheet.create({
     ...SHADOWS.lg,
   },
 
-  // Bottom Sheet
-  sheetOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
-  },
-  sheetContent: {
-    backgroundColor: COLORS.background.secondary,
-    borderTopLeftRadius: RADIUS.xl,
-    borderTopRightRadius: RADIUS.xl,
-    padding: SPACING.lg,
-    paddingBottom: SPACING.xxxl,
-  },
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.surface.border,
-    alignSelf: 'center',
-    marginBottom: SPACING.lg,
-  },
+  // New Workout Sheet
   sheetTitle: {
     ...TYPOGRAPHY.label,
     color: COLORS.text.secondary,

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { AlertCircle } from 'lucide-react-native';
+import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 
 /**
  * Error Boundary Component
@@ -45,7 +46,7 @@ class ErrorBoundary extends React.Component {
       return (
         <View style={styles.container}>
           <View style={styles.content}>
-            <AlertCircle size={64} color="#EF4444" strokeWidth={2} />
+            <AlertCircle size={64} color={COLORS.error} strokeWidth={2} />
             <Text style={styles.title}>Oops! Something went wrong</Text>
             <Text style={styles.message}>
               {this.props.fallbackMessage ||
@@ -75,54 +76,51 @@ class ErrorBoundary extends React.Component {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.background.secondary,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: SPACING.lg,
   },
   content: {
     alignItems: 'center',
     maxWidth: 400,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 24,
-    marginBottom: 12,
+    ...TYPOGRAPHY.h2,
+    color: COLORS.text.primary,
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.sm,
     textAlign: 'center',
   },
   message: {
-    fontSize: 16,
-    color: '#9CA3AF',
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.secondary,
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 24,
+    marginBottom: SPACING.lg,
   },
   errorDetails: {
-    backgroundColor: '#374151',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 24,
+    backgroundColor: COLORS.background.elevated,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.lg,
     maxWidth: '100%',
   },
   errorText: {
     fontSize: 12,
-    color: '#EF4444',
+    color: COLORS.error,
     fontFamily: 'monospace',
   },
   button: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
+    backgroundColor: COLORS.accent.primary,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: RADIUS.md,
     minWidth: 120,
     alignItems: 'center',
   },
   buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.inverse,
   },
 });
 

@@ -1,9 +1,8 @@
-import { ChevronDown, Search, TrendingUp, X } from 'lucide-react-native';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Search, TrendingUp, X, ArrowUp, ArrowDown, Zap, Dumbbell, Trophy } from 'lucide-react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,10 +10,16 @@ import {
   TextInput,
   View
 } from 'react-native';
-import Svg, { Circle, G, Line, Polyline, Text as SvgText } from 'react-native-svg';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { useFocusEffect } from '@react-navigation/native';
+import Svg, { Circle, G, Line, Path, Polyline, Text as SvgText } from 'react-native-svg';
 import { EXERCISE_DATABASE } from '../constants/workoutTypes';
 import { loadWorkouts } from '../utils/storage';
+import { calculateOneRepMax } from '../utils/personalRecords';
+import { getCurrentWeekStats } from '../utils/weeklyRecap';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { Calendar } from 'lucide-react-native';
+import BottomSheet from '../components/ui/BottomSheet';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 32;
@@ -30,17 +35,58 @@ export default function ProgressScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeView, setActiveView] = useState('analytics'); // 'analytics' or 'charts'
+  const [strengthProgression, setStrengthProgression] = useState({ topGainers: [], declining: [] });
+  const [consistencyStats, setConsistencyStats] = useState({
+    daysThisMonth: 0,
+    daysPassed: 0,
+    totalWorkoutsThisMonth: 0,
+  });
+  const [weeklyStats, setWeeklyStats] = useState(null);
   const scrollViewRef = useRef(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const loadData = async () => {
     try {
       setIsLoading(true);
       const data = await loadWorkouts({ silent: true });
       setWorkouts(data || []);
+
+      // Calculate consistency stats
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      const dayOfMonth = now.getDate();
+
+      const workoutsThisMonth = (data || []).filter(w => {
+        const workoutDate = new Date(w.date);
+        return workoutDate.getMonth() === currentMonth &&
+               workoutDate.getFullYear() === currentYear;
+      });
+
+      // Count unique workout days this month
+      const uniqueDays = new Set(workoutsThisMonth.map(w => {
+        const d = new Date(w.date);
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      }));
+
+      setConsistencyStats({
+        daysThisMonth: uniqueDays.size,
+        daysPassed: dayOfMonth,
+        totalWorkoutsThisMonth: workoutsThisMonth.length,
+      });
+
+      // Load weekly stats
+      const weekStats = await getCurrentWeekStats();
+      setWeeklyStats(weekStats);
+
+      // Calculate strength progression
+      calculateSessionProgression(data || []);
 
       const exerciseMap = {};
       (data || []).forEach(workout => {
@@ -82,6 +128,63 @@ export default function ProgressScreen() {
     }
   };
 
+  const calculateSessionProgression = (workoutsData) => {
+    const sortedWorkouts = [...workoutsData].sort((a, b) =>
+      new Date(b.date) - new Date(a.date)
+    );
+
+    const exerciseChanges = [];
+    const seenExercises = new Set();
+
+    sortedWorkouts.forEach((workout, workoutIdx) => {
+      workout.exercises?.forEach(exercise => {
+        if (seenExercises.has(exercise.name)) return;
+
+        const hasWeightReps = exercise.sets?.some(set => set.weight > 0 && set.reps > 0);
+        if (!hasWeightReps) return;
+
+        const currentMaxWeight = Math.max(...exercise.sets.map(set => set.weight || 0));
+
+        for (let i = workoutIdx + 1; i < sortedWorkouts.length; i++) {
+          const prevWorkout = sortedWorkouts[i];
+          const prevExercise = prevWorkout.exercises?.find(e => e.name === exercise.name);
+
+          if (prevExercise) {
+            const prevSets = prevExercise.sets?.filter(s => s.weight > 0 && s.reps > 0);
+            if (prevSets && prevSets.length > 0) {
+              const prevMaxWeight = Math.max(...prevSets.map(set => set.weight || 0));
+
+              if (prevMaxWeight > 0) {
+                const percentChange = ((currentMaxWeight - prevMaxWeight) / prevMaxWeight) * 100;
+
+                exerciseChanges.push({
+                  name: exercise.name,
+                  currentWeight: currentMaxWeight,
+                  previousWeight: prevMaxWeight,
+                  percentChange
+                });
+                seenExercises.add(exercise.name);
+              }
+              break;
+            }
+          }
+        }
+      });
+    });
+
+    const topGainers = exerciseChanges
+      .filter(e => e.percentChange > 0)
+      .sort((a, b) => b.percentChange - a.percentChange)
+      .slice(0, 5);
+
+    const declining = exerciseChanges
+      .filter(e => e.percentChange < 0)
+      .sort((a, b) => a.percentChange - b.percentChange)
+      .slice(0, 3);
+
+    setStrengthProgression({ topGainers, declining });
+  };
+
   const exerciseList = Object.keys(exercises).sort();
 
   const filteredExercises = useMemo(() => {
@@ -103,13 +206,15 @@ export default function ProgressScreen() {
   }, [exerciseList, selectedCategory, searchQuery]);
 
   const availableCategories = useMemo(() => {
+    // Only show categories that contain exercises the user has actually recorded
     const categories = new Set();
     exerciseList.forEach(exercise => {
-      Object.keys(EXERCISE_DATABASE).forEach(category => {
-        if (EXERCISE_DATABASE[category].includes(exercise)) {
+      for (const [category, categoryExercises] of Object.entries(EXERCISE_DATABASE)) {
+        if (categoryExercises.includes(exercise)) {
           categories.add(category);
+          break;
         }
-      });
+      }
     });
     return Array.from(categories).sort();
   }, [exerciseList]);
@@ -121,12 +226,14 @@ export default function ProgressScreen() {
 
     const records = exercises[selectedExercise];
     return records.map((record, index) => {
+      const estimated1RM = calculateOneRepMax(record.weight, record.reps);
       return {
         x: index + 1,
         y: record.weight,
         date: record.date,
         reps: record.reps,
         weight: record.weight,
+        estimated1RM,
       };
     });
   }, [selectedExercise, exercises]);
@@ -143,15 +250,12 @@ export default function ProgressScreen() {
     const minWeight = Math.min(...chartData.map(d => d.y));
     const actualRange = maxWeight - minWeight;
 
-    // Enforce minimum range of 10 lbs to ensure labels are distinct
     const minRange = 10;
     const weightPadding = actualRange < minRange
-      ? (minRange - actualRange) / 2 + 2  // Center small ranges with extra padding
+      ? (minRange - actualRange) / 2 + 2
       : actualRange * 0.1;
 
-    // Fixed: Calculate available width WITHOUT subtracting pointRadius
-    // Points will be positioned within padding.left to (CHART_WIDTH - padding.right)
-    const availableWidth = chartWidth - (pointRadius * 2); // Account for point radius on edges
+    const availableWidth = chartWidth - (pointRadius * 2);
     const xScale = chartData.length === 1 ? 0 : availableWidth / Math.max(chartData.length - 1, 1);
 
     const adjustedMin = minWeight - weightPadding;
@@ -164,7 +268,7 @@ export default function ProgressScreen() {
       chartHeight,
       minWeight: adjustedMin,
       maxWeight: adjustedMax,
-      actualRange, // Store actual range for label formatting
+      actualRange,
       xScale,
       yScale,
       pointRadius
@@ -175,13 +279,10 @@ export default function ProgressScreen() {
     if (!chartMetrics || chartData.length === 0) return [];
 
     return chartData.map((point, index) => {
-      // Fixed: Consistent positioning that keeps points within chart bounds
       let x;
       if (chartData.length === 1) {
-        // Single point: center it
         x = chartMetrics.padding.left + chartMetrics.chartWidth / 2;
       } else {
-        // Multiple points: start at padding.left + pointRadius, end at padding.left + chartWidth - pointRadius
         x = chartMetrics.padding.left + chartMetrics.pointRadius + (index * chartMetrics.xScale);
       }
 
@@ -198,6 +299,7 @@ export default function ProgressScreen() {
       y: point.y,
       weight: point.weight,
       reps: point.reps,
+      estimated1RM: point.estimated1RM,
       date: point.date,
       svgX: point.svgX,
       svgY: point.svgY,
@@ -270,8 +372,504 @@ export default function ProgressScreen() {
     );
   }
 
+  // Analytics View
+  const renderAnalyticsView = () => {
+    const consistencyPercent = consistencyStats.daysPassed > 0
+      ? Math.round((consistencyStats.daysThisMonth / consistencyStats.daysPassed) * 100)
+      : 0;
+
+    // Workout type breakdown
+    const workoutTypes = weeklyStats?.workoutTypes || {};
+    const workoutTypeEntries = Object.entries(workoutTypes).sort((a, b) => b[1] - a[1]);
+    const totalWorkoutTypes = Object.values(workoutTypes).reduce((sum, count) => sum + count, 0);
+
+    return (
+    <View style={styles.analyticsContainer}>
+      {/* Weekly Recap Card */}
+      {weeklyStats && (
+        <Animated.View entering={FadeIn.duration(300)} style={styles.card}>
+          <View style={styles.weeklyHeader}>
+            <View style={styles.weeklyIconContainer}>
+              <Zap size={16} color={COLORS.warning} strokeWidth={2.5} fill={COLORS.warning} />
+            </View>
+            <View>
+              <Text style={styles.cardTitle}>WEEKLY RECAP</Text>
+              <Text style={styles.weeklySubtitle}>{weeklyStats.weekLabel}</Text>
+            </View>
+          </View>
+
+          {/* Stats Grid */}
+          <View style={styles.weeklyStatsGrid}>
+            <View style={styles.weeklyStatItem}>
+              <Text style={styles.weeklyStatValue}>{weeklyStats.totalWorkouts}</Text>
+              <Text style={styles.weeklyStatLabel}>WORKOUTS</Text>
+            </View>
+            <View style={styles.weeklyStatDivider} />
+            <View style={styles.weeklyStatItem}>
+              <Text style={styles.weeklyStatValue}>{weeklyStats.daysActive}</Text>
+              <Text style={styles.weeklyStatLabel}>DAYS ACTIVE</Text>
+            </View>
+            <View style={styles.weeklyStatDivider} />
+            <View style={styles.weeklyStatItem}>
+              <Text style={[styles.weeklyStatValue, weeklyStats.prsCount > 0 && { color: COLORS.warning }]}>
+                {weeklyStats.prsCount}
+              </Text>
+              <Text style={styles.weeklyStatLabel}>PRs HIT</Text>
+            </View>
+          </View>
+
+          {/* Workout Type Breakdown - Pie Chart */}
+          {totalWorkoutTypes > 0 && (
+            <View style={styles.exerciseTypeSection}>
+              <Text style={styles.exerciseTypeTitle}>WORKOUT BREAKDOWN</Text>
+              <View style={styles.pieChartContainer}>
+                <Svg width={100} height={100} viewBox="0 0 100 100">
+                  {(() => {
+                    const cx = 50, cy = 50, radius = 40;
+                    let currentAngle = -90; // Start at top
+                    return workoutTypeEntries.map(([type, count], idx) => {
+                      const percentage = count / totalWorkoutTypes;
+                      const angle = percentage * 360;
+                      const startAngle = currentAngle;
+                      const endAngle = currentAngle + angle;
+                      currentAngle = endAngle;
+
+                      // Convert to radians
+                      const startRad = (startAngle * Math.PI) / 180;
+                      const endRad = (endAngle * Math.PI) / 180;
+
+                      // Calculate arc points
+                      const x1 = cx + radius * Math.cos(startRad);
+                      const y1 = cy + radius * Math.sin(startRad);
+                      const x2 = cx + radius * Math.cos(endRad);
+                      const y2 = cy + radius * Math.sin(endRad);
+
+                      const largeArc = angle > 180 ? 1 : 0;
+
+                      // If only one type, draw a full circle
+                      if (workoutTypeEntries.length === 1) {
+                        return (
+                          <Circle
+                            key={type}
+                            cx={cx}
+                            cy={cy}
+                            r={radius}
+                            fill={COLORS.workoutTypes[type] || COLORS.text.tertiary}
+                          />
+                        );
+                      }
+
+                      const d = `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+                      return (
+                        <Path
+                          key={type}
+                          d={d}
+                          fill={COLORS.workoutTypes[type] || COLORS.text.tertiary}
+                        />
+                      );
+                    });
+                  })()}
+                </Svg>
+                <View style={styles.pieChartLegend}>
+                  {workoutTypeEntries.map(([type, count]) => (
+                    <View key={type} style={styles.pieChartLegendItem}>
+                      <View style={[styles.exerciseTypeDot, { backgroundColor: COLORS.workoutTypes[type] || COLORS.text.tertiary }]} />
+                      <Text style={styles.pieChartLegendText}>{type}</Text>
+                      <Text style={styles.pieChartLegendCount}>{count}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          )}
+        </Animated.View>
+      )}
+
+      {/* Consistency Stats Card */}
+      <Animated.View entering={FadeIn.duration(300)} style={styles.card}>
+        <View style={styles.consistencyHeader}>
+          <Calendar size={18} color={COLORS.accent.primary} strokeWidth={2.5} />
+          <Text style={styles.cardTitle}>MONTHLY CONSISTENCY</Text>
+        </View>
+        <Text style={styles.cardSubtitle}>Active days this month so far</Text>
+
+        <View style={styles.consistencyContent}>
+          <View style={styles.consistencyMain}>
+            <Text style={styles.consistencyPercent}>{consistencyPercent}%</Text>
+            <Text style={styles.consistencyLabel}>of days active</Text>
+          </View>
+          <View style={styles.consistencyDivider} />
+          <View style={styles.consistencyDetail}>
+            <View style={styles.consistencyRow}>
+              <Text style={styles.consistencyDetailLabel}>Active days</Text>
+              <Text style={styles.consistencyDetailValue}>{consistencyStats.daysThisMonth}</Text>
+            </View>
+            <View style={styles.consistencyRow}>
+              <Text style={styles.consistencyDetailLabel}>Days passed</Text>
+              <Text style={styles.consistencyDetailValue}>{consistencyStats.daysPassed}</Text>
+            </View>
+            <View style={styles.consistencyRow}>
+              <Text style={styles.consistencyDetailLabel}>Total workouts</Text>
+              <Text style={styles.consistencyDetailValue}>{consistencyStats.totalWorkoutsThisMonth}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Progress bar */}
+        <View style={styles.progressBarContainer}>
+          <View style={styles.progressBarTrack}>
+            <View style={[styles.progressBarFill, { width: `${Math.min(consistencyPercent, 100)}%` }]} />
+          </View>
+        </View>
+      </Animated.View>
+
+      {/* Strength Gains Card */}
+      {strengthProgression.topGainers.length > 0 && (
+        <Animated.View entering={FadeIn.duration(300).delay(100)} style={styles.card}>
+          <Text style={styles.cardTitle}>STRENGTH GAINS</Text>
+          <Text style={styles.cardSubtitle}>Recent weight increases</Text>
+
+          <View style={styles.gainsList}>
+            {strengthProgression.topGainers.map((exercise, idx) => (
+              <View key={idx} style={styles.gainRow}>
+                <View style={styles.gainInfo}>
+                  <Text style={styles.gainName} numberOfLines={1}>{exercise.name}</Text>
+                  <Text style={styles.gainWeight}>
+                    {exercise.previousWeight} → {exercise.currentWeight} lbs
+                  </Text>
+                </View>
+                <View style={styles.gainBadge}>
+                  <ArrowUp size={12} color={COLORS.success} strokeWidth={3} />
+                  <Text style={styles.gainPercent}>+{exercise.percentChange.toFixed(0)}%</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Declining Exercises Card */}
+      {strengthProgression.declining.length > 0 && (
+        <Animated.View entering={FadeIn.duration(300).delay(200)} style={styles.card}>
+          <Text style={styles.cardTitle}>NEEDS ATTENTION</Text>
+          <Text style={styles.cardSubtitle}>Weight decreases to monitor</Text>
+
+          <View style={styles.gainsList}>
+            {strengthProgression.declining.map((exercise, idx) => (
+              <View key={idx} style={styles.gainRow}>
+                <View style={styles.gainInfo}>
+                  <Text style={styles.gainName} numberOfLines={1}>{exercise.name}</Text>
+                  <Text style={styles.gainWeight}>
+                    {exercise.previousWeight} → {exercise.currentWeight} lbs
+                  </Text>
+                </View>
+                <View style={[styles.gainBadge, styles.declineBadge]}>
+                  <ArrowDown size={12} color={COLORS.error} strokeWidth={3} />
+                  <Text style={[styles.gainPercent, styles.declinePercent]}>
+                    {exercise.percentChange.toFixed(0)}%
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Empty state for analytics */}
+      {strengthProgression.topGainers.length === 0 && consistencyStats.totalWorkoutsThisMonth === 0 && (
+        <View style={styles.emptyAnalytics}>
+          <TrendingUp size={48} color={COLORS.text.tertiary} strokeWidth={1.5} />
+          <Text style={styles.emptyTitle}>NO DATA YET</Text>
+          <Text style={styles.emptyText}>Complete workouts to see your analytics</Text>
+        </View>
+      )}
+    </View>
+    );
+  };
+
+  // Charts View
+  const renderChartsView = () => (
+    <>
+      {exerciseList.length === 0 ? (
+        <View style={styles.emptyState}>
+          <View style={styles.emptyIconContainer}>
+            <TrendingUp size={48} color={COLORS.text.tertiary} strokeWidth={1.5} />
+          </View>
+          <Text style={styles.emptyTitle}>NO EXERCISE DATA</Text>
+          <Text style={styles.emptyText}>Complete workouts to track your progress</Text>
+        </View>
+      ) : (
+        <>
+          {/* Exercise Dropdown */}
+          <View style={styles.dropdownContainer}>
+            <Text style={styles.label}>SELECT EXERCISE</Text>
+            <Pressable
+              style={styles.dropdown}
+              onPress={() => setShowDropdown(true)}
+            >
+              <Text style={[
+                styles.dropdownText,
+                !selectedExercise && styles.dropdownPlaceholder
+              ]}>
+                {selectedExercise || 'Tap to select an exercise'}
+              </Text>
+              <View style={styles.dropdownIcon}>
+                <ChevronDown size={20} color={COLORS.accent.primary} strokeWidth={2.5} />
+              </View>
+            </Pressable>
+          </View>
+
+          {/* Chart or Prompt */}
+          {!selectedExercise ? (
+            <View style={styles.promptContainer}>
+              <View style={styles.promptIconContainer}>
+                <TrendingUp size={48} color={COLORS.accent.primary} strokeWidth={1.5} />
+              </View>
+              <Text style={styles.promptTitle}>SELECT AN EXERCISE</Text>
+              <Text style={styles.promptText}>
+                Choose an exercise from the dropdown above to view your weight progression over time
+              </Text>
+            </View>
+          ) : selectedExercise && exercises[selectedExercise] && exercises[selectedExercise].length > 0 ? (
+            <View style={styles.chartCard}>
+              <View style={styles.chartHeader}>
+                <View>
+                  <Text style={styles.chartTitle}>{selectedExercise}</Text>
+                  <Text style={styles.chartSubtitle}>Weight Progression</Text>
+                </View>
+                <View style={styles.chartBadge}>
+                  <Text style={styles.chartBadgeText}>{svgPoints.length} sessions</Text>
+                </View>
+              </View>
+
+              <View
+                style={styles.chartWrapper}
+                onStartShouldSetResponder={() => {
+                  setIsTouchingChart(true);
+                  return true;
+                }}
+                onMoveShouldSetResponder={() => true}
+                onResponderGrant={handleChartPressIn}
+                onResponderMove={handleChartTouchMove}
+                onResponderRelease={handleChartPressOut}
+                onResponderTerminate={handleChartPressOut}
+                onResponderTerminationRequest={() => false}
+              >
+                {chartMetrics && svgPoints.length > 0 && (
+                  <>
+                    <Svg width={CHART_WIDTH} height={CHART_HEIGHT} pointerEvents="none">
+                      {/* Grid lines */}
+                      {[0, 1, 2, 3, 4].map(i => {
+                        const y = chartMetrics.padding.top +
+                                 (chartMetrics.chartHeight / 4) * i;
+                        return (
+                          <Line
+                            key={`grid-h-${i}`}
+                            x1={chartMetrics.padding.left}
+                            y1={y}
+                            x2={chartMetrics.padding.left + chartMetrics.chartWidth}
+                            y2={y}
+                            stroke={COLORS.surface.border}
+                            strokeWidth="1"
+                            strokeDasharray="4,4"
+                          />
+                        );
+                      })}
+
+                      {/* Y-axis labels */}
+                      {(() => {
+                        const range = chartMetrics.maxWeight - chartMetrics.minWeight;
+                        const labelCount = range < 10 ? 3 : 5;
+                        const labelIndices = labelCount === 3 ? [0, 2, 4] : [0, 1, 2, 3, 4];
+
+                        return labelIndices.map(i => {
+                          const weight = chartMetrics.minWeight +
+                                       (chartMetrics.maxWeight - chartMetrics.minWeight) * (1 - i / 4);
+                          const y = chartMetrics.padding.top + (chartMetrics.chartHeight / 4) * i;
+
+                          const displayWeight = range < 5
+                            ? weight.toFixed(1)
+                            : Math.round(weight).toString();
+
+                          return (
+                            <G key={`y-label-${i}`}>
+                              <SvgText
+                                x={chartMetrics.padding.left - 10}
+                                y={y + 4}
+                                fontSize="11"
+                                fill={COLORS.text.tertiary}
+                                textAnchor="end"
+                                fontWeight="600"
+                              >
+                                {displayWeight}
+                              </SvgText>
+                            </G>
+                          );
+                        });
+                      })()}
+
+                      {/* Y-axis title */}
+                      <SvgText
+                        x={15}
+                        y={CHART_HEIGHT / 2}
+                        fontSize="10"
+                        fill={COLORS.text.tertiary}
+                        textAnchor="middle"
+                        transform={`rotate(-90, 15, ${CHART_HEIGHT / 2})`}
+                        fontWeight="600"
+                      >
+                        WEIGHT (LBS)
+                      </SvgText>
+
+                      {/* X-axis labels */}
+                      {svgPoints.map((point, index) => {
+                        const showLabel = index % Math.ceil(svgPoints.length / 5) === 0 ||
+                                        index === svgPoints.length - 1 ||
+                                        index === 0;
+                        if (showLabel) {
+                          const date = new Date(point.date);
+                          const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+                          return (
+                            <SvgText
+                              key={`x-label-${index}`}
+                              x={point.svgX}
+                              y={CHART_HEIGHT - chartMetrics.padding.bottom + 20}
+                              fontSize="10"
+                              fill={COLORS.text.tertiary}
+                              textAnchor="middle"
+                              fontWeight="600"
+                            >
+                              {dateStr}
+                            </SvgText>
+                          );
+                        }
+                        return null;
+                      })}
+
+                      {/* Line */}
+                      {svgPoints.length > 1 && (
+                        <Polyline
+                          points={svgPoints.map(p => `${p.svgX},${p.svgY}`).join(' ')}
+                          fill="none"
+                          stroke={COLORS.accent.primary}
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      )}
+
+                      {/* Data points */}
+                      {svgPoints.map((point, index) => (
+                        <Circle
+                          key={`point-${index}`}
+                          cx={point.svgX}
+                          cy={point.svgY}
+                          r="7"
+                          fill={COLORS.accent.primary}
+                          stroke={COLORS.background.primary}
+                          strokeWidth="2"
+                        />
+                      ))}
+
+                      {/* Axes */}
+                      <Line
+                        x1={chartMetrics.padding.left}
+                        y1={chartMetrics.padding.top}
+                        x2={chartMetrics.padding.left}
+                        y2={chartMetrics.padding.top + chartMetrics.chartHeight}
+                        stroke={COLORS.surface.border}
+                        strokeWidth="2"
+                      />
+                      <Line
+                        x1={chartMetrics.padding.left}
+                        y1={chartMetrics.padding.top + chartMetrics.chartHeight}
+                        x2={chartMetrics.padding.left + chartMetrics.chartWidth}
+                        y2={chartMetrics.padding.top + chartMetrics.chartHeight}
+                        stroke={COLORS.surface.border}
+                        strokeWidth="2"
+                      />
+                    </Svg>
+
+                    {/* Tooltip */}
+                    {tooltipData && tooltipData.svgX !== undefined && (
+                      <View
+                        style={[
+                          styles.tooltip,
+                          {
+                            position: 'absolute',
+                            left: Math.max(10, Math.min(tooltipData.svgX - 70, CHART_WIDTH - 150)),
+                            top: tooltipData.svgY - 80,
+                          }
+                        ]}
+                      >
+                        <Text style={styles.tooltipDate}>
+                          {new Date(tooltipData.date).toLocaleDateString()}
+                        </Text>
+                        <View style={styles.tooltipRow}>
+                          <Text style={styles.tooltipLabel}>Weight</Text>
+                          <Text style={styles.tooltipValueHighlight}>{tooltipData.weight} lbs</Text>
+                        </View>
+                        <View style={styles.tooltipRow}>
+                          <Text style={styles.tooltipLabel}>Reps</Text>
+                          <Text style={styles.tooltipValueHighlight}>{tooltipData.reps}</Text>
+                        </View>
+                        {tooltipData.estimated1RM > 0 && (
+                          <View style={styles.tooltipRow}>
+                            <Text style={styles.tooltipLabel}>Est. 1RM</Text>
+                            <Text style={styles.tooltipValueHighlight}>{tooltipData.estimated1RM} lbs</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+
+              <Text style={styles.hintText}>Touch chart to see details</Text>
+            </View>
+          ) : selectedExercise ? (
+            <View style={styles.emptyChart}>
+              <View style={styles.emptyChartIcon}>
+                <TrendingUp size={40} color={COLORS.text.tertiary} strokeWidth={1.5} />
+              </View>
+              <Text style={styles.emptyChartTitle}>NO DATA YET</Text>
+              <Text style={styles.emptyChartText}>
+                No sets recorded for {selectedExercise}
+              </Text>
+              <Text style={styles.emptyChartSubtext}>
+                Complete a workout with this exercise to track progress
+              </Text>
+            </View>
+          ) : null}
+        </>
+      )}
+    </>
+  );
+
   return (
     <View style={styles.container}>
+      {/* View Toggle */}
+      <View style={styles.toggleContainer}>
+        <View style={styles.toggleWrapper}>
+          <Pressable
+            style={[styles.toggleButton, activeView === 'analytics' && styles.toggleButtonActive]}
+            onPress={() => setActiveView('analytics')}
+          >
+            <Text style={[styles.toggleText, activeView === 'analytics' && styles.toggleTextActive]}>
+              Analytics
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.toggleButton, activeView === 'charts' && styles.toggleButtonActive]}
+            onPress={() => setActiveView('charts')}
+          >
+            <Text style={[styles.toggleText, activeView === 'charts' && styles.toggleTextActive]}>
+              Charts
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
@@ -281,388 +879,122 @@ export default function ProgressScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          {exerciseList.length === 0 ? (
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconContainer}>
-                <TrendingUp size={48} color={COLORS.text.tertiary} strokeWidth={1.5} />
-              </View>
-              <Text style={styles.emptyTitle}>NO EXERCISE DATA</Text>
-              <Text style={styles.emptyText}>Complete workouts to track your progress</Text>
-            </View>
-          ) : (
-            <>
-              {/* Exercise Dropdown */}
-              <View style={styles.dropdownContainer}>
-                <Text style={styles.label}>SELECT EXERCISE</Text>
-                <Pressable
-                  style={styles.dropdown}
-                  onPress={() => setShowDropdown(true)}
-                >
-                  <Text style={[
-                    styles.dropdownText,
-                    !selectedExercise && styles.dropdownPlaceholder
-                  ]}>
-                    {selectedExercise || 'Tap to select an exercise'}
-                  </Text>
-                  <View style={styles.dropdownIcon}>
-                    <ChevronDown size={20} color={COLORS.accent.primary} strokeWidth={2.5} />
-                  </View>
-                </Pressable>
-              </View>
-
-              {/* Chart or Prompt */}
-              {!selectedExercise ? (
-                <View style={styles.promptContainer}>
-                  <View style={styles.promptIconContainer}>
-                    <TrendingUp size={48} color={COLORS.accent.primary} strokeWidth={1.5} />
-                  </View>
-                  <Text style={styles.promptTitle}>SELECT AN EXERCISE</Text>
-                  <Text style={styles.promptText}>
-                    Choose an exercise from the dropdown above to view your weight progression over time
-                  </Text>
-                </View>
-              ) : selectedExercise && exercises[selectedExercise] && exercises[selectedExercise].length > 0 ? (
-                <View style={styles.chartCard}>
-                  <View style={styles.chartHeader}>
-                    <View>
-                      <Text style={styles.chartTitle}>{selectedExercise}</Text>
-                      <Text style={styles.chartSubtitle}>Weight Progression</Text>
-                    </View>
-                    <View style={styles.chartBadge}>
-                      <Text style={styles.chartBadgeText}>{svgPoints.length} sessions</Text>
-                    </View>
-                  </View>
-
-                  <View
-                    style={styles.chartWrapper}
-                    onStartShouldSetResponder={() => {
-                      setIsTouchingChart(true);
-                      if (scrollViewRef.current) {
-                        scrollViewRef.current.setNativeProps({ scrollEnabled: false });
-                      }
-                      return true;
-                    }}
-                    onMoveShouldSetResponder={() => true}
-                    onResponderGrant={handleChartPressIn}
-                    onResponderMove={handleChartTouchMove}
-                    onResponderRelease={() => {
-                      handleChartPressOut();
-                      if (scrollViewRef.current) {
-                        scrollViewRef.current.setNativeProps({ scrollEnabled: true });
-                      }
-                    }}
-                    onResponderTerminate={() => {
-                      handleChartPressOut();
-                      if (scrollViewRef.current) {
-                        scrollViewRef.current.setNativeProps({ scrollEnabled: true });
-                      }
-                    }}
-                    onResponderTerminationRequest={() => false}
-                  >
-                    {chartMetrics && svgPoints.length > 0 && (
-                      <>
-                        <Svg width={CHART_WIDTH} height={CHART_HEIGHT} pointerEvents="none">
-                          {/* Grid lines */}
-                          {[0, 1, 2, 3, 4].map(i => {
-                            const y = chartMetrics.padding.top +
-                                     (chartMetrics.chartHeight / 4) * i;
-                            return (
-                              <Line
-                                key={`grid-h-${i}`}
-                                x1={chartMetrics.padding.left}
-                                y1={y}
-                                x2={chartMetrics.padding.left + chartMetrics.chartWidth}
-                                y2={y}
-                                stroke={COLORS.surface.border}
-                                strokeWidth="1"
-                                strokeDasharray="4,4"
-                              />
-                            );
-                          })}
-
-                          {/* Y-axis labels - smart formatting based on range */}
-                          {(() => {
-                            const range = chartMetrics.maxWeight - chartMetrics.minWeight;
-                            // Use fewer labels (3) when range is small to avoid duplicates
-                            const labelCount = range < 10 ? 3 : 5;
-                            const labelIndices = labelCount === 3 ? [0, 2, 4] : [0, 1, 2, 3, 4];
-
-                            return labelIndices.map(i => {
-                              const weight = chartMetrics.minWeight +
-                                           (chartMetrics.maxWeight - chartMetrics.minWeight) * (1 - i / 4);
-                              const y = chartMetrics.padding.top + (chartMetrics.chartHeight / 4) * i;
-
-                              // Show decimals when range is very small (< 5 lbs)
-                              const displayWeight = range < 5
-                                ? weight.toFixed(1)
-                                : Math.round(weight).toString();
-
-                              return (
-                                <G key={`y-label-${i}`}>
-                                  <SvgText
-                                    x={chartMetrics.padding.left - 10}
-                                    y={y + 4}
-                                    fontSize="11"
-                                    fill={COLORS.text.tertiary}
-                                    textAnchor="end"
-                                    fontWeight="600"
-                                  >
-                                    {displayWeight}
-                                  </SvgText>
-                                </G>
-                              );
-                            });
-                          })()}
-
-                          {/* Y-axis title */}
-                          <SvgText
-                            x={15}
-                            y={CHART_HEIGHT / 2}
-                            fontSize="10"
-                            fill={COLORS.text.tertiary}
-                            textAnchor="middle"
-                            transform={`rotate(-90, 15, ${CHART_HEIGHT / 2})`}
-                            fontWeight="600"
-                          >
-                            WEIGHT (LBS)
-                          </SvgText>
-
-                          {/* X-axis labels */}
-                          {svgPoints.map((point, index) => {
-                            const showLabel = index % Math.ceil(svgPoints.length / 5) === 0 ||
-                                            index === svgPoints.length - 1 ||
-                                            index === 0;
-                            if (showLabel) {
-                              const date = new Date(point.date);
-                              const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
-                              return (
-                                <SvgText
-                                  key={`x-label-${index}`}
-                                  x={point.svgX}
-                                  y={CHART_HEIGHT - chartMetrics.padding.bottom + 20}
-                                  fontSize="10"
-                                  fill={COLORS.text.tertiary}
-                                  textAnchor="middle"
-                                  fontWeight="600"
-                                >
-                                  {dateStr}
-                                </SvgText>
-                              );
-                            }
-                            return null;
-                          })}
-
-                          {/* Line */}
-                          {svgPoints.length > 1 && (
-                            <Polyline
-                              points={svgPoints.map(p => `${p.svgX},${p.svgY}`).join(' ')}
-                              fill="none"
-                              stroke={COLORS.accent.primary}
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          )}
-
-                          {/* Data points */}
-                          {svgPoints.map((point, index) => (
-                            <Circle
-                              key={`point-${index}`}
-                              cx={point.svgX}
-                              cy={point.svgY}
-                              r="7"
-                              fill={COLORS.accent.primary}
-                              stroke={COLORS.background.primary}
-                              strokeWidth="2"
-                            />
-                          ))}
-
-                          {/* Axes */}
-                          <Line
-                            x1={chartMetrics.padding.left}
-                            y1={chartMetrics.padding.top}
-                            x2={chartMetrics.padding.left}
-                            y2={chartMetrics.padding.top + chartMetrics.chartHeight}
-                            stroke={COLORS.surface.border}
-                            strokeWidth="2"
-                          />
-                          <Line
-                            x1={chartMetrics.padding.left}
-                            y1={chartMetrics.padding.top + chartMetrics.chartHeight}
-                            x2={chartMetrics.padding.left + chartMetrics.chartWidth}
-                            y2={chartMetrics.padding.top + chartMetrics.chartHeight}
-                            stroke={COLORS.surface.border}
-                            strokeWidth="2"
-                          />
-                        </Svg>
-
-                        {/* Tooltip */}
-                        {tooltipData && tooltipData.svgX !== undefined && (
-                          <View
-                            style={[
-                              styles.tooltip,
-                              {
-                                position: 'absolute',
-                                left: Math.max(10, Math.min(tooltipData.svgX - 70, CHART_WIDTH - 150)),
-                                top: tooltipData.svgY - 80,
-                              }
-                            ]}
-                          >
-                            <Text style={styles.tooltipDate}>
-                              {new Date(tooltipData.date).toLocaleDateString()}
-                            </Text>
-                            <View style={styles.tooltipRow}>
-                              <Text style={styles.tooltipLabel}>Weight</Text>
-                              <Text style={styles.tooltipValueHighlight}>{tooltipData.weight} lbs</Text>
-                            </View>
-                            <View style={styles.tooltipRow}>
-                              <Text style={styles.tooltipLabel}>Reps</Text>
-                              <Text style={styles.tooltipValue}>{tooltipData.reps}</Text>
-                            </View>
-                          </View>
-                        )}
-                      </>
-                    )}
-                  </View>
-
-                  <Text style={styles.hintText}>Touch chart to see details</Text>
-                </View>
-              ) : selectedExercise ? (
-                <View style={styles.emptyChart}>
-                  <View style={styles.emptyChartIcon}>
-                    <TrendingUp size={40} color={COLORS.text.tertiary} strokeWidth={1.5} />
-                  </View>
-                  <Text style={styles.emptyChartTitle}>NO DATA YET</Text>
-                  <Text style={styles.emptyChartText}>
-                    No sets recorded for {selectedExercise}
-                  </Text>
-                  <Text style={styles.emptyChartSubtext}>
-                    Complete a workout with this exercise to track progress
-                  </Text>
-                </View>
-              ) : null}
-            </>
-          )}
+          {activeView === 'analytics' ? renderAnalyticsView() : renderChartsView()}
         </View>
       </ScrollView>
 
-      {/* Dropdown Modal */}
-      <Modal
-        visible={showDropdown}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowDropdown(false)}
+      {/* Exercise Picker Bottom Sheet */}
+      <BottomSheet
+        isVisible={showDropdown}
+        onClose={() => {
+          setShowDropdown(false);
+          setSearchQuery('');
+          setSelectedCategory(null);
+        }}
+        height="75%"
+        scrollable={false}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowDropdown(false)}
-        >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHandle} />
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>SELECT EXERCISE</Text>
+          <Pressable
+            onPress={() => {
+              setShowDropdown(false);
+              setSearchQuery('');
+              setSelectedCategory(null);
+            }}
+            style={styles.modalCloseButton}
+          >
+            <X size={20} color={COLORS.text.primary} strokeWidth={2.5} />
+          </Pressable>
+        </View>
 
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>SELECT EXERCISE</Text>
+        {/* Search Input */}
+        <View style={styles.searchContainer}>
+          <Search size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search exercises..."
+            placeholderTextColor={COLORS.text.tertiary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery('')} style={styles.clearButton}>
+              <X size={16} color={COLORS.text.tertiary} strokeWidth={2} />
+            </Pressable>
+          )}
+        </View>
+
+        {/* Category Filter */}
+        {availableCategories.length > 0 && (
+          <View style={styles.categoryContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <Pressable
-                onPress={() => {
-                  setShowDropdown(false);
-                  setSearchQuery('');
-                  setSelectedCategory(null);
-                }}
-                style={styles.modalCloseButton}
+                style={[
+                  styles.categoryChip,
+                  selectedCategory === null && styles.categoryChipActive
+                ]}
+                onPress={() => setSelectedCategory(null)}
               >
-                <X size={20} color={COLORS.text.primary} strokeWidth={2.5} />
+                <Text style={[
+                  styles.categoryChipText,
+                  selectedCategory === null && styles.categoryChipTextActive
+                ]}>
+                  All
+                </Text>
               </Pressable>
-            </View>
-
-            {/* Search Input */}
-            <View style={styles.searchContainer}>
-              <Search size={18} color={COLORS.text.tertiary} strokeWidth={2} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search exercises..."
-                placeholderTextColor={COLORS.text.tertiary}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {searchQuery.length > 0 && (
-                <Pressable onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                  <X size={16} color={COLORS.text.tertiary} strokeWidth={2} />
+              {availableCategories.map((category) => (
+                <Pressable
+                  key={category}
+                  style={[
+                    styles.categoryChip,
+                    selectedCategory === category && styles.categoryChipActive
+                  ]}
+                  onPress={() => setSelectedCategory(category)}
+                >
+                  <Text style={[
+                    styles.categoryChipText,
+                    selectedCategory === category && styles.categoryChipTextActive
+                  ]}>
+                    {category}
+                  </Text>
                 </Pressable>
-              )}
-            </View>
-
-            {/* Category Filter */}
-            {availableCategories.length > 0 && (
-              <View style={styles.categoryContainer}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <Pressable
-                    style={[
-                      styles.categoryChip,
-                      selectedCategory === null && styles.categoryChipActive
-                    ]}
-                    onPress={() => setSelectedCategory(null)}
-                  >
-                    <Text style={[
-                      styles.categoryChipText,
-                      selectedCategory === null && styles.categoryChipTextActive
-                    ]}>
-                      All
-                    </Text>
-                  </Pressable>
-                  {availableCategories.map((category) => (
-                    <Pressable
-                      key={category}
-                      style={[
-                        styles.categoryChip,
-                        selectedCategory === category && styles.categoryChipActive
-                      ]}
-                      onPress={() => setSelectedCategory(category)}
-                    >
-                      <Text style={[
-                        styles.categoryChipText,
-                        selectedCategory === category && styles.categoryChipTextActive
-                      ]}>
-                        {category}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
-              {filteredExercises.length > 0 ? (
-                filteredExercises.map((exerciseName) => (
-                  <Pressable
-                    key={exerciseName}
-                    style={[
-                      styles.modalItem,
-                      selectedExercise === exerciseName && styles.modalItemSelected
-                    ]}
-                    onPress={() => handleExerciseSelect(exerciseName)}
-                  >
-                    <Text style={[
-                      styles.modalItemText,
-                      selectedExercise === exerciseName && styles.modalItemTextSelected
-                    ]}>
-                      {exerciseName}
-                    </Text>
-                    {selectedExercise === exerciseName && (
-                      <View style={styles.selectedIndicator} />
-                    )}
-                  </Pressable>
-                ))
-              ) : (
-                <View style={styles.noResults}>
-                  <Text style={styles.noResultsText}>No exercises found</Text>
-                </View>
-              )}
+              ))}
             </ScrollView>
           </View>
-        </Pressable>
-      </Modal>
+        )}
+
+        <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
+          {filteredExercises.length > 0 ? (
+            filteredExercises.map((exerciseName) => (
+              <Pressable
+                key={exerciseName}
+                style={[
+                  styles.modalItem,
+                  selectedExercise === exerciseName && styles.modalItemSelected
+                ]}
+                onPress={() => handleExerciseSelect(exerciseName)}
+              >
+                <Text style={[
+                  styles.modalItemText,
+                  selectedExercise === exerciseName && styles.modalItemTextSelected
+                ]}>
+                  {exerciseName}
+                </Text>
+                {selectedExercise === exerciseName && (
+                  <View style={styles.selectedIndicator} />
+                )}
+              </Pressable>
+            ))
+          ) : (
+            <View style={styles.noResults}>
+              <Text style={styles.noResultsText}>No exercises found</Text>
+            </View>
+          )}
+        </ScrollView>
+      </BottomSheet>
     </View>
   );
 }
@@ -678,6 +1010,292 @@ const styles = StyleSheet.create({
   content: {
     padding: SPACING.lg,
     paddingBottom: 100,
+  },
+
+  // Toggle
+  toggleContainer: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+    backgroundColor: COLORS.background.primary,
+  },
+  toggleWrapper: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    alignItems: 'center',
+    borderRadius: RADIUS.md,
+  },
+  toggleButtonActive: {
+    backgroundColor: COLORS.accent.primary,
+  },
+  toggleText: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 14,
+    color: COLORS.text.tertiary,
+  },
+  toggleTextActive: {
+    color: COLORS.text.inverse,
+  },
+
+  // Analytics View
+  analyticsContainer: {
+    gap: SPACING.lg,
+  },
+  card: {
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.lg,
+  },
+  cardTitle: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.text.primary,
+    marginBottom: 4,
+  },
+  cardSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    marginBottom: SPACING.lg,
+  },
+
+  // Weekly Recap Card
+  weeklyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  weeklyIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 214, 0, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weeklySubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    marginTop: 1,
+  },
+  weeklyStatsGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  weeklyStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  weeklyStatValue: {
+    ...TYPOGRAPHY.statMedium,
+    color: COLORS.text.primary,
+    fontSize: 28,
+  },
+  weeklyStatLabel: {
+    ...TYPOGRAPHY.label,
+    fontSize: 9,
+    color: COLORS.text.tertiary,
+    marginTop: 2,
+  },
+  weeklyStatDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: COLORS.surface.border,
+  },
+  exerciseTypeSection: {
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+  },
+  exerciseTypeTitle: {
+    ...TYPOGRAPHY.label,
+    fontSize: 9,
+    color: COLORS.text.tertiary,
+    marginBottom: SPACING.sm,
+  },
+  exerciseTypeBar: {
+    flexDirection: 'row',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: SPACING.sm,
+  },
+  exerciseTypeCompound: {
+    backgroundColor: COLORS.accent.primary,
+  },
+  exerciseTypeIsolation: {
+    backgroundColor: COLORS.tertiary.primary,
+  },
+  exerciseTypeLegend: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  workoutTypeLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+  },
+  pieChartContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.lg,
+  },
+  pieChartLegend: {
+    flex: 1,
+    gap: SPACING.xs,
+  },
+  pieChartLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  pieChartLegendText: {
+    ...TYPOGRAPHY.caption,
+    flex: 1,
+    color: COLORS.text.secondary,
+  },
+  pieChartLegendCount: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 14,
+    color: COLORS.text.primary,
+  },
+  exerciseTypeLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  exerciseTypeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  exerciseTypeLegendText: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 11,
+    color: COLORS.text.secondary,
+  },
+
+  // Consistency Card
+  consistencyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: 4,
+  },
+  consistencyContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  consistencyMain: {
+    alignItems: 'center',
+    paddingRight: SPACING.lg,
+  },
+  consistencyPercent: {
+    ...TYPOGRAPHY.h1,
+    fontSize: 48,
+    color: COLORS.accent.primary,
+    lineHeight: 52,
+  },
+  consistencyLabel: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+  },
+  consistencyDivider: {
+    width: 1,
+    height: 60,
+    backgroundColor: COLORS.surface.border,
+    marginHorizontal: SPACING.md,
+  },
+  consistencyDetail: {
+    flex: 1,
+    gap: SPACING.sm,
+  },
+  consistencyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  consistencyDetailLabel: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+  },
+  consistencyDetailValue: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
+  },
+  progressBarContainer: {
+    marginTop: SPACING.lg,
+  },
+  progressBarTrack: {
+    height: 6,
+    backgroundColor: COLORS.surface.border,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: COLORS.accent.primary,
+    borderRadius: 3,
+  },
+  gainsList: {
+    gap: SPACING.sm,
+  },
+  gainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+  },
+  gainInfo: {
+    flex: 1,
+    marginRight: SPACING.md,
+  },
+  gainName: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.primary,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  gainWeight: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+  },
+  gainBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 255, 136, 0.15)',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.md,
+  },
+  declineBadge: {
+    backgroundColor: 'rgba(255, 59, 59, 0.15)',
+  },
+  gainPercent: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 14,
+    color: COLORS.success,
+  },
+  declinePercent: {
+    color: COLORS.error,
+  },
+  emptyAnalytics: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
   },
 
   // Loading State
@@ -820,12 +1438,38 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.accent.primary,
   },
+  chartModeToggle: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.md,
+    padding: 3,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+  },
+  chartModeButton: {
+    flex: 1,
+    paddingVertical: SPACING.xs,
+    alignItems: 'center',
+    borderRadius: RADIUS.sm,
+  },
+  chartModeButtonActive: {
+    backgroundColor: COLORS.accent.primary,
+  },
+  chartModeText: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '700',
+    color: COLORS.text.tertiary,
+  },
+  chartModeTextActive: {
+    color: COLORS.text.inverse,
+  },
   chartWrapper: {
     backgroundColor: COLORS.background.primary,
     borderRadius: RADIUS.lg,
     padding: SPACING.sm,
     position: 'relative',
-    overflow: 'hidden', // Prevent chart elements from overflowing
+    overflow: 'hidden',
   },
   hintText: {
     ...TYPOGRAPHY.caption,
@@ -869,12 +1513,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.text.primary,
   },
-  tooltipRowHighlight: {
-    marginTop: SPACING.xs,
-    paddingTop: SPACING.xs,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.surface.border,
-  },
   tooltipValueHighlight: {
     ...TYPOGRAPHY.caption,
     fontWeight: '700',
@@ -917,28 +1555,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: COLORS.background.secondary,
-    borderTopLeftRadius: RADIUS.xl,
-    borderTopRightRadius: RADIUS.xl,
-    maxHeight: '75%',
-    paddingBottom: 40,
-  },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.surface.border,
-    alignSelf: 'center',
-    marginTop: SPACING.md,
-    marginBottom: SPACING.sm,
-  },
+  // Exercise Picker Sheet
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

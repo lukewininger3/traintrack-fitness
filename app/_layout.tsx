@@ -1,4 +1,4 @@
-import { router, Slot, useRootNavigationState, useSegments } from 'expo-router';
+import { router, Stack, useRootNavigationState, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -7,35 +7,90 @@ import { TimerProvider } from '../src/contexts/TimerContext';
 import ErrorBoundary from '../src/components/ErrorBoundary';
 
 function RootLayoutNav() {
-  const { user, loading } = useAuth();
+  const { user, loading, profileLoading, needsUsername, needsOnboarding } = useAuth();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
 
   useEffect(() => {
-    // Don't do anything until navigation is ready and auth is loaded
-    if (!navigationState?.key || loading) return;
+    // Don't do anything until navigation is ready and auth/profile is loaded
+    if (!navigationState?.key || loading || profileLoading) return;
 
     const inAuthGroup = segments[0] === 'auth';
+    const onUsernameSetup = segments[1] === 'username-setup';
+    const onOnboarding = segments[0] === 'onboarding';
 
     if (!user && !inAuthGroup) {
       // User not logged in and trying to access app - redirect to login
       router.replace('/auth/login' as any);
-    } else if (user && inAuthGroup) {
-      // User IS logged in but still on auth screen - redirect to app
+    } else if (user && needsUsername && !onUsernameSetup) {
+      // User logged in but needs to set up username - redirect to username setup
+      router.replace('/auth/username-setup' as any);
+    } else if (user && !needsUsername && needsOnboarding && !onOnboarding) {
+      // User has username but hasn't completed onboarding
+      router.replace('/onboarding' as any);
+    } else if (user && !needsUsername && !needsOnboarding && (inAuthGroup || onOnboarding)) {
+      // User IS fully set up but still on auth/onboarding screen - redirect to app
       router.replace('/(tabs)' as any);
     }
-  }, [user, loading, segments, navigationState?.key]);
+  }, [user, loading, profileLoading, needsUsername, needsOnboarding, segments, navigationState?.key]);
 
-  // Show loading screen while checking auth or navigation not ready
-  if (loading || !navigationState?.key) {
+  // Show loading screen while checking auth/profile or navigation not ready
+  if (loading || profileLoading || !navigationState?.key) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color="#BFFF00" />
       </View>
     );
   }
 
-  return <Slot />;
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: '#0A0A0A' },
+        animation: 'fade',
+      }}
+    >
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="auth" />
+      <Stack.Screen
+        name="onboarding"
+        options={{ animation: 'fade' }}
+      />
+      <Stack.Screen
+        name="workout-builder"
+        options={{ animation: 'slide_from_bottom' }}
+      />
+      <Stack.Screen
+        name="workout-details"
+        options={{ animation: 'slide_from_bottom' }}
+      />
+      <Stack.Screen
+        name="custom-exercises"
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="personal-records"
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="templates"
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="friend-profile"
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="planned-workouts"
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="generate-workout"
+        options={{ animation: 'slide_from_bottom' }}
+      />
+    </Stack>
+  );
 }
 
 export default function RootLayout() {
@@ -57,6 +112,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1F2937',
+    backgroundColor: '#0A0A0A',
   },
 });

@@ -21,7 +21,7 @@ export const saveAsTemplate = async (workout, templateName) => {
       type: workout.type,
       exercises: workout.exercises.map(ex => ({
         name: ex.name,
-        sets: ex.sets.map(set => ({
+        sets: (ex.sets || []).map(set => ({
           weight: set.weight || 0,
           reps: set.reps || 0,
           distance: set.distance || 0,
@@ -40,6 +40,39 @@ export const saveAsTemplate = async (workout, templateName) => {
   } catch (error) {
     console.error('Error saving template:', error);
     throw error;
+  }
+};
+
+// Save a template (simplified interface for social sharing)
+export const saveTemplate = async (template) => {
+  try {
+    const templates = await loadTemplates();
+
+    const newTemplate = {
+      id: Date.now(),
+      name: template.name,
+      type: template.type,
+      exercises: (template.exercises || []).map(ex => ({
+        name: ex.name,
+        sets: (ex.sets || []).map(set => ({
+          weight: set.weight || 0,
+          reps: set.reps || 0,
+          distance: set.distance || 0,
+          time: set.time || 0
+        })),
+        notes: ex.notes || ''
+      })),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const updatedTemplates = [...templates, newTemplate];
+    await saveTemplates(updatedTemplates);
+
+    return { success: true, template: newTemplate };
+  } catch (error) {
+    console.error('Error saving template:', error);
+    return { success: false, error: error.message };
   }
 };
 

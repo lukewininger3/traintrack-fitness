@@ -7,14 +7,17 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, RADIUS } from '../../theme/design';
+
+const SHIMMER_DURATION = 1200;
 
 /**
  * Skeleton Component
  *
- * Animated placeholder for loading states with pulse/shimmer effect.
+ * Animated placeholder for loading states with a shimmer gradient sweep.
  *
- * @param {number} width - Width of skeleton (default: '100%')
+ * @param {number|string} width - Width of skeleton (default: '100%')
  * @param {number} height - Height of skeleton
  * @param {number} borderRadius - Border radius (default: RADIUS.md)
  * @param {object} style - Additional styles
@@ -25,29 +28,43 @@ export function Skeleton({
   borderRadius = RADIUS.md,
   style,
 }) {
-  const opacity = useSharedValue(0.3);
+  const translateX = useSharedValue(-1);
 
   useEffect(() => {
-    opacity.value = withRepeat(
-      withTiming(0.7, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+    translateX.value = withRepeat(
+      withTiming(1, { duration: SHIMMER_DURATION, easing: Easing.inOut(Easing.ease) }),
       -1,
-      true
+      false
     );
   }, []);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
+  const shimmerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value * 200 }],
   }));
 
   return (
-    <Animated.View
+    <View
       style={[
         styles.container,
         { width, height, borderRadius },
-        animatedStyle,
         style,
       ]}
-    />
+    >
+      <Animated.View style={[styles.shimmerContainer, shimmerStyle]}>
+        <LinearGradient
+          colors={[
+            'transparent',
+            'rgba(255, 255, 255, 0.06)',
+            'rgba(255, 255, 255, 0.12)',
+            'rgba(255, 255, 255, 0.06)',
+            'transparent',
+          ]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.shimmerGradient}
+        />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -165,6 +182,15 @@ export function SkeletonChart({ height = 200, style }) {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: COLORS.surface.card,
+    overflow: 'hidden',
+  },
+  shimmerContainer: {
+    ...StyleSheet.absoluteFillObject,
+    width: '200%',
+    left: '-50%',
+  },
+  shimmerGradient: {
+    flex: 1,
   },
 
   // Card skeleton

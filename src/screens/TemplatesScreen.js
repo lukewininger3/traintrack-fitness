@@ -59,10 +59,12 @@ export default function TemplatesScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            await deleteTemplate(templateId);
+          onPress: () => {
+            // Immediately update UI
+            setTemplates(prev => prev.filter(t => t.id !== templateId));
             setSelectedTemplate(null);
-            loadData();
+            // Then delete in background (no await)
+            deleteTemplate(templateId);
           }
         }
       ]
@@ -128,7 +130,9 @@ export default function TemplatesScreen() {
           <Pressable
             onPress={() => handleUseTemplate(template)}
             style={styles.useButton}
-            hitSlop={8}
+            hitSlop={12}
+            accessibilityLabel={`Start ${template.name} workout`}
+            accessibilityRole="button"
           >
             <Play size={18} color={COLORS.accent.primary} strokeWidth={2.5} fill={COLORS.accent.primary} />
           </Pressable>

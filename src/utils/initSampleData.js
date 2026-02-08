@@ -22,7 +22,7 @@ export const initializeSampleData = async () => {
       type: 'Strength',
       exercises: [
         {
-          name: 'Barbell Bench Press',
+          name: 'BB Bench Press',
           // INCREASING - Good progress
           sets: (week) => [
             { weight: 135 + (week * 5), reps: 10, distance: 0, time: 0 },
@@ -40,7 +40,7 @@ export const initializeSampleData = async () => {
           ]
         },
         {
-          name: 'Overhead Press',
+          name: 'BB Overhead Press',
           // DECREASING - Deload or fatigue
           sets: (week) => [
             { weight: 135 - (week * 3), reps: 8, distance: 0, time: 0 },
@@ -54,7 +54,7 @@ export const initializeSampleData = async () => {
       type: 'Strength',
       exercises: [
         {
-          name: 'Barbell Squat',
+          name: 'BB Back Squat',
           // INCREASING - Strong gains
           sets: (week) => [
             { weight: 185 + (week * 6), reps: 10, distance: 0, time: 0 },
@@ -71,7 +71,7 @@ export const initializeSampleData = async () => {
           ]
         },
         {
-          name: 'Walking Lunges',
+          name: 'DB Walking Lunges',
           // STABLE
           sets: () => [
             { weight: 0, reps: 20, distance: 0, time: 0 },
@@ -85,7 +85,7 @@ export const initializeSampleData = async () => {
       type: 'Strength',
       exercises: [
         {
-          name: 'Barbell Deadlift',
+          name: 'BB Deadlift',
           // INCREASING - Excellent progress
           sets: (week) => [
             { weight: 225 + (week * 7), reps: 8, distance: 0, time: 0 },
@@ -94,7 +94,7 @@ export const initializeSampleData = async () => {
           ]
         },
         {
-          name: 'Barbell Row',
+          name: 'BB Bent Over Row',
           // DECREASING - Form issues or fatigue
           sets: (week) => [
             { weight: 155 - (week * 4), reps: 10, distance: 0, time: 0 },
@@ -102,7 +102,7 @@ export const initializeSampleData = async () => {
           ]
         },
         {
-          name: 'Barbell Curl',
+          name: 'BB Curl',
           // STABLE
           sets: () => [
             { weight: 65, reps: 12, distance: 0, time: 0 },
@@ -117,7 +117,7 @@ export const initializeSampleData = async () => {
       type: 'Strength',
       exercises: [
         {
-          name: 'Dumbbell Bench Press',
+          name: 'DB Bench Press',
           // INCREASING - Good progress
           sets: (week) => [
             { weight: 50 + (week * 3), reps: 10, distance: 0, time: 0 },
@@ -134,7 +134,7 @@ export const initializeSampleData = async () => {
           ]
         },
         {
-          name: 'Tricep Pushdown',
+          name: 'Cable Rope Pushdown',
           // INCREASING - Small gains
           sets: (week) => [
             { weight: 50 + (week * 2), reps: 12, distance: 0, time: 0 },
@@ -149,7 +149,7 @@ export const initializeSampleData = async () => {
       type: 'Strength',
       exercises: [
         {
-          name: 'Dumbbell Shoulder Press',
+          name: 'DB Overhead Press',
           // DECREASING - Shoulder fatigue
           sets: (week) => [
             { weight: 55 - (week * 2), reps: 10, distance: 0, time: 0 },
@@ -157,7 +157,7 @@ export const initializeSampleData = async () => {
           ]
         },
         {
-          name: 'Lateral Raises',
+          name: 'DB Lateral Raises',
           // STABLE
           sets: () => [
             { weight: 15, reps: 15, distance: 0, time: 0 },

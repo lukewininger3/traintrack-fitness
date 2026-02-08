@@ -1,5 +1,5 @@
-import { Activity, ArrowDown, ArrowUp, Bike, ChevronLeft, ChevronRight, Dumbbell, Flame, Scale, Target, TrendingUp, Waves, Zap } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, ChevronRight as ArrowRight, Dumbbell, Activity, Bike, Waves, Flame, Play } from 'lucide-react-native';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Dimensions,
   Modal,
@@ -13,12 +13,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { calculateWeekStreak } from '../utils/calculations';
 import { getTodayString, loadWorkouts } from '../utils/storage';
-import { loadWeightData, calculateWeightProgress, formatWeight } from '../utils/weightStorage';
+import { loadWeeklyGoals, getWeekStart, getDateFromDayOfWeek } from '../utils/goalsStorage';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 
 const { width } = Dimensions.get('window');
 const DAY_WIDTH = (width - SPACING.lg * 2 - SPACING.lg * 2 - 52 - 14) / 7;
-const DAY_HEIGHT = DAY_WIDTH + 4; // Slightly taller for icons
+const DAY_HEIGHT = DAY_WIDTH + 4;
 
 export default function DashboardScreen({ navigation }) {
   const router = useRouter();
@@ -27,23 +27,8 @@ export default function DashboardScreen({ navigation }) {
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [weekStreak, setWeekStreak] = useState(0);
   const [selectedWorkouts, setSelectedWorkouts] = useState(null);
-  const [weightData, setWeightData] = useState(null);
-  const [consistencyStats, setConsistencyStats] = useState({
-    daysThisMonth: 0,
-    daysPassed: 0,
-    totalWorkoutsThisMonth: 0,
-    totalWorkoutsLastMonth: 0
-  });
-  const [strengthProgression, setStrengthProgression] = useState({
-    topGainers: [],
-    declining: []
-  });
+  const [todayPlannedWorkouts, setTodayPlannedWorkouts] = useState([]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  // Reload data every time screen gains focus
   useFocusEffect(
     useCallback(() => {
       const timer = setTimeout(() => {
@@ -57,108 +42,56 @@ export default function DashboardScreen({ navigation }) {
     const data = await loadWorkouts({ silent: true });
     setWorkouts(data || []);
     setWeekStreak(calculateWeekStreak(data || []));
-    calculateStats(data || []);
 
-    // Load weight data
-    const weight = await loadWeightData();
-    setWeightData(weight);
+    // Load today's planned workouts
+    const weekStart = getWeekStart();
+    const goals = await loadWeeklyGoals(weekStart);
+    if (goals?.plannedWorkouts) {
+      const todayDayOfWeek = new Date().getDay();
+      const todayWorkouts = goals.plannedWorkouts.filter(p =>
+        p.dayOfWeek === todayDayOfWeek && !p.completed
+      );
+      setTodayPlannedWorkouts(todayWorkouts);
+    } else {
+      setTodayPlannedWorkouts([]);
+    }
   };
 
-  const calculateStats = (data) => {
+  // Calculate stats for the viewed calendar month
+  const viewedMonthStats = useMemo(() => {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
-    const currentDay = now.getDate();
 
-    const firstDayThisMonth = new Date(currentYear, currentMonth, 1);
-    const lastDayThisMonth = new Date(currentYear, currentMonth + 1, 0);
-    const lastMonthFirst = new Date(currentYear, currentMonth - 1, 1);
-    const lastMonthLast = new Date(currentYear, currentMonth, 0);
+    // Check if viewing a future month
+    const isFutureMonth = calendarYear > currentYear ||
+      (calendarYear === currentYear && calendarMonth > currentMonth);
 
-    const thisMonthWorkouts = data.filter(w => {
+    if (isFutureMonth) {
+      return { isFuture: true, totalWorkouts: 0, change: 0 };
+    }
+
+    const firstDayViewedMonth = new Date(calendarYear, calendarMonth, 1);
+    const lastDayViewedMonth = new Date(calendarYear, calendarMonth + 1, 0);
+    const prevMonthFirst = new Date(calendarYear, calendarMonth - 1, 1);
+    const prevMonthLast = new Date(calendarYear, calendarMonth, 0);
+
+    const viewedMonthWorkouts = workouts.filter(w => {
       const workoutDate = new Date(w.date);
-      return workoutDate >= firstDayThisMonth && workoutDate <= lastDayThisMonth;
+      return workoutDate >= firstDayViewedMonth && workoutDate <= lastDayViewedMonth;
     });
 
-    const lastMonthWorkouts = data.filter(w => {
+    const prevMonthWorkouts = workouts.filter(w => {
       const workoutDate = new Date(w.date);
-      return workoutDate >= lastMonthFirst && workoutDate <= lastMonthLast;
+      return workoutDate >= prevMonthFirst && workoutDate <= prevMonthLast;
     });
 
-    const lastMonthSameDayCount = lastMonthWorkouts.filter(w => {
-      const workoutDate = new Date(w.date);
-      return workoutDate.getDate() <= currentDay;
-    }).length;
-
-    const uniqueDaysThisMonth = new Set(thisMonthWorkouts.map(w => w.date)).size;
-
-    setConsistencyStats({
-      daysThisMonth: uniqueDaysThisMonth,
-      daysPassed: currentDay,
-      totalWorkoutsThisMonth: thisMonthWorkouts.length,
-      totalWorkoutsLastMonth: lastMonthSameDayCount
-    });
-
-    calculateSessionProgression(data);
-  };
-
-  const calculateSessionProgression = (workoutsData) => {
-    const sortedWorkouts = [...workoutsData].sort((a, b) =>
-      new Date(b.date) - new Date(a.date)
-    );
-
-    const exerciseChanges = [];
-    const seenExercises = new Set();
-
-    sortedWorkouts.forEach((workout, workoutIdx) => {
-      workout.exercises?.forEach(exercise => {
-        // Skip if we've already tracked this exercise (deduplication)
-        if (seenExercises.has(exercise.name)) return;
-
-        const hasWeightReps = exercise.sets?.some(set => set.weight > 0 && set.reps > 0);
-        if (!hasWeightReps) return;
-
-        const currentMaxWeight = Math.max(...exercise.sets.map(set => set.weight || 0));
-
-        for (let i = workoutIdx + 1; i < sortedWorkouts.length; i++) {
-          const prevWorkout = sortedWorkouts[i];
-          const prevExercise = prevWorkout.exercises?.find(e => e.name === exercise.name);
-
-          if (prevExercise) {
-            const prevSets = prevExercise.sets?.filter(s => s.weight > 0 && s.reps > 0);
-            if (prevSets && prevSets.length > 0) {
-              const prevMaxWeight = Math.max(...prevSets.map(set => set.weight || 0));
-
-              if (prevMaxWeight > 0) {
-                const percentChange = ((currentMaxWeight - prevMaxWeight) / prevMaxWeight) * 100;
-
-                exerciseChanges.push({
-                  name: exercise.name,
-                  currentWeight: currentMaxWeight,
-                  previousWeight: prevMaxWeight,
-                  percentChange
-                });
-                seenExercises.add(exercise.name);
-              }
-              break;
-            }
-          }
-        }
-      });
-    });
-
-    const topGainers = exerciseChanges
-      .filter(e => e.percentChange > 0)
-      .sort((a, b) => b.percentChange - a.percentChange)
-      .slice(0, 3);
-
-    const declining = exerciseChanges
-      .filter(e => e.percentChange < 0)
-      .sort((a, b) => a.percentChange - b.percentChange)
-      .slice(0, 2);
-
-    setStrengthProgression({ topGainers, declining });
-  };
+    return {
+      isFuture: false,
+      totalWorkouts: viewedMonthWorkouts.length,
+      change: viewedMonthWorkouts.length - prevMonthWorkouts.length
+    };
+  }, [workouts, calendarMonth, calendarYear]);
 
   const getWorkoutIcon = (type) => {
     const icons = {
@@ -173,6 +106,25 @@ export default function DashboardScreen({ navigation }) {
 
   const getWorkoutColor = (type) => {
     return COLORS.workoutTypes[type] || COLORS.text.tertiary;
+  };
+
+  // Start a planned workout - navigate to workout builder with planned data
+  const startPlannedWorkout = (plannedWorkout) => {
+    const today = getTodayString();
+    const workoutDetails = {
+      name: plannedWorkout.name,
+      type: plannedWorkout.workoutType,
+      date: today,
+      plannedExercises: plannedWorkout.exercises || [],
+      plannedWorkoutId: plannedWorkout.id,
+    };
+
+    router.push({
+      pathname: '/workout-details',
+      params: {
+        workoutDetails: JSON.stringify(workoutDetails),
+      },
+    });
   };
 
   const previousMonth = () => {
@@ -204,7 +156,6 @@ export default function DashboardScreen({ navigation }) {
     return workouts.some(w => w.date === dateStr);
   };
 
-  // Get unique workout types for a date
   const getWorkoutTypesForDate = (dateStr) => {
     const dayWorkouts = workouts.filter(w => w.date === dateStr);
     const types = [...new Set(dayWorkouts.map(w => w.type))];
@@ -284,21 +235,9 @@ export default function DashboardScreen({ navigation }) {
     return calendar;
   }, [calendarMonth, calendarYear, workouts]);
 
-  const monthWorkoutCount = useMemo(() => {
-    const firstDay = new Date(calendarYear, calendarMonth, 1);
-    const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
-    return workouts.filter(w => {
-      const d = new Date(w.date);
-      return d >= firstDay && d <= lastDay;
-    }).length;
-  }, [workouts, calendarMonth, calendarYear]);
+  const isPositiveChange = viewedMonthStats.change >= 0;
 
-  const consistencyPercentage = consistencyStats.daysPassed > 0
-    ? Math.round((consistencyStats.daysThisMonth / consistencyStats.daysPassed) * 100)
-    : 0;
-
-  const workoutChange = consistencyStats.totalWorkoutsThisMonth - consistencyStats.totalWorkoutsLastMonth;
-  const isPositiveChange = workoutChange >= 0;
+  const today = getTodayString();
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -330,7 +269,6 @@ export default function DashboardScreen({ navigation }) {
           {calendarData.map((week, weekIdx) => {
             const hasWorkoutInVisibleDays = week.some(day => day?.hasWorkout);
             const hasWorkoutThisWeek = hasWorkoutInVisibleDays || week.adjacentMonthHasWorkout;
-            const today = getTodayString();
             const isCurrentWeek = week.some(day => day?.date === today);
 
             return (
@@ -340,9 +278,7 @@ export default function DashboardScreen({ navigation }) {
                     const isFutureDay = day && day.date > today;
                     const workoutTypes = day?.workoutTypes || [];
                     const primaryColor = workoutTypes.length > 0 ? getWorkoutColor(workoutTypes[0]) : null;
-
                     const workoutCount = day?.workoutCount || 0;
-                    const hasMultiple = workoutCount > 1;
 
                     return (
                       <Pressable
@@ -361,7 +297,6 @@ export default function DashboardScreen({ navigation }) {
                           !day && styles.dayInvisible,
                         ]}
                       >
-                        {/* Main day cell */}
                         <View style={[
                           styles.dayInner,
                           day?.isToday && styles.dayToday,
@@ -371,34 +306,14 @@ export default function DashboardScreen({ navigation }) {
                             borderColor: primaryColor + '40',
                           },
                         ]}>
-                          {/* Show icon instead of date for workout days */}
                           {day?.hasWorkout ? (
-                            <>
-                              <View style={styles.workoutIconCenter}>
-                                {React.createElement(getWorkoutIcon(workoutTypes[0]), {
-                                  size: 18,
-                                  color: day?.isToday ? COLORS.text.inverse : primaryColor,
-                                  strokeWidth: 2.5
-                                })}
-                              </View>
-                              {/* Show a dot for each additional workout */}
-                              {workoutCount > 1 && (
-                                <View style={styles.additionalWorkoutDots}>
-                                  {workouts
-                                    .filter(w => w.date === day.date)
-                                    .slice(1, 4)
-                                    .map((w, i) => (
-                                      <View
-                                        key={i}
-                                        style={[
-                                          styles.additionalDot,
-                                          { backgroundColor: getWorkoutColor(w.type) }
-                                        ]}
-                                      />
-                                    ))}
-                                </View>
-                              )}
-                            </>
+                            <View style={styles.workoutIconCenter}>
+                              {React.createElement(getWorkoutIcon(workoutTypes[0]), {
+                                size: 18,
+                                color: day?.isToday ? COLORS.text.inverse : primaryColor,
+                                strokeWidth: 2.5
+                              })}
+                            </View>
                           ) : (
                             <Text style={[
                               styles.dayText,
@@ -415,17 +330,16 @@ export default function DashboardScreen({ navigation }) {
                   })}
                 </View>
 
-                {/* Week Indicator - shows streak number inside fire icon */}
+                {/* Week Indicator */}
                 <View style={styles.weekIndicator}>
                   {isCurrentWeek && weekStreak > 0 ? (
-                    <View style={styles.fireStreakContainer}>
+                    <View style={styles.streakBadge}>
                       <Flame
-                        size={32}
-                        color={COLORS.accent.primary}
-                        fill={COLORS.accent.primary}
-                        strokeWidth={1.5}
+                        size={14}
+                        color={COLORS.secondary.primary}
+                        strokeWidth={2.5}
                       />
-                      <Text style={styles.fireStreakNumber}>{weekStreak}</Text>
+                      <Text style={styles.streakBadgeNumber}>{weekStreak}</Text>
                     </View>
                   ) : hasWorkoutThisWeek ? (
                     <View style={styles.weekCircleFilled} />
@@ -437,7 +351,29 @@ export default function DashboardScreen({ navigation }) {
             );
           })}
 
-          {/* Legend - inside calendar card */}
+          {/* Legend */}
+          {/* Monthly Stats Footer */}
+          {!viewedMonthStats.isFuture && (
+            <View style={styles.calendarFooter}>
+              <View style={styles.calendarStats}>
+                <Text style={styles.calendarStatsNumber}>{viewedMonthStats.totalWorkouts}</Text>
+                <Text style={styles.calendarStatsLabel}>workouts</Text>
+              </View>
+              <View style={styles.calendarStatsDivider} />
+              <View style={[
+                styles.calendarChangeBadge,
+                isPositiveChange ? styles.calendarChangeBadgePositive : styles.calendarChangeBadgeNegative
+              ]}>
+                <Text style={[
+                  styles.calendarChangeBadgeText,
+                  isPositiveChange ? styles.calendarChangeBadgeTextPositive : styles.calendarChangeBadgeTextNegative
+                ]}>
+                  {isPositiveChange ? '+' : ''}{viewedMonthStats.change} vs last month
+                </Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.legend}>
             {Object.entries(COLORS.workoutTypes)
               .filter(([type]) => type !== 'Other')
@@ -454,135 +390,64 @@ export default function DashboardScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Strength Progression - Minimalist */}
-        {(strengthProgression.topGainers.length > 0 || strengthProgression.declining.length > 0) && (
-          <View style={styles.strengthCard}>
-            <View style={styles.strengthHeader}>
-              <TrendingUp size={16} color={COLORS.text.secondary} strokeWidth={2} />
-              <Text style={styles.strengthTitle}>RECENT GAINS</Text>
+        {/* Today's Workout Card */}
+        {todayPlannedWorkouts.length > 0 ? (
+          <View style={styles.todayWorkoutCard}>
+            <View style={styles.todayWorkoutHeader}>
+              <View style={styles.todayWorkoutIcon}>
+                <Play size={18} color={COLORS.accent.primary} strokeWidth={2.5} fill={COLORS.accent.primary} />
+              </View>
+              <Text style={styles.todayWorkoutTitle}>TODAY'S WORKOUT</Text>
             </View>
 
-            <View style={styles.strengthList}>
-              {strengthProgression.topGainers.map((exercise, idx) => (
-                <View key={`gain-${idx}`} style={styles.strengthRow}>
-                  <Text style={styles.strengthName} numberOfLines={1}>{exercise.name}</Text>
-                  <View style={styles.strengthChange}>
-                    <Text style={styles.strengthWeightSmall}>
-                      {exercise.previousWeight}→{exercise.currentWeight}
+            {todayPlannedWorkouts.map((workout, index) => (
+              <Pressable
+                key={workout.id}
+                style={styles.todayWorkoutItem}
+                onPress={() => startPlannedWorkout(workout)}
+              >
+                <View style={styles.todayWorkoutInfo}>
+                  <View style={[styles.todayWorkoutTypeBadge, { backgroundColor: getWorkoutColor(workout.workoutType) + '20' }]}>
+                    {React.createElement(getWorkoutIcon(workout.workoutType), {
+                      size: 16,
+                      color: getWorkoutColor(workout.workoutType),
+                      strokeWidth: 2.5
+                    })}
+                  </View>
+                  <View style={styles.todayWorkoutDetails}>
+                    <Text style={styles.todayWorkoutName}>{workout.name}</Text>
+                    <Text style={styles.todayWorkoutMeta}>
+                      {workout.workoutType}
+                      {workout.exercises?.length > 0 && ` • ${workout.exercises.length} exercises`}
                     </Text>
-                    <View style={styles.strengthBadge}>
-                      <ArrowUp size={10} color={COLORS.success} strokeWidth={3} />
-                      <Text style={styles.strengthBadgeText}>
-                        {exercise.percentChange.toFixed(0)}%
-                      </Text>
-                    </View>
                   </View>
                 </View>
-              ))}
-
-              {strengthProgression.declining.map((exercise, idx) => (
-                <View key={`decline-${idx}`} style={styles.strengthRow}>
-                  <Text style={styles.strengthName} numberOfLines={1}>{exercise.name}</Text>
-                  <View style={styles.strengthChange}>
-                    <Text style={styles.strengthWeightSmall}>
-                      {exercise.previousWeight}→{exercise.currentWeight}
-                    </Text>
-                    <View style={[styles.strengthBadge, styles.strengthBadgeNeg]}>
-                      <ArrowDown size={10} color={COLORS.error} strokeWidth={3} />
-                      <Text style={[styles.strengthBadgeText, styles.strengthBadgeTextNeg]}>
-                        {Math.abs(exercise.percentChange).toFixed(0)}%
-                      </Text>
-                    </View>
-                  </View>
+                <View style={styles.startWorkoutButton}>
+                  <Text style={styles.startWorkoutText}>Start</Text>
+                  <ArrowRight size={16} color={COLORS.accent.primary} strokeWidth={2.5} />
                 </View>
-              ))}
-            </View>
+              </Pressable>
+            ))}
           </View>
-        )}
-
-        {/* Consistency Stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <View style={styles.statHeader}>
-              <Target size={16} color={COLORS.accent.primary} strokeWidth={2.5} />
-              <Text style={styles.statLabel}>THIS MONTH</Text>
-            </View>
-            <Text style={styles.statNumber}>{consistencyPercentage}%</Text>
-            <Text style={styles.statDetail}>
-              {consistencyStats.daysThisMonth}/{consistencyStats.daysPassed} days
-            </Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <View style={styles.statHeader}>
-              <Zap size={16} color={COLORS.tertiary.primary} strokeWidth={2.5} />
-              <Text style={styles.statLabel}>VS LAST</Text>
-            </View>
-            <View style={styles.changeRow}>
-              <Text style={styles.statNumber}>{consistencyStats.totalWorkoutsThisMonth}</Text>
-              <View style={[
-                styles.changeBadge,
-                isPositiveChange ? styles.changeBadgePositive : styles.changeBadgeNegative
-              ]}>
-                <Text style={[
-                  styles.changeBadgeText,
-                  isPositiveChange ? styles.changeBadgeTextPositive : styles.changeBadgeTextNegative
-                ]}>
-                  {isPositiveChange ? '+' : ''}{workoutChange}
-                </Text>
+        ) : (
+          <Pressable
+            style={styles.noWorkoutCard}
+            onPress={() => router.push('/(tabs)/goals')}
+          >
+            <View style={styles.noWorkoutContent}>
+              <View style={styles.noWorkoutIcon}>
+                <Dumbbell size={24} color={COLORS.text.tertiary} strokeWidth={2} />
+              </View>
+              <View style={styles.noWorkoutText}>
+                <Text style={styles.noWorkoutTitle}>No workout planned today</Text>
+                <Text style={styles.noWorkoutHint}>Tap to plan your workouts →</Text>
               </View>
             </View>
-            <Text style={styles.statDetail}>workouts</Text>
-          </View>
-        </View>
-
-        {/* Weight Tracking Card */}
-        <Pressable
-          style={styles.weightCard}
-          onPress={() => router.push('/(tabs)/goals')}
-        >
-          <View style={styles.weightCardHeader}>
-            <View style={styles.weightCardIcon}>
-              <Scale size={18} color={COLORS.tertiary.primary} strokeWidth={2} />
-            </View>
-            <Text style={styles.weightCardTitle}>WEIGHT</Text>
-          </View>
-          {weightData?.entries?.length > 0 ? (
-            <View style={styles.weightCardContent}>
-              <Text style={styles.weightCardValue}>
-                {formatWeight(weightData.entries[0]?.weight, weightData?.settings?.unit || 'lbs')}
-              </Text>
-              {weightData.goal && (() => {
-                const progress = calculateWeightProgress(weightData);
-                return progress ? (
-                  <View style={styles.weightCardProgress}>
-                    <View style={styles.weightProgressBarSmall}>
-                      <View
-                        style={[
-                          styles.weightProgressFillSmall,
-                          { width: `${progress.progress}%` },
-                          progress.isComplete && styles.weightProgressComplete
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.weightCardGoal}>
-                      Goal: {formatWeight(progress.targetWeight, weightData?.settings?.unit || 'lbs')}
-                    </Text>
-                  </View>
-                ) : null;
-              })()}
-              <Text style={styles.weightCardHint}>Tap to log weight →</Text>
-            </View>
-          ) : (
-            <View style={styles.weightCardEmpty}>
-              <Text style={styles.weightCardEmptyText}>No weight logged yet</Text>
-              <Text style={styles.weightCardHint}>Tap to start tracking →</Text>
-            </View>
-          )}
-        </Pressable>
+          </Pressable>
+        )}
       </View>
 
-      {/* Workout Detail Modal - supports multiple workouts */}
+      {/* Workout Detail Modal */}
       {selectedWorkouts && selectedWorkouts.length > 0 && (
         <Modal
           visible={true}
@@ -651,6 +516,9 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     paddingBottom: SPACING.xxxl,
   },
+  section: {
+    marginBottom: SPACING.lg,
+  },
 
   // Calendar Card
   calendarCard: {
@@ -686,8 +554,6 @@ const styles = StyleSheet.create({
     color: COLORS.text.primary,
     letterSpacing: 1,
   },
-
-  // Day Headers
   dayHeaders: {
     flexDirection: 'row',
     marginBottom: SPACING.sm,
@@ -705,8 +571,6 @@ const styles = StyleSheet.create({
     width: 36,
     marginLeft: SPACING.sm,
   },
-
-  // Week Row
   weekRow: {
     flexDirection: 'row',
     marginBottom: SPACING.xs,
@@ -754,12 +618,10 @@ const styles = StyleSheet.create({
   dayTextPast: {
     color: COLORS.text.secondary,
   },
-  // Workout icon centered
   workoutIconCenter: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Additional workout type dots (shown below icon)
   additionalWorkoutDots: {
     position: 'absolute',
     bottom: 2,
@@ -771,8 +633,6 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 2.5,
   },
-
-  // Week Indicator
   weekIndicator: {
     width: 36,
     marginLeft: SPACING.sm,
@@ -790,176 +650,204 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: COLORS.accent.primary,
+    backgroundColor: COLORS.secondary.primary,
   },
-  fireStreakContainer: {
-    position: 'relative',
+  streakBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    width: 32,
-    height: 36,
+    gap: 3,
+    backgroundColor: COLORS.secondary.dim,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1.5,
+    borderColor: COLORS.secondary.primary,
   },
-  fireStreakNumber: {
-    position: 'absolute',
+  streakBadgeNumber: {
     ...TYPOGRAPHY.caption,
     fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.9)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-    top: 13,
+    fontWeight: '700',
+    color: COLORS.secondary.primary,
   },
 
-  // Legend
-  legend: {
+  // Calendar Footer Stats
+  calendarFooter: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.md,
-    marginTop: SPACING.lg,
+    alignItems: 'center',
+    marginTop: SPACING.md,
     paddingTop: SPACING.md,
     borderTopWidth: 1,
     borderTopColor: COLORS.surface.border,
+    gap: SPACING.sm,
+  },
+  calendarStats: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: SPACING.xs,
+  },
+  calendarStatsNumber: {
+    ...TYPOGRAPHY.h2,
+    fontSize: 24,
+    color: COLORS.text.primary,
+  },
+  calendarStatsLabel: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+  },
+  calendarStatsDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: COLORS.surface.border,
+    marginHorizontal: SPACING.xs,
+  },
+  calendarChangeBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.md,
+  },
+  calendarChangeBadgePositive: {
+    backgroundColor: 'rgba(0, 255, 136, 0.15)',
+  },
+  calendarChangeBadgeNegative: {
+    backgroundColor: 'rgba(255, 59, 59, 0.15)',
+  },
+  calendarChangeBadgeText: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  calendarChangeBadgeTextPositive: {
+    color: COLORS.success,
+  },
+  calendarChangeBadgeTextNegative: {
+    color: COLORS.error,
+  },
+
+  legend: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: SPACING.sm,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   legendText: {
     ...TYPOGRAPHY.caption,
-    fontSize: 10,
+    fontSize: 9,
     color: COLORS.text.tertiary,
   },
 
-  // Strength Card - Minimalist
-  strengthCard: {
+  // Today's Workout Card
+  todayWorkoutCard: {
     backgroundColor: COLORS.surface.card,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
+    borderColor: COLORS.surface.borderAccent,
     padding: SPACING.md,
     marginBottom: SPACING.lg,
   },
-  strengthHeader: {
+  todayWorkoutHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
+    gap: SPACING.sm,
     marginBottom: SPACING.md,
   },
-  strengthTitle: {
+  todayWorkoutIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.accent.primaryDim,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  todayWorkoutTitle: {
     ...TYPOGRAPHY.label,
-    fontSize: 10,
-    color: COLORS.text.tertiary,
+    color: COLORS.accent.primary,
   },
-  strengthList: {
-    gap: SPACING.sm,
-  },
-  strengthRow: {
+  todayWorkoutItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
   },
-  strengthName: {
-    ...TYPOGRAPHY.body,
-    fontSize: 13,
-    color: COLORS.text.primary,
+  todayWorkoutInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
     flex: 1,
-    marginRight: SPACING.sm,
   },
-  strengthChange: {
-    flexDirection: 'row',
+  todayWorkoutTypeBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
-    gap: SPACING.sm,
+    justifyContent: 'center',
   },
-  strengthWeightSmall: {
+  todayWorkoutDetails: {
+    flex: 1,
+  },
+  todayWorkoutName: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
+  },
+  todayWorkoutMeta: {
     ...TYPOGRAPHY.caption,
-    fontSize: 11,
     color: COLORS.text.tertiary,
+    marginTop: 2,
   },
-  strengthBadge: {
+  startWorkoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: RADIUS.sm,
-    backgroundColor: 'rgba(0, 255, 136, 0.1)',
+    gap: SPACING.xs,
+    backgroundColor: COLORS.accent.primaryDim,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.md,
   },
-  strengthBadgeNeg: {
-    backgroundColor: 'rgba(255, 59, 59, 0.1)',
-  },
-  strengthBadgeText: {
-    ...TYPOGRAPHY.caption,
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.success,
-  },
-  strengthBadgeTextNeg: {
-    color: COLORS.error,
+  startWorkoutText: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 13,
+    color: COLORS.accent.primary,
   },
 
-  // Stats Row
-  statsRow: {
-    flexDirection: 'row',
-    gap: SPACING.md,
-    marginBottom: SPACING.lg,
-  },
-  statCard: {
-    flex: 1,
+  // No Workout Card
+  noWorkoutCard: {
     backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.surface.border,
-    padding: SPACING.md,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
   },
-  statHeader: {
+  noWorkoutContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
-    marginBottom: SPACING.xs,
+    gap: SPACING.md,
   },
-  statLabel: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.text.tertiary,
-    fontSize: 9,
-  },
-  statNumber: {
-    ...TYPOGRAPHY.statMedium,
-    fontSize: 28,
-    color: COLORS.text.primary,
-  },
-  statDetail: {
-    ...TYPOGRAPHY.caption,
-    fontSize: 11,
-    color: COLORS.text.tertiary,
-  },
-  changeRow: {
-    flexDirection: 'row',
+  noWorkoutIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.background.elevated,
     alignItems: 'center',
-    gap: SPACING.sm,
+    justifyContent: 'center',
   },
-  changeBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: RADIUS.sm,
+  noWorkoutText: {
+    flex: 1,
   },
-  changeBadgePositive: {
-    backgroundColor: 'rgba(0, 255, 136, 0.1)',
+  noWorkoutTitle: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.secondary,
   },
-  changeBadgeNegative: {
-    backgroundColor: 'rgba(255, 59, 59, 0.1)',
-  },
-  changeBadgeText: {
+  noWorkoutHint: {
     ...TYPOGRAPHY.caption,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  changeBadgeTextPositive: {
-    color: COLORS.success,
-  },
-  changeBadgeTextNegative: {
-    color: COLORS.error,
+    color: COLORS.accent.primary,
+    marginTop: SPACING.xs,
   },
 
   // Modal
@@ -1020,22 +908,6 @@ const styles = StyleSheet.create({
   workoutSection: {
     marginBottom: SPACING.lg,
   },
-  workoutSectionHeader: {
-    marginBottom: SPACING.md,
-  },
-  workoutTypeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    alignSelf: 'flex-start',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.md,
-  },
-  workoutTypeBadgeText: {
-    ...TYPOGRAPHY.bodyBold,
-    fontSize: 14,
-  },
   exerciseCard: {
     backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.lg,
@@ -1067,78 +939,5 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     fontSize: 13,
     color: COLORS.text.primary,
-  },
-
-  // Weight Card
-  weightCard: {
-    backgroundColor: COLORS.surface.card,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.surface.border,
-    padding: SPACING.md,
-    marginBottom: SPACING.lg,
-  },
-  weightCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  weightCardIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.tertiary.primary + '15',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  weightCardTitle: {
-    ...TYPOGRAPHY.label,
-    fontSize: 10,
-    color: COLORS.text.tertiary,
-  },
-  weightCardContent: {
-    gap: SPACING.xs,
-  },
-  weightCardValue: {
-    ...TYPOGRAPHY.statMedium,
-    fontSize: 28,
-    color: COLORS.text.primary,
-  },
-  weightCardProgress: {
-    gap: SPACING.xs,
-    marginTop: SPACING.xs,
-  },
-  weightProgressBarSmall: {
-    height: 6,
-    backgroundColor: COLORS.surface.border,
-    borderRadius: RADIUS.full,
-    overflow: 'hidden',
-  },
-  weightProgressFillSmall: {
-    height: '100%',
-    backgroundColor: COLORS.tertiary.primary,
-    borderRadius: RADIUS.full,
-  },
-  weightProgressComplete: {
-    backgroundColor: COLORS.success,
-  },
-  weightCardGoal: {
-    ...TYPOGRAPHY.caption,
-    fontSize: 11,
-    color: COLORS.text.tertiary,
-  },
-  weightCardHint: {
-    ...TYPOGRAPHY.caption,
-    fontSize: 11,
-    color: COLORS.tertiary.primary,
-    marginTop: SPACING.xs,
-  },
-  weightCardEmpty: {
-    gap: SPACING.xs,
-  },
-  weightCardEmptyText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.text.secondary,
   },
 });

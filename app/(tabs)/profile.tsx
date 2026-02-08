@@ -1,13 +1,16 @@
 import { router } from 'expo-router';
-import { Calendar, ChevronRight, Database, LogOut, Mail, Settings, Trash2, Trophy, User as UserIcon } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Calendar, Camera, ChevronRight, Database, Dumbbell, Eye, EyeOff, LogOut, Mail, Settings, Trash2, Trophy, User as UserIcon, Users } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { getPRStats } from '../../src/utils/personalRecords';
+import { clearAllPersonalRecords, getPRStats } from '../../src/utils/personalRecords';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -15,27 +18,139 @@ import { supabase } from '../../src/config/supabase';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { initializeSampleData } from '../../src/utils/initSampleData';
 import { clearLocalWorkouts } from '../../src/utils/storage';
+import { uploadProfilePicture } from '../../src/utils/socialStorage';
 import { formatDateLong } from '../../src/utils/dateFormatter';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../src/theme/design';
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, profile, refreshProfile, signOut } = useAuth();
   const [loadingSample, setLoadingSample] = useState(false);
   const [prStats, setPRStats] = useState<{ totalPRs: number; recentPRs: number } | null>(null);
+  const [shareWorkouts, setShareWorkouts] = useState(true);
+  const [updatingShare, setUpdatingShare] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     loadPRStats();
   }, []);
+
+  // Load avatar URL from profile
+  useEffect(() => {
+    if (profile?.avatar_url) {
+      setAvatarUrl(profile.avatar_url);
+    }
+  }, [profile]);
+
+  // Load share preference from profile
+  useEffect(() => {
+    if (profile) {
+      setShareWorkouts(profile.share_workouts !== false);
+    }
+  }, [profile]);
 
   const loadPRStats = async () => {
     const stats = await getPRStats();
     setPRStats(stats);
   };
 
+  const handlePickImage = async () => {
+    // Request permission
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permission Required',
+        'Please grant camera roll permissions to upload a profile picture.'
+      );
+      return;
+    }
+
+    // Show options for camera or gallery
+    Alert.alert(
+      'Update Profile Picture',
+      'Choose how to update your photo',
+      [
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
+            if (cameraStatus.status !== 'granted') {
+              Alert.alert('Permission Required', 'Please grant camera permissions to take a photo.');
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets[0]) {
+              await handleUpload(result.assets[0].uri);
+            }
+          },
+        },
+        {
+          text: 'Choose from Library',
+          onPress: async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets[0]) {
+              await handleUpload(result.assets[0].uri);
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleUpload = async (imageUri: string) => {
+    setIsUploadingPhoto(true);
+    try {
+      const result = await uploadProfilePicture(imageUri);
+      if (result.success && result.avatarUrl) {
+        setAvatarUrl(result.avatarUrl);
+        await refreshProfile();
+        Alert.alert('Success', 'Profile picture updated!');
+      } else {
+        Alert.alert('Error', result.error || 'Failed to upload photo');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to upload photo');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleToggleShare = async (value: boolean) => {
+    setShareWorkouts(value);
+    setUpdatingShare(true);
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ share_workouts: value })
+        .eq('id', (user as any)?.id);
+
+      if (error) throw error;
+      await refreshProfile();
+    } catch (error) {
+      console.error('Error updating share preference:', error);
+      setShareWorkouts(!value); // Revert on error
+      Alert.alert('Error', 'Failed to update privacy setting');
+    } finally {
+      setUpdatingShare(false);
+    }
+  };
+
   const handleClearAllData = async () => {
     Alert.alert(
       'Clear All Data',
-      'This will delete all workouts from cloud and local storage. Continue?',
+      'This will delete all workouts and personal records from cloud and local storage. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -44,12 +159,22 @@ export default function ProfileScreen() {
           onPress: async () => {
             try {
               setLoadingSample(true);
+              // Clear cloud workouts
               const { error: cloudError } = await supabase
                 .from('workouts')
                 .delete()
                 .eq('user_id', (user as any)?.id);
               if (cloudError) throw cloudError;
+
+              // Clear local workouts
               await clearLocalWorkouts();
+
+              // Clear personal records (local + cloud)
+              await clearAllPersonalRecords();
+
+              // Reset PR stats in UI immediately
+              setPRStats({ totalPRs: 0, recentPRs: 0 });
+
               Alert.alert('Success', 'All data cleared! Restart the app to see changes.');
               setLoadingSample(false);
             } catch (error) {
@@ -113,9 +238,27 @@ export default function ProfileScreen() {
       <View style={styles.content}>
         {/* Profile Header */}
         <View style={styles.header}>
-          <View style={styles.avatarContainer}>
-            <UserIcon size={40} color={COLORS.accent.primary} strokeWidth={2} />
-          </View>
+          <Pressable
+            style={styles.avatarWrapper}
+            onPress={handlePickImage}
+            disabled={isUploadingPhoto}
+          >
+            <View style={styles.avatarContainer}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <UserIcon size={40} color={COLORS.accent.primary} strokeWidth={2} />
+              )}
+              {isUploadingPhoto && (
+                <View style={styles.avatarOverlay}>
+                  <ActivityIndicator size="small" color={COLORS.text.primary} />
+                </View>
+              )}
+            </View>
+            <View style={styles.cameraButton}>
+              <Camera size={14} color={COLORS.text.primary} strokeWidth={2.5} />
+            </View>
+          </Pressable>
           <Text style={styles.title}>PROFILE</Text>
           <Text style={styles.subtitle}>Manage your account</Text>
         </View>
@@ -187,6 +330,88 @@ export default function ProfileScreen() {
             </View>
           </View>
         </Pressable>
+
+        {/* Trophies & Achievements Card */}
+        <Pressable
+          style={styles.card}
+          onPress={() => router.push('/trophy' as any)}
+        >
+          <View style={styles.prCardContent}>
+            <View style={[styles.prIconContainer, { backgroundColor: 'rgba(147, 51, 234, 0.15)' }]}>
+              <Trophy size={28} color="#9333EA" strokeWidth={2} />
+            </View>
+            <View style={styles.prTextContent}>
+              <Text style={styles.prTitle}>TROPHIES</Text>
+              <Text style={styles.prSubtitle}>View your achievements</Text>
+            </View>
+            <ChevronRight size={20} color={COLORS.text.tertiary} strokeWidth={2} />
+          </View>
+        </Pressable>
+
+        {/* Custom Exercises Card */}
+        <Pressable
+          style={styles.card}
+          onPress={() => router.push('/custom-exercises' as any)}
+        >
+          <View style={styles.prCardContent}>
+            <View style={[styles.prIconContainer, { backgroundColor: COLORS.tertiary.dim }]}>
+              <Dumbbell size={28} color={COLORS.tertiary.primary} strokeWidth={2} />
+            </View>
+            <View style={styles.prTextContent}>
+              <Text style={styles.prTitle}>CUSTOM EXERCISES</Text>
+              <Text style={styles.prSubtitle}>Create and manage your exercises</Text>
+            </View>
+            <ChevronRight size={20} color={COLORS.text.tertiary} strokeWidth={2} />
+          </View>
+        </Pressable>
+
+        {/* Social Settings Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>SOCIAL</Text>
+          </View>
+
+          <View style={styles.settingRowWithToggle}>
+            <View style={[styles.settingIcon, { backgroundColor: shareWorkouts ? COLORS.accent.primaryDim : COLORS.surface.card }]}>
+              {shareWorkouts ? (
+                <Eye size={18} color={COLORS.accent.primary} strokeWidth={2} />
+              ) : (
+                <EyeOff size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+              )}
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingText}>Share Workouts</Text>
+              <Text style={styles.settingDescription}>
+                {shareWorkouts ? 'Friends can see your workouts' : 'Your workouts are private'}
+              </Text>
+            </View>
+            {updatingShare ? (
+              <ActivityIndicator size="small" color={COLORS.accent.primary} />
+            ) : (
+              <Switch
+                value={shareWorkouts}
+                onValueChange={handleToggleShare}
+                trackColor={{ false: COLORS.surface.border, true: COLORS.accent.primaryDim }}
+                thumbColor={shareWorkouts ? COLORS.accent.primary : COLORS.text.tertiary}
+              />
+            )}
+          </View>
+
+          {profile?.username && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.infoRow}>
+                <View style={[styles.infoIcon, { backgroundColor: COLORS.tertiary.dim }]}>
+                  <Users size={18} color={COLORS.tertiary.primary} strokeWidth={2} />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>USERNAME</Text>
+                  <Text style={styles.infoValue}>@{profile.username}</Text>
+                </View>
+              </View>
+            </>
+          )}
+        </View>
 
         {/* Developer Settings */}
         <View style={styles.card}>
@@ -273,6 +498,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SPACING.xl,
   },
+  avatarWrapper: {
+    position: 'relative',
+    marginBottom: SPACING.lg,
+  },
   avatarContainer: {
     width: 88,
     height: 88,
@@ -282,7 +511,36 @@ const styles = StyleSheet.create({
     borderColor: COLORS.accent.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.lg,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 44,
+  },
+  cameraButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.accent.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.background.primary,
   },
   title: {
     ...TYPOGRAPHY.h2,
@@ -403,6 +661,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: SPACING.md,
   },
+  settingRowWithToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+  },
   settingIcon: {
     width: 36,
     height: 36,
@@ -411,10 +674,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: SPACING.md,
   },
+  settingTextContainer: {
+    flex: 1,
+  },
   settingText: {
     ...TYPOGRAPHY.body,
     color: COLORS.text.primary,
     flex: 1,
+  },
+  settingDescription: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    marginTop: 2,
   },
   divider: {
     height: 1,

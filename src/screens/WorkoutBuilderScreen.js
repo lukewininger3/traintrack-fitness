@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Award, FileText, MessageSquare, Pencil, Plus, Trash2, Trophy, X } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Award, EllipsisVertical, Pencil, Plus, Trash2, Trophy, X } from 'lucide-react-native';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -14,7 +14,6 @@ import {
   TextInput,
   View
 } from 'react-native';
-import DraggableFlatList from 'react-native-draggable-flatlist';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -25,14 +24,14 @@ import Animated, {
 import { EXERCISE_DATABASE, getAllCategories, searchBuiltInExercises } from '../constants/workoutTypes';
 import { exerciseExists, loadCustomExercises, saveCustomExercise } from '../utils/customExercises';
 import { saveAsTemplate } from '../utils/workoutTemplates';
+import { getAllBestOneRepMaxes } from '../utils/oneRepMax';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import RestTimerButton from '../components/RestTimer';
 import { useTimer } from '../contexts/TimerContext';
 import CustomExerciseForm from './WorkoutBuilder/components/CustomExerciseForm';
 import ExerciseCard from './WorkoutBuilder/components/ExerciseCard';
-import ExerciseSetInput from './WorkoutBuilder/components/ExerciseSetInput';
-import PreviousSessionBanner from './WorkoutBuilder/components/PreviousSessionBanner';
 import { useWorkoutForm } from './WorkoutBuilder/hooks/useWorkoutForm';
+import Confetti from '../components/Confetti';
 
 export default function WorkoutBuilderScreen() {
   const params = useLocalSearchParams();
@@ -40,12 +39,11 @@ export default function WorkoutBuilderScreen() {
   const templateId = params?.templateId;
   const repeatData = params?.repeatData;
   const workoutDetails = params?.workoutDetails;
-  const scrollViewRef = useRef(null);
-  const setRefs = useRef([]);
 
   // Use the workout form hook for state management
   const {
     workout,
+    isEditing,
     isSaving,
     isCardioWorkoutType,
     isCardioExercise,
@@ -54,24 +52,74 @@ export default function WorkoutBuilderScreen() {
     findPreviousSession,
   } = useWorkoutForm({ editingWorkoutId, templateId, repeatData, workoutDetails });
 
+  // Track previous sessions for each exercise
+  const [previousSessions, setPreviousSessions] = useState({});
+  // Best estimated 1RM per exercise (for badges)
+  const [best1RMMap, setBest1RMMap] = useState({});
+
   // Timer for auto-start after logging sets
-  const { onSetLogged, reset: resetTimer } = useTimer();
+  const { reset: resetTimer, onSetLogged } = useTimer();
+
+  // Load best 1RM map on mount
+  useEffect(() => {
+    getAllBestOneRepMaxes().then(map => {
+      if (isMountedRef.current) setBest1RMMap(map);
+    });
+  }, []);
+
+  // Load previous sessions when exercises change
+  useEffect(() => {
+    const loadPreviousSessions = async () => {
+      const sessions = {};
+      for (const exercise of workout.exercises) {
+        if (!previousSessions[exercise.name]) {
+          const prevSession = await findPreviousSession(exercise.name);
+          if (prevSession) {
+            sessions[exercise.name] = prevSession;
+          }
+        }
+      }
+      if (Object.keys(sessions).length > 0) {
+        setPreviousSessions(prev => ({ ...prev, ...sessions }));
+      }
+    };
+    loadPreviousSessions();
+  }, [workout.exercises.map(e => e.name).join(',')]);
+
+  // Handle set confirmation - start rest timer and haptic feedback
+  const handleSetConfirmed = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    onSetLogged();
+  };
 
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [selectedMuscleGroup, setSelectedMuscleGroup] = useState(null);
-  const [editingExerciseIndex, setEditingExerciseIndex] = useState(null);
-  const [currentExercise, setCurrentExercise] = useState({
-    name: '',
-    sets: [{ weight: '', reps: '', distance: '', time: '', pace: '' }],
-    notes: ''
-  });
-
-  const [previousSession, setPreviousSession] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [customExercises, setCustomExercises] = useState([]);
   const [editingCustomExercise, setEditingCustomExercise] = useState(null);
   const [customExerciseScreen, setCustomExerciseScreen] = useState(null);
+
+  // ScrollView ref for auto-scrolling
+  const scrollViewRef = useRef(null);
+
+  // Track mounted state to guard async callbacks
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    return () => { isMountedRef.current = false; };
+  }, []);
+
+  // Scroll to a specific position (used when notes are focused)
+  const scrollToPosition = (y) => {
+    scrollViewRef.current?.scrollTo({ y, animated: true });
+  };
+
+  // Scroll to the end (used when new exercise is added)
+  const scrollToEnd = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
 
   // PR Celebration state
   const [showPRCelebration, setShowPRCelebration] = useState(false);
@@ -151,14 +199,8 @@ export default function WorkoutBuilderScreen() {
     resetPRCelebration();
     // Small delay to ensure modal fully closes before navigation
     setTimeout(() => {
-      navigateToActivities();
+      if (isMountedRef.current) navigateToActivities();
     }, 100);
-  };
-
-  const navigateBack = () => {
-    // Cancel exits completely without saving - reset timer and go to activities
-    resetTimer();
-    router.replace('/activities');
   };
 
   const navigateToEditDetails = () => {
@@ -200,12 +242,14 @@ export default function WorkoutBuilderScreen() {
     }
 
     const { exists, type } = await exerciseExists(name);
+    if (!isMountedRef.current) return false;
     if (exists && (!editingCustomExercise || editingCustomExercise.name !== name)) {
       Alert.alert('Duplicate Exercise', `This exercise already exists as a ${type} exercise`);
       return false;
     }
 
-    const { data, error } = await saveCustomExercise(name.trim(), category, editingCustomExercise?.id);
+    const { error } = await saveCustomExercise(name.trim(), category, editingCustomExercise?.id);
+    if (!isMountedRef.current) return false;
 
     if (error) {
       Alert.alert('Error', error);
@@ -213,6 +257,7 @@ export default function WorkoutBuilderScreen() {
     }
 
     await loadCustomExercisesData();
+    if (!isMountedRef.current) return true;
     Alert.alert('Success', editingCustomExercise ? 'Exercise updated!' : 'Exercise created!');
     return true;
   };
@@ -229,12 +274,13 @@ export default function WorkoutBuilderScreen() {
           onPress: async () => {
             const { deleteCustomExercise } = await import('../utils/customExercises');
             const { error } = await deleteCustomExercise(exerciseId);
+            if (!isMountedRef.current) return;
 
             if (error) {
               Alert.alert('Error', 'Failed to delete exercise');
             } else {
               await loadCustomExercisesData();
-              Alert.alert('Success', 'Exercise deleted!');
+              if (isMountedRef.current) Alert.alert('Success', 'Exercise deleted!');
             }
           }
         }
@@ -242,78 +288,20 @@ export default function WorkoutBuilderScreen() {
     );
   };
 
-  const scrollToSet = (index) => {
-    if (setRefs.current[index] && scrollViewRef.current) {
-      setTimeout(() => {
-        setRefs.current[index].measureLayout(
-          scrollViewRef.current,
-          (x, y) => {
-            scrollViewRef.current.scrollTo({ y: y - 50, animated: true });
-          },
-          () => {}
-        );
-      }, 100);
-    }
-  };
-
-
   useEffect(() => {
     loadCustomExercisesData();
   }, []);
 
   const loadCustomExercisesData = async () => {
     const customs = await loadCustomExercises();
-    setCustomExercises(customs);
-  };
-
-  const calculatePace = (distance, time) => {
-    if (!distance || !time || parseFloat(distance) === 0) return '';
-    const paceValue = parseFloat(time) / parseFloat(distance);
-    return paceValue.toFixed(2);
-  };
-
-  const calculateTime = (distance, pace) => {
-    if (!distance || !pace) return '';
-    const timeValue = parseFloat(distance) * parseFloat(pace);
-    return timeValue.toFixed(2);
-  };
-
-  const calculateDistance = (time, pace) => {
-    if (!time || !pace || parseFloat(pace) === 0) return '';
-    const distanceValue = parseFloat(time) / parseFloat(pace);
-    return distanceValue.toFixed(2);
-  };
-
-  const updateSetWithCalculation = (index, field, value) => {
-    const updated = [...currentExercise.sets];
-    updated[index][field] = value;
-
-    const isCurrentExerciseCardio = isCardioWorkoutType(workout.type) || isCardioExercise(currentExercise.name);
-
-    if (isCurrentExerciseCardio) {
-      const set = updated[index];
-
-      if (field === 'distance' || field === 'time') {
-        if (set.distance && set.time) {
-          updated[index].pace = calculatePace(set.distance, set.time);
-        }
-      } else if (field === 'pace') {
-        if (set.distance && set.pace && !set.time) {
-          updated[index].time = calculateTime(set.distance, set.pace);
-        } else if (set.time && set.pace && !set.distance) {
-          updated[index].distance = calculateDistance(set.time, set.pace);
-        }
-      }
-    }
-
-    setCurrentExercise({ ...currentExercise, sets: updated });
+    if (isMountedRef.current) setCustomExercises(customs);
   };
 
   const saveWorkout = async () => {
     try {
       const result = await saveWorkoutData();
 
-      if (!result.success) {
+      if (!isMountedRef.current || !result.success) {
         return;
       }
 
@@ -323,14 +311,16 @@ export default function WorkoutBuilderScreen() {
         setShowPRCelebration(true);
         // Trigger animation after modal renders
         setTimeout(() => {
-          triggerPRCelebration();
+          if (isMountedRef.current) triggerPRCelebration();
         }, 100);
       } else {
         navigateToActivities();
       }
     } catch (error) {
       console.error('Error in saveWorkout:', error);
-      Alert.alert('Error', 'Something went wrong while saving. Please try again.');
+      if (isMountedRef.current) {
+        Alert.alert('Error', 'Something went wrong while saving. Please try again.');
+      }
     }
   };
 
@@ -369,90 +359,49 @@ export default function WorkoutBuilderScreen() {
   const closeExerciseModal = () => {
     setShowExercisePicker(false);
     setTimeout(() => {
-      setCurrentExercise({
-        name: '',
-        sets: [{ weight: '', reps: '', distance: '', time: '', pace: '' }],
-        notes: ''
-      });
-      setPreviousSession(null);
-      setSearchQuery('');
-      setSelectedMuscleGroup(null);
-      setEditingExerciseIndex(null);
+      if (isMountedRef.current) {
+        setSearchQuery('');
+        setSelectedMuscleGroup(null);
+      }
     }, 200);
   };
 
-  const addExerciseOrSession = () => {
+  const addExerciseToWorkout = (exerciseName) => {
     const isCurrentCardioWorkout = isCardioWorkoutType(workout.type);
-    const isCurrentExerciseCardio = isCardioExercise(currentExercise.name);
-    const isCardioEntry = isCurrentCardioWorkout || isCurrentExerciseCardio;
-
-    if (!isCurrentCardioWorkout && !currentExercise.name) {
-      Alert.alert('Missing Exercise', 'Please select an exercise');
-      return;
-    }
-
-    const validSets = currentExercise.sets.filter(set => {
-      if (isCardioEntry) {
-        const hasDistance = set.distance && parseFloat(set.distance) > 0;
-        const hasTime = set.time && parseFloat(set.time) > 0;
-        const hasPace = set.pace && parseFloat(set.pace) > 0;
-        return (hasDistance && hasTime) || (hasDistance && hasPace) || (hasTime && hasPace);
-      } else {
-        return set.weight && set.reps;
-      }
-    });
-
-    if (validSets.length === 0) {
-      Alert.alert('Missing Data', 'Please add at least one complete set');
-      return;
-    }
+    const isExerciseCardio = isCardioExercise(exerciseName);
+    const isCardioEntry = isCurrentCardioWorkout || isExerciseCardio;
 
     const exercise = {
-      name: isCurrentCardioWorkout ? `Session ${workout.exercises.length + 1}` : currentExercise.name,
-      sets: validSets.map(set => {
-        if (isCardioEntry) {
-          return {
-            distance: parseFloat(set.distance) || 0,
-            time: parseFloat(set.time) || 0,
-            pace: parseFloat(set.pace) || 0
-          };
-        } else {
-          return {
-            weight: parseFloat(set.weight) || 0,
-            reps: parseInt(set.reps) || 0
-          };
-        }
-      }),
-      notes: currentExercise.notes
+      name: exerciseName,
+      sets: isCardioEntry
+        ? [{ distance: 0, time: 0, pace: 0 }]
+        : [{ weight: 0, reps: 0 }],
+      notes: ''
     };
 
-    if (editingExerciseIndex !== null) {
-      const updated = [...workout.exercises];
-      updated[editingExerciseIndex] = exercise;
-      setWorkout({ ...workout, exercises: updated });
-    } else {
-      setWorkout({ ...workout, exercises: [...workout.exercises, exercise] });
-    }
-
-    // Trigger auto-timer if enabled (only for strength exercises, not cardio)
-    if (!isCardioEntry && validSets.length > 0) {
-      onSetLogged();
-    }
-
+    setWorkout({ ...workout, exercises: [...workout.exercises, exercise] });
     closeExerciseModal();
+    scrollToEnd();
   };
 
-
-  const addSet = () => {
-    setCurrentExercise({
-      ...currentExercise,
-      sets: [...currentExercise.sets, { weight: '', reps: '', distance: '', time: '', pace: '' }]
-    });
+  const addCardioSession = () => {
+    const sessionName = `Session ${workout.exercises.length + 1}`;
+    const exercise = {
+      name: sessionName,
+      sets: [{ distance: 0, time: 0, pace: 0 }],
+      notes: ''
+    };
+    setWorkout({ ...workout, exercises: [...workout.exercises, exercise] });
+    closeExerciseModal();
+    scrollToEnd();
   };
 
-  const removeSet = (index) => {
-    const updated = currentExercise.sets.filter((_, i) => i !== index);
-    setCurrentExercise({ ...currentExercise, sets: updated });
+  const moveExercise = (fromIndex, toIndex) => {
+    if (toIndex < 0 || toIndex >= workout.exercises.length) return;
+    const updated = [...workout.exercises];
+    const [moved] = updated.splice(fromIndex, 1);
+    updated.splice(toIndex, 0, moved);
+    setWorkout({ ...workout, exercises: updated });
   };
 
   const isCurrentCardioWorkout = isCardioWorkoutType(workout.type);
@@ -465,142 +414,148 @@ export default function WorkoutBuilderScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
     >
       <View style={styles.header}>
+        {isEditing ? (
+          <Pressable
+            onPress={() => {
+              Alert.alert(
+                'Discard Changes?',
+                'Any unsaved changes to this workout will be lost.',
+                [
+                  { text: 'Keep Editing', style: 'cancel' },
+                  {
+                    text: 'Discard',
+                    style: 'destructive',
+                    onPress: () => {
+                      resetTimer();
+                      router.back();
+                    },
+                  },
+                ]
+              );
+            }}
+            style={styles.closeButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <X size={22} color={COLORS.text.secondary} strokeWidth={2} />
+          </Pressable>
+        ) : (
+          <View style={styles.headerSpacer} />
+        )}
         <Pressable
-          onPress={navigateBack}
-          style={styles.headerButton}
-          disabled={isSaving}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={[styles.headerButtonText, isSaving && { opacity: 0.5 }]}>Cancel</Text>
-        </Pressable>
-        <Pressable
-          style={styles.headerCenter}
+          style={styles.typeButton}
           onPress={navigateToEditDetails}
-          hitSlop={{ top: 5, bottom: 5, left: 0, right: 0 }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <View style={styles.headerTitleRow}>
-            <Text style={styles.headerTitle}>{workout.name || 'New Workout'}</Text>
-            <Pencil size={14} color={COLORS.text.secondary} strokeWidth={2} />
-          </View>
-          <Text style={styles.headerSubtitle}>{workout.type} • {workout.date}</Text>
+          <Text style={styles.typeButtonText}>{workout.type}</Text>
+          <Pencil size={12} color={COLORS.text.secondary} strokeWidth={2} />
         </Pressable>
-        <Pressable
-          onPress={saveWorkout}
-          style={[styles.saveButtonContainer, isSaving && styles.saveButtonDisabled]}
-          disabled={isSaving}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={[styles.saveButtonText, isSaving && styles.saveButtonTextDisabled]}>
-            {isSaving ? 'Saving...' : 'Save'}
-          </Text>
-        </Pressable>
+        <View style={styles.headerRight}>
+          <Pressable
+            onPress={saveWorkout}
+            style={[styles.saveButtonContainer, isSaving && styles.saveButtonDisabled]}
+            disabled={isSaving}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={[styles.saveButtonText, isSaving && styles.saveButtonTextDisabled]}>
+              {isSaving ? 'Saving...' : 'Save'}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              Alert.alert(
+                'Options',
+                null,
+                [
+                  { text: 'Save as Template', onPress: handleSaveAsTemplate },
+                  { text: 'Cancel', style: 'cancel' },
+                ]
+              );
+            }}
+            style={styles.moreButton}
+            hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
+          >
+            <EllipsisVertical size={18} color={COLORS.text.secondary} strokeWidth={2} />
+          </Pressable>
+        </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{sectionLabel.toUpperCase()}</Text>
-            <Pressable
-              onPress={async () => {
-                setEditingExerciseIndex(null);
-
-                if (isCurrentCardioWorkout) {
-                  const sessionName = `${workout.type} Session ${workout.exercises.length + 1}`;
-                  const prevSession = await findPreviousSession(workout.type);
-                  setPreviousSession(prevSession);
-                  setCurrentExercise({
-                    name: sessionName,
-                    sets: [{ weight: '', reps: '', distance: '', time: '', pace: '' }],
-                    notes: ''
-                  });
-                } else {
-                  setCurrentExercise({
-                    name: '',
-                    sets: [{ weight: '', reps: '', distance: '', time: '', pace: '' }],
-                    notes: ''
-                  });
-                  setPreviousSession(null);
-                }
-
-                setShowExercisePicker(true);
-              }}
-              style={styles.addButton}
-            >
-              <Plus size={18} color={COLORS.text.inverse} strokeWidth={2.5} />
-              <Text style={styles.addButtonText}>{addButtonLabel}</Text>
-            </Pressable>
-          </View>
-
-          {workout.exercises.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>{emptyStateText}</Text>
-              <Text style={styles.emptySubtext}>Tap the button above to get started</Text>
-            </View>
-          ) : (
-            <DraggableFlatList
-              data={workout.exercises}
-              keyExtractor={(item, index) => `exercise-${index}-${item.name}`}
-              onDragBegin={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              }}
-              onDragEnd={({ data }) => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setWorkout({ ...workout, exercises: data });
-              }}
-              renderItem={({ item: exercise, getIndex, drag, isActive }) => {
-                const index = getIndex();
-                return (
-                  <ExerciseCard
-                    exercise={exercise}
-                    index={index}
-                    isCardioWorkout={isCurrentCardioWorkout}
-                    drag={drag}
-                    isActive={isActive}
-                    onEdit={async (idx) => {
-                      setEditingExerciseIndex(idx);
-
-                      if (isCurrentCardioWorkout) {
-                        const prevSession = await findPreviousSession(workout.type);
-                        setPreviousSession(prevSession);
-                      }
-
-                      setCurrentExercise({
-                        name: exercise.name,
-                        sets: exercise.sets.map(s => ({
-                          weight: s.weight?.toString() || '',
-                          reps: s.reps?.toString() || '',
-                          distance: s.distance?.toString() || '',
-                          time: s.time?.toString() || '',
-                          pace: s.pace?.toString() || ''
-                        })),
-                        notes: exercise.notes || ''
-                      });
-                      setShowExercisePicker(true);
-                    }}
-                    onDelete={(idx) => {
-                      const updated = workout.exercises.filter((_, i) => i !== idx);
-                      setWorkout({ ...workout, exercises: updated });
-                    }}
-                  />
-                );
-              }}
-              scrollEnabled={false}
-              containerStyle={styles.draggableList}
-            />
-          )}
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scrollContentContainer}
+      >
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{sectionLabel.toUpperCase()}</Text>
         </View>
 
-        {/* Save as Template Button */}
-        {workout.exercises.length > 0 && (
-          <Pressable onPress={handleSaveAsTemplate} style={styles.templateButton}>
-            <FileText size={18} color={COLORS.accent.primary} strokeWidth={2} />
-            <Text style={styles.templateButtonText}>Save as Template</Text>
-          </Pressable>
+        {workout.exercises.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>{emptyStateText}</Text>
+            <Text style={styles.emptySubtext}>Tap the button below to get started</Text>
+          </View>
+        ) : (
+          workout.exercises.map((exercise, index) => (
+            <ExerciseCard
+              key={`exercise-${index}-${exercise.name}`}
+              exercise={exercise}
+              index={index}
+              isCardioWorkout={isCurrentCardioWorkout}
+              previousSession={previousSessions[exercise.name]}
+              onSetConfirmed={handleSetConfirmed}
+              onUpdateSets={(idx, updatedSets) => {
+                const updated = [...workout.exercises];
+                updated[idx] = { ...updated[idx], sets: updatedSets };
+                setWorkout({ ...workout, exercises: updated });
+              }}
+              onUpdateNotes={(idx, notes) => {
+                const updated = [...workout.exercises];
+                updated[idx] = { ...updated[idx], notes };
+                setWorkout({ ...workout, exercises: updated });
+              }}
+              onDelete={(idx) => {
+                const updated = workout.exercises.filter((_, i) => i !== idx);
+                setWorkout({ ...workout, exercises: updated });
+              }}
+              onNotesFocus={(yPosition) => scrollToPosition(yPosition)}
+              totalExercises={workout.exercises.length}
+              allExercises={workout.exercises}
+              onUpdateSuperset={(idx, supersetId) => {
+                const updated = [...workout.exercises];
+                updated[idx] = { ...updated[idx], supersetId };
+                setWorkout({ ...workout, exercises: updated });
+              }}
+              onMoveUp={(idx) => moveExercise(idx, idx - 1)}
+              onMoveDown={(idx) => moveExercise(idx, idx + 1)}
+              estimated1RM={best1RMMap[exercise.name] || null}
+            />
+          ))
         )}
+
+        {/* Spacer for sticky button */}
+        {workout.exercises.length > 0 && <View style={{ height: SPACING.lg }} />}
       </ScrollView>
+
+      {/* Sticky Add Exercise Button */}
+      <View style={styles.stickyAddButtonContainer}>
+        <Pressable
+          onPress={() => {
+            if (isCurrentCardioWorkout) {
+              addCardioSession();
+            } else {
+              setShowExercisePicker(true);
+            }
+          }}
+          style={styles.stickyAddButton}
+        >
+          <Plus size={20} color={COLORS.text.inverse} strokeWidth={2.5} />
+          <Text style={styles.stickyAddButtonText}>{addButtonLabel}</Text>
+        </Pressable>
+      </View>
 
       {/* Exercise Picker Modal */}
       <Modal
@@ -627,13 +582,6 @@ export default function WorkoutBuilderScreen() {
                 if (customExerciseScreen === 'manage') {
                   setCustomExerciseScreen(null);
                   setEditingCustomExercise(null);
-                } else if (editingExerciseIndex !== null) {
-                  // When editing an existing exercise, back should close the modal
-                  closeExerciseModal();
-                } else if (currentExercise.name) {
-                  // When adding a new exercise, go back to category selection
-                  setCurrentExercise({ ...currentExercise, name: '' });
-                  setSearchQuery('');
                 } else {
                   closeExerciseModal();
                 }
@@ -642,30 +590,14 @@ export default function WorkoutBuilderScreen() {
             >
               {customExerciseScreen === 'manage' ? (
                 <Text style={styles.modalBackText}>← Back</Text>
-              ) : editingExerciseIndex !== null ? (
-                <X size={24} color={COLORS.text.primary} strokeWidth={2} />
-              ) : currentExercise.name ? (
-                <Text style={styles.modalBackText}>← Back</Text>
               ) : (
                 <X size={24} color={COLORS.text.primary} strokeWidth={2} />
               )}
             </Pressable>
             <Text style={styles.modalTitle}>
-              {customExerciseScreen === 'manage'
-                ? 'CUSTOM EXERCISES'
-                : isCurrentCardioWorkout
-                  ? (editingExerciseIndex !== null ? 'EDIT SESSION' : 'ADD SESSION')
-                  : (editingExerciseIndex !== null ? 'EDIT EXERCISE' : 'ADD EXERCISE')}
+              {customExerciseScreen === 'manage' ? 'CUSTOM EXERCISES' : 'ADD EXERCISE'}
             </Text>
-            {customExerciseScreen === 'manage' ? (
-              <View style={{ width: 60 }} />
-            ) : currentExercise.name ? (
-              <Pressable onPress={addExerciseOrSession} style={styles.modalDoneButton}>
-                <Text style={styles.modalDoneText}>Done</Text>
-              </Pressable>
-            ) : (
-              <View style={{ width: 60 }} />
-            )}
+            <View style={{ width: 60 }} />
           </View>
 
           {customExerciseScreen === 'manage' ? (
@@ -707,12 +639,7 @@ export default function WorkoutBuilderScreen() {
                         <Text style={styles.manageCategoryTitle}>{category}</Text>
                         {exercisesInCategory.map(exercise => (
                           <View key={exercise.id} style={styles.manageExerciseCard}>
-                            <View style={styles.manageExerciseInfo}>
-                              <Text style={styles.manageExerciseName}>{exercise.name}</Text>
-                              <View style={styles.customBadge}>
-                                <Text style={styles.customBadgeText}>CUSTOM</Text>
-                              </View>
-                            </View>
+                            <Text style={styles.manageExerciseName} numberOfLines={1}>{exercise.name}</Text>
                             <View style={styles.exerciseCardActions}>
                               <Pressable
                                 onPress={() => setEditingCustomExercise(exercise)}
@@ -737,142 +664,86 @@ export default function WorkoutBuilderScreen() {
             </ScrollView>
           ) : (
             <ScrollView
-              ref={scrollViewRef}
               style={styles.modalContent}
               contentContainerStyle={styles.modalContentContainer}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {currentExercise.name ? (
-                <>
-                  <Text style={styles.selectedExercise}>{currentExercise.name}</Text>
+              <View style={styles.searchSection}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search exercises..."
+                  placeholderTextColor={COLORS.text.tertiary}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoCapitalize="none"
+                />
 
-                  <PreviousSessionBanner
-                    previousSession={previousSession}
-                    isCardio={isCardioExercise(currentExercise.name)}
-                  />
+                <Pressable
+                  onPress={() => {
+                    setEditingCustomExercise(null);
+                    setCustomExerciseScreen('manage');
+                  }}
+                  style={styles.manageCustomButton}
+                >
+                  <Text style={styles.manageCustomButtonText}>
+                    {customExercises.length > 0
+                      ? `Manage Custom Exercises (${customExercises.length})`
+                      : 'Create Custom Exercise'}
+                  </Text>
+                </Pressable>
+              </View>
 
-                  <View style={styles.exerciseNotesSection}>
-                    <View style={styles.exerciseNotesHeader}>
-                      <MessageSquare size={16} color={COLORS.text.tertiary} strokeWidth={2} />
-                      <Text style={styles.exerciseNotesLabel}>EXERCISE NOTES</Text>
-                    </View>
-                    <TextInput
-                      style={styles.notesInput}
-                      value={currentExercise.notes}
-                      onChangeText={(text) => setCurrentExercise({ ...currentExercise, notes: text })}
-                      placeholder="Add notes for this exercise..."
-                      placeholderTextColor={COLORS.text.tertiary}
-                      multiline
-                    />
-                  </View>
+              {searchQuery.trim() ? (
+                <View>
+                  <Text style={styles.searchResultsTitle}>SEARCH RESULTS</Text>
+                  {(() => {
+                    const builtInResults = searchBuiltInExercises(searchQuery).map(r => ({
+                      ...r,
+                      isCustom: false
+                    }));
+                    const customResults = customExercises
+                      .filter(ex => ex.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .map(ex => ({
+                        name: ex.name,
+                        category: ex.category,
+                        id: ex.id,
+                        isCustom: true
+                      }));
 
-                  <Text style={styles.setsTitle}>SETS</Text>
-                  {currentExercise.sets.map((set, index) => (
-                    <View
-                      key={index}
-                      ref={ref => setRefs.current[index] = ref}
-                    >
-                      <ExerciseSetInput
-                        setNumber={index + 1}
-                        set={set}
-                        isCardio={isCurrentCardioWorkout || isCardioExercise(currentExercise.name)}
-                        canRemove={currentExercise.sets.length > 1}
-                        onUpdate={(field, value) => updateSetWithCalculation(index, field, value)}
-                        onRemove={() => removeSet(index)}
-                        onFocus={() => scrollToSet(index)}
-                        onConfirm={() => onSetLogged()}
-                      />
-                    </View>
-                  ))}
+                    // Combine and sort alphabetically
+                    const allResults = [...builtInResults, ...customResults]
+                      .sort((a, b) => a.name.localeCompare(b.name));
 
-                  <Pressable onPress={addSet} style={styles.addSetButton}>
-                    <Plus size={20} color={COLORS.text.primary} strokeWidth={2.5} />
-                    <Text style={styles.addSetButtonText}>Add Set</Text>
-                  </Pressable>
-                </>
-              ) : (
-                <>
-                  <View style={styles.searchSection}>
-                    <TextInput
-                      style={styles.searchInput}
-                      placeholder="Search exercises..."
-                      placeholderTextColor={COLORS.text.tertiary}
-                      value={searchQuery}
-                      onChangeText={setSearchQuery}
-                      autoCapitalize="none"
-                    />
+                    if (allResults.length === 0) {
+                      return (
+                        <View style={styles.emptySearchResults}>
+                          <Text style={styles.emptySearchText}>No exercises found</Text>
+                          <Text style={styles.emptySearchSubtext}>
+                            Try a different search or create a custom exercise
+                          </Text>
+                        </View>
+                      );
+                    }
 
-                    <Pressable
-                      onPress={() => {
-                        setEditingCustomExercise(null);
-                        setCustomExerciseScreen('manage');
-                      }}
-                      style={styles.manageCustomButton}
-                    >
-                      <Text style={styles.manageCustomButtonText}>
-                        {customExercises.length > 0
-                          ? `Manage Custom Exercises (${customExercises.length})`
-                          : 'Create Custom Exercise'}
-                      </Text>
-                    </Pressable>
-                  </View>
-
-                  {searchQuery.trim() ? (
-                    <View>
-                      <Text style={styles.searchResultsTitle}>SEARCH RESULTS</Text>
-                      {(() => {
-                        const builtInResults = searchBuiltInExercises(searchQuery).map(r => ({
-                          ...r,
-                          isCustom: false
-                        }));
-                        const customResults = customExercises
-                          .filter(ex => ex.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                          .map(ex => ({
-                            name: ex.name,
-                            category: ex.category,
-                            id: ex.id,
-                            isCustom: true
-                          }));
-
-                        // Combine and sort alphabetically
-                        const allResults = [...builtInResults, ...customResults]
-                          .sort((a, b) => a.name.localeCompare(b.name));
-
-                        if (allResults.length === 0) {
-                          return (
-                            <View style={styles.emptySearchResults}>
-                              <Text style={styles.emptySearchText}>No exercises found</Text>
-                              <Text style={styles.emptySearchSubtext}>
-                                Try a different search or create a custom exercise
-                              </Text>
-                            </View>
-                          );
-                        }
-
-                        return (
-                          <>
-                            {allResults.map((result, idx) => (
-                              <Pressable
-                                key={result.isCustom ? `custom-${result.id}` : `built-in-${idx}`}
-                                onPress={async () => {
-                                  const prevSession = await findPreviousSession(result.name);
-                                  setPreviousSession(prevSession);
-                                  setCurrentExercise({ ...currentExercise, name: result.name });
-                                  setSearchQuery('');
-                                }}
-                                style={styles.exerciseOption}
-                              >
-                                <View style={styles.exerciseOptionRow}>
-                                  <Text style={styles.exerciseOptionText}>{result.name}</Text>
-                                  {result.isCustom && (
-                                    <View style={styles.customBadge}>
-                                      <Text style={styles.customBadgeText}>CUSTOM</Text>
-                                    </View>
-                                  )}
+                    return (
+                      <>
+                        {allResults.map((result, idx) => (
+                          <Pressable
+                            key={result.isCustom ? `custom-${result.id}` : `built-in-${idx}`}
+                            onPress={() => addExerciseToWorkout(result.name)}
+                            style={styles.exerciseOption}
+                          >
+                            <View style={styles.exerciseOptionRow}>
+                              <Text style={styles.exerciseOptionText}>{result.name}</Text>
+                              {result.isCustom && (
+                                <View style={styles.customBadge}>
+                                  <Text style={styles.customBadgeText}>CUSTOM</Text>
                                 </View>
-                                <Text style={styles.exerciseCategoryTag}>{result.category}</Text>
-                              </Pressable>
+                              )}
+                            </View>
+                            <Text style={styles.exerciseCategoryTag}>{result.category}</Text>
+                          </Pressable>
                             ))}
                           </>
                         );
@@ -925,12 +796,7 @@ export default function WorkoutBuilderScreen() {
                             return allExercises.map((exercise, idx) => (
                               <Pressable
                                 key={exercise.isCustom ? `custom-${exercise.id}` : `built-in-${idx}`}
-                                onPress={async () => {
-                                  const prevSession = await findPreviousSession(exercise.name);
-                                  setPreviousSession(prevSession);
-                                  setCurrentExercise({ ...currentExercise, name: exercise.name });
-                                  setSelectedMuscleGroup(null);
-                                }}
+                                onPress={() => addExerciseToWorkout(exercise.name)}
                                 style={styles.exerciseOption}
                               >
                                 <View style={styles.exerciseOptionRow}>
@@ -948,8 +814,6 @@ export default function WorkoutBuilderScreen() {
                       )}
                     </>
                   )}
-                </>
-              )}
             </ScrollView>
           )}
 
@@ -961,6 +825,9 @@ export default function WorkoutBuilderScreen() {
       {/* Rest Timer - always visible in bottom-left corner */}
       <RestTimerButton />
 
+      {/* Confetti overlay */}
+      <Confetti trigger={showPRCelebration} />
+
       {/* PR Celebration Modal */}
       <Modal
         visible={showPRCelebration}
@@ -968,8 +835,8 @@ export default function WorkoutBuilderScreen() {
         animationType="fade"
         onRequestClose={closePRCelebration}
       >
-        <View style={styles.prModalOverlay}>
-          <View style={styles.prModalContainer}>
+        <Pressable style={styles.prModalOverlay} onPress={closePRCelebration}>
+          <Pressable style={styles.prModalContainer}>
             {/* Animated Trophy Icon with Glow */}
             <Animated.View style={[styles.prTrophyContainer, styles.prTrophyGlow, trophyAnimatedStyle, trophyGlowStyle]}>
               <Trophy size={48} color={COLORS.warning} strokeWidth={1.5} fill={COLORS.warning} />
@@ -1029,8 +896,8 @@ export default function WorkoutBuilderScreen() {
                 <Text style={styles.prModalViewAllText}>View All PRs</Text>
               </Pressable>
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -1054,32 +921,43 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.surface.border
   },
-  headerButton: {
-    padding: SPACING.sm
+  headerSpacer: {
+    width: 60,
   },
-  headerButtonText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.text.secondary
+  closeButton: {
+    width: 60,
+    paddingVertical: SPACING.xs,
   },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: SPACING.sm,
-  },
-  headerTitleRow: {
+  typeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    backgroundColor: COLORS.surface.card,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
   },
-  headerTitle: {
-    ...TYPOGRAPHY.bodyBold,
+  typeButtonText: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '600',
     color: COLORS.text.primary,
-    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   headerSubtitle: {
     ...TYPOGRAPHY.caption,
     color: COLORS.text.secondary,
     marginTop: 2,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  moreButton: {
+    padding: SPACING.xs,
   },
   saveButtonContainer: {
     backgroundColor: COLORS.accent.primary,
@@ -1134,9 +1012,35 @@ const styles = StyleSheet.create({
     color: COLORS.text.inverse
   },
 
-  // Draggable List
-  draggableList: {
-    marginBottom: SPACING.sm,
+  scrollContentContainer: {
+    paddingBottom: SPACING.xl * 4,
+  },
+
+  // Sticky Add Button
+  stickyAddButtonContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl,
+    paddingTop: SPACING.md,
+    backgroundColor: COLORS.background.primary,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surface.border,
+  },
+  stickyAddButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.accent.primary,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+  },
+  stickyAddButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.inverse,
   },
 
   // Empty State
@@ -1565,14 +1469,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     marginBottom: SPACING.sm
   },
-  manageExerciseInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1
-  },
   manageExerciseName: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.primary
+    color: COLORS.text.primary,
+    flex: 1,
+    marginRight: SPACING.md,
   },
   exerciseCardActions: {
     flexDirection: 'row',
@@ -1718,21 +1619,4 @@ const styles = StyleSheet.create({
   },
 
   // Template Button
-  templateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.surface.card,
-    borderWidth: 1,
-    borderColor: COLORS.accent.primary,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.xl,
-    gap: SPACING.sm,
-  },
-  templateButtonText: {
-    ...TYPOGRAPHY.bodyBold,
-    color: COLORS.accent.primary,
-  },
 });

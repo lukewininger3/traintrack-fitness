@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getAllCategories } from '../../../constants/workoutTypes';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../../theme/design';
 
@@ -14,6 +14,7 @@ export default function CustomExerciseForm({ exercise, onSave, onCancel }) {
   const [name, setName] = useState(exercise?.name || '');
   const [category, setCategory] = useState(exercise?.category || 'Chest');
   const [showDropdown, setShowDropdown] = useState(false);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     if (exercise) {
@@ -26,23 +27,38 @@ export default function CustomExerciseForm({ exercise, onSave, onCancel }) {
     setShowDropdown(false);
   }, [exercise]);
 
+  const handleDropdownPress = () => {
+    Keyboard.dismiss();
+    setShowDropdown(!showDropdown);
+  };
+
+  const handleSave = async () => {
+    const success = await onSave(name, category);
+    // Clear the name field after successful creation (not edit)
+    if (success && !exercise) {
+      setName('');
+    }
+  };
+
   return (
     <View>
       <View style={styles.inputGroup}>
         <Text style={styles.label}>EXERCISE NAME</Text>
         <TextInput
+          ref={inputRef}
           style={styles.input}
           value={name}
           onChangeText={setName}
+          onFocus={() => setShowDropdown(false)}
           placeholder="e.g., Cable Crossover"
           placeholderTextColor={COLORS.text.tertiary}
         />
       </View>
 
-      <View style={styles.inputGroup}>
+      <View style={[styles.inputGroup, styles.dropdownContainer]}>
         <Text style={styles.label}>CATEGORY</Text>
         <Pressable
-          onPress={() => setShowDropdown(!showDropdown)}
+          onPress={handleDropdownPress}
           style={[styles.dropdownButton, showDropdown && styles.dropdownButtonActive]}
         >
           <Text style={styles.dropdownText}>{category}</Text>
@@ -52,30 +68,32 @@ export default function CustomExerciseForm({ exercise, onSave, onCancel }) {
         </Pressable>
 
         {showDropdown && (
-          <ScrollView style={styles.dropdownList} nestedScrollEnabled={true}>
-            {getAllCategories().map((cat) => (
-              <Pressable
-                key={cat}
-                onPress={() => {
-                  setCategory(cat);
-                  setShowDropdown(false);
-                }}
-                style={[
-                  styles.dropdownItem,
-                  category === cat && styles.dropdownItemSelected,
-                ]}
-              >
-                <Text
+          <View style={styles.dropdownOverlay}>
+            <ScrollView style={styles.dropdownList} nestedScrollEnabled={true}>
+              {getAllCategories().map((cat) => (
+                <Pressable
+                  key={cat}
+                  onPress={() => {
+                    setCategory(cat);
+                    setShowDropdown(false);
+                  }}
                   style={[
-                    styles.dropdownItemText,
-                    category === cat && styles.dropdownItemTextSelected,
+                    styles.dropdownItem,
+                    category === cat && styles.dropdownItemSelected,
                   ]}
                 >
-                  {cat}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+                  <Text
+                    style={[
+                      styles.dropdownItemText,
+                      category === cat && styles.dropdownItemTextSelected,
+                    ]}
+                  >
+                    {cat}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
         )}
       </View>
 
@@ -89,7 +107,7 @@ export default function CustomExerciseForm({ exercise, onSave, onCancel }) {
           </Pressable>
         )}
         <Pressable
-          onPress={() => onSave(name, category)}
+          onPress={handleSave}
           style={[
             styles.formButton,
             styles.saveFormButton,
@@ -108,6 +126,21 @@ export default function CustomExerciseForm({ exercise, onSave, onCancel }) {
 const styles = StyleSheet.create({
   inputGroup: {
     marginBottom: SPACING.md,
+  },
+  dropdownContainer: {
+    zIndex: 100,
+  },
+  dropdownOverlay: {
+    position: 'absolute',
+    top: 75, // Below the label and button
+    left: 0,
+    right: 0,
+    zIndex: 101,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   label: {
     ...TYPOGRAPHY.label,

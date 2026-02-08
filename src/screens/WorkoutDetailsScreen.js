@@ -26,6 +26,7 @@ export default function WorkoutDetailsScreen() {
   const repeatData = params?.repeatData;
   const editingDetails = params?.editingDetails; // Coming back from builder to edit
   const existingExercises = params?.existingExercises; // Exercises from builder
+  const workoutDetails = params?.workoutDetails; // Coming from planned workout (Dashboard)
 
   const isEditing = !!editingWorkoutId;
 
@@ -36,6 +37,10 @@ export default function WorkoutDetailsScreen() {
     time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
     notes: '',
   });
+
+  // Store planned workout data to pass to builder
+  const [plannedExercises, setPlannedExercises] = useState([]);
+  const [plannedWorkoutId, setPlannedWorkoutId] = useState(null);
 
   const [exercises, setExercises] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -66,11 +71,14 @@ export default function WorkoutDetailsScreen() {
     }, 100);
   };
 
-  // Load data from editing details, existing workout, template, or repeat
+  // Load data from editing details, existing workout, template, repeat, or planned workout
   useEffect(() => {
     if (editingDetails) {
       // Coming back from builder to edit - use the passed details
       loadFromEditingDetails();
+    } else if (workoutDetails) {
+      // Coming from planned workout on Dashboard
+      loadFromWorkoutDetails();
     } else if (editingWorkoutId) {
       loadFromEditing();
     } else if (templateId) {
@@ -78,7 +86,7 @@ export default function WorkoutDetailsScreen() {
     } else if (repeatData) {
       loadFromRepeat();
     }
-  }, [editingDetails, editingWorkoutId, templateId, repeatData]);
+  }, [editingDetails, workoutDetails, editingWorkoutId, templateId, repeatData]);
 
   const loadFromEditingDetails = () => {
     try {
@@ -92,6 +100,28 @@ export default function WorkoutDetailsScreen() {
       });
     } catch (e) {
       console.error('Failed to parse editing details:', e);
+    }
+  };
+
+  const loadFromWorkoutDetails = () => {
+    try {
+      const details = JSON.parse(workoutDetails);
+      setWorkout({
+        name: details.name || '',
+        type: details.type || 'Strength',
+        date: details.date || getTodayString(),
+        time: details.time || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        notes: details.notes || '',
+      });
+      // Store planned exercises and ID to pass to builder
+      if (details.plannedExercises) {
+        setPlannedExercises(details.plannedExercises);
+      }
+      if (details.plannedWorkoutId) {
+        setPlannedWorkoutId(details.plannedWorkoutId);
+      }
+    } catch (e) {
+      console.error('Failed to parse workout details:', e);
     }
   };
 
@@ -186,11 +216,20 @@ export default function WorkoutDetailsScreen() {
       return;
     }
 
+    // Build workout details including planned exercises if available
+    const detailsToPass = {
+      ...workout,
+      plannedExercises: plannedExercises.length > 0 ? plannedExercises : undefined,
+      // Pass back exercises from builder round-trip so they aren't lost
+      existingExercises: exercises.length > 0 ? exercises : undefined,
+      plannedWorkoutId: plannedWorkoutId || undefined,
+    };
+
     // Navigate to exercise builder with workout details
     router.push({
       pathname: '/workout-builder',
       params: {
-        workoutDetails: JSON.stringify(workout),
+        workoutDetails: JSON.stringify(detailsToPass),
         workoutId: editingWorkoutId,
         templateId: templateId,
         repeatData: repeatData,
@@ -199,8 +238,14 @@ export default function WorkoutDetailsScreen() {
   };
 
   const navigateBack = () => {
-    // Cancel always exits completely without saving
-    router.replace('/activities');
+    Alert.alert(
+      'Discard Workout?',
+      'You\'ll lose any unsaved changes.',
+      [
+        { text: 'Keep Editing', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: () => router.replace('/activities') },
+      ]
+    );
   };
 
   const handleSave = async () => {
@@ -231,8 +276,9 @@ export default function WorkoutDetailsScreen() {
         );
         await saveWorkouts(updated);
       } else {
-        savedWorkout = { ...workoutToSave, id: Date.now() };
-        await saveWorkouts([...workouts, savedWorkout]);
+        const newId = Date.now();
+        savedWorkout = { ...workoutToSave, id: newId };
+        await saveWorkouts([...workouts, savedWorkout], { newWorkoutId: newId });
       }
 
       // Check for new PRs
@@ -257,8 +303,8 @@ export default function WorkoutDetailsScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={navigateBack} style={styles.cancelButton}>
-          <Text style={styles.cancelText}>Cancel</Text>
+        <Pressable onPress={navigateBack} style={styles.discardButton}>
+          <Text style={styles.discardText}>Discard</Text>
         </Pressable>
         <Text style={styles.headerTitle}>
           {isEditing ? 'EDIT WORKOUT' : 'NEW WORKOUT'}
@@ -453,13 +499,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.surface.border,
   },
-  cancelButton: {
+  discardButton: {
     paddingVertical: SPACING.sm,
     paddingRight: SPACING.md,
   },
-  cancelText: {
+  discardText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.secondary,
+    color: COLORS.error,
   },
   headerTitle: {
     ...TYPOGRAPHY.label,

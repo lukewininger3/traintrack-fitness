@@ -2,75 +2,108 @@ export const WORKOUT_TYPES = ['Strength', 'Running', 'Cycling', 'Swimming'];
 
 export const EXERCISE_DATABASE = {
   Chest: [
-    'Bench Press',
-    'Incline Bench Press',
-    'Decline Bench Press',
-    'Dumbbell Bench Press',
-    'Incline Dumbbell Press',
-    'Dumbbell Flyes',
+    'BB Bench Press',
+    'DB Bench Press',
+    'SM Bench Press',
+    'BB Incline Bench Press',
+    'DB Incline Bench Press',
+    'SM Incline Bench Press',
+    'BB Decline Bench Press',
+    'DB Decline Bench Press',
+    'DB Flyes',
     'Cable Flyes',
     'Chest Press Machine',
+    'Pec Deck',
     'Push-Ups',
     'Dips',
-    'Pec Deck'
+    'Landmine Press',
+    'DB Pullover',
   ],
   Back: [
-    'Deadlift',
-    'Barbell Row',
-    'Dumbbell Row',
+    'BB Deadlift',
+    'BB Bent Over Row',
+    'DB Row',
     'T-Bar Row',
     'Seated Cable Row',
     'Lat Pulldown',
     'Pull-Ups',
     'Chin-Ups',
     'Face Pulls',
-    'Shrugs',
-    'Hyperextensions'
+    'BB Shrugs',
+    'DB Shrugs',
+    'SM Shrugs',
+    'Hyperextensions',
+    'Pendlay Row',
+    'Chest Supported DB Row',
+    'Cable Pullover',
+    'Straight Arm Pulldown',
   ],
   Shoulders: [
-    'Overhead Press',
-    'Dumbbell Shoulder Press',
+    'BB Overhead Press',
+    'DB Overhead Press',
+    'SM Overhead Press',
     'Arnold Press',
-    'Lateral Raises',
-    'Front Raises',
-    'Rear Delt Flyes',
-    'Upright Rows',
-    'Cable Lateral Raises'
+    'DB Lateral Raises',
+    'Cable Lateral Raises',
+    'DB Front Raises',
+    'DB Rear Delt Flyes',
+    'Cable Rear Delt Flyes',
+    'Reverse Pec Deck',
+    'BB Upright Row',
+    'DB Upright Row',
+    'Machine Shoulder Press',
   ],
   Biceps: [
-    'Barbell Curl',
-    'Dumbbell Curl',
-    'Hammer Curl',
-    'Preacher Curl',
-    'Concentration Curl',
+    'BB Curl',
+    'EZ Bar Curl',
+    'DB Curl',
+    'DB Hammer Curl',
+    'BB Preacher Curl',
+    'DB Preacher Curl',
+    'DB Concentration Curl',
     'Cable Curl',
-    'Incline Dumbbell Curl',
+    'DB Incline Curl',
     'Spider Curl',
-    '21s'
+    'Reverse Curl',
+    'Machine Curl',
   ],
   Triceps: [
-    'Tricep Pushdown',
-    'Overhead Tricep Extension',
-    'Skull Crushers',
-    'Close-Grip Bench Press',
+    'Cable Rope Pushdown',
+    'Cable Straight Bar Pushdown',
+    'BB Skull Crushers',
+    'DB Skull Crushers',
+    'BB Close-Grip Bench Press',
+    'SM Close-Grip Bench Press',
     'Tricep Dips',
     'Cable Overhead Extension',
+    'DB Overhead Tricep Extension',
+    'DB Kickbacks',
     'Diamond Push-Ups',
-    'Kickbacks'
+    'Machine Tricep Extension',
   ],
   Legs: [
-    'Squat',
-    'Front Squat',
-    'Leg Press',
-    'Romanian Deadlift',
-    'Leg Curl',
-    'Leg Extension',
-    'Walking Lunges',
-    'Bulgarian Split Squat',
-    'Calf Raises',
+    'BB Back Squat',
+    'BB Front Squat',
+    'SM Squat',
     'Goblet Squat',
     'Hack Squat',
-    'Step-Ups'
+    'Leg Press',
+    'BB Romanian Deadlift',
+    'DB Romanian Deadlift',
+    'BB Sumo Deadlift',
+    'Leg Curl',
+    'Leg Extension',
+    'DB Walking Lunges',
+    'BB Walking Lunges',
+    'SM Lunges',
+    'Bulgarian Split Squat',
+    'Standing Calf Raises',
+    'Seated Calf Raises',
+    'SM Calf Raises',
+    'DB Step-Ups',
+    'BB Hip Thrust',
+    'SM Hip Thrust',
+    'Good Mornings',
   ],
   Core: [
     'Plank',
@@ -78,11 +111,15 @@ export const EXERCISE_DATABASE = {
     'Crunches',
     'Bicycle Crunches',
     'Russian Twists',
-    'Leg Raises',
+    'Hanging Leg Raises',
     'Ab Wheel',
     'Cable Crunches',
     'Mountain Climbers',
-    'Hanging Knee Raises'
+    'Hanging Knee Raises',
+    'Pallof Press',
+    'Cable Woodchoppers',
+    'Dead Bug',
+    'Decline Sit-Ups',
   ],
   Cardio: [
     'Running',
@@ -94,8 +131,8 @@ export const EXERCISE_DATABASE = {
     'Jump Rope',
     'Swimming',
     'Walking',
-    'Sprints'
-  ]
+    'Sprints',
+  ],
 };
 
 // Helper to get all exercise names from built-in database
@@ -116,7 +153,7 @@ export const getAllCategories = () => {
 export const searchBuiltInExercises = (query) => {
   const lowerQuery = query.toLowerCase();
   const results = [];
-  
+
   Object.entries(EXERCISE_DATABASE).forEach(([category, exercises]) => {
     exercises.forEach(exercise => {
       if (exercise.toLowerCase().includes(lowerQuery)) {
@@ -124,6 +161,6 @@ export const searchBuiltInExercises = (query) => {
       }
     });
   });
-  
+
   return results;
 };

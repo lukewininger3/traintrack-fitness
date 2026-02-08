@@ -1,4 +1,4 @@
-import { Check, Plus, X, Circle, Dumbbell } from 'lucide-react-native';
+import { Check, Plus, X } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -12,8 +12,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 // Reorder days to start with Monday
 const WEEK_DAYS = [
   { short: 'M', full: 'Mon', index: 1 },
@@ -25,34 +23,7 @@ const WEEK_DAYS = [
   { short: 'S', full: 'Sun', index: 0 },
 ];
 
-const CheckmarkIcon = ({ completed }) => {
-  const scale = useSharedValue(completed ? 1 : 0);
-
-  React.useEffect(() => {
-    if (completed) {
-      scale.value = withSequence(
-        withSpring(1.2, { damping: 8 }),
-        withSpring(1, { damping: 12 })
-      );
-    } else {
-      scale.value = withSpring(0);
-    }
-  }, [completed]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  if (!completed) return null;
-
-  return (
-    <Animated.View style={[styles.checkmarkContainer, animatedStyle]}>
-      <Check size={10} color={COLORS.text.inverse} strokeWidth={3} />
-    </Animated.View>
-  );
-};
-
-const WorkoutPill = ({ workout, onRemove, isCompleted }) => {
+const WorkoutPill = ({ workout, onPress, isCompleted }) => {
   const workoutType = workout.workoutType || 'Other';
   const typeColor = COLORS.workoutTypes[workoutType] || COLORS.workoutTypes.Other;
 
@@ -60,23 +31,26 @@ const WorkoutPill = ({ workout, onRemove, isCompleted }) => {
   const displayColor = isCompleted ? COLORS.success : typeColor;
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(200)}
-      exiting={FadeOut.duration(150)}
-      layout={Layout.springify().damping(15)}
-      style={[
-        styles.workoutPill,
-        {
-          backgroundColor: isCompleted
-            ? 'rgba(0, 255, 136, 0.08)'
-            : `${typeColor}10`,
-          borderColor: isCompleted
-            ? 'rgba(0, 255, 136, 0.25)'
-            : `${typeColor}30`,
-        },
-      ]}
+    <Pressable
+      onPress={() => onPress(workout)}
+      hitSlop={12}
     >
-      <View style={styles.workoutPillContent}>
+      <Animated.View
+        entering={FadeIn.duration(200)}
+        exiting={FadeOut.duration(150)}
+        layout={Layout.springify().damping(15)}
+        style={[
+          styles.workoutPill,
+          {
+            backgroundColor: isCompleted
+              ? 'rgba(0, 255, 136, 0.08)'
+              : `${typeColor}10`,
+            borderColor: isCompleted
+              ? 'rgba(0, 255, 136, 0.25)'
+              : `${typeColor}30`,
+          },
+        ]}
+      >
         {isCompleted ? (
           <View style={styles.pillCheckmark}>
             <Check size={10} color={COLORS.success} strokeWidth={3} />
@@ -93,17 +67,8 @@ const WorkoutPill = ({ workout, onRemove, isCompleted }) => {
         >
           {workout.name}
         </Text>
-      </View>
-      {!isCompleted && onRemove && (
-        <Pressable
-          onPress={() => onRemove(workout.id)}
-          hitSlop={8}
-          style={styles.pillRemove}
-        >
-          <X size={12} color={typeColor} style={{ opacity: 0.6 }} />
-        </Pressable>
-      )}
-    </Animated.View>
+      </Animated.View>
+    </Pressable>
   );
 };
 
@@ -114,19 +79,16 @@ const DayRow = ({
   plannedWorkouts,
   hasActualWorkout,
   onPlanDay,
+  onWorkoutPress,
   onRemoveWorkout,
 }) => {
   const hasPlans = plannedWorkouts.length > 0;
-  const allCompleted = hasPlans && plannedWorkouts.every(w => w.completed);
-  const someCompleted = hasPlans && plannedWorkouts.some(w => w.completed);
 
   return (
-    <Pressable
-      onPress={() => onPlanDay(day.index)}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.dayRow,
         isToday && styles.dayRowToday,
-        pressed && styles.dayRowPressed,
       ]}
     >
       {/* Today indicator bar */}
@@ -141,11 +103,6 @@ const DayRow = ({
         ]}>
           {day.full}
         </Text>
-        {isToday && (
-          <View style={styles.todayBadge}>
-            <Text style={styles.todayBadgeText}>TODAY</Text>
-          </View>
-        )}
       </View>
 
       {/* Content area */}
@@ -157,6 +114,7 @@ const DayRow = ({
                 key={workout.id}
                 workout={workout}
                 isCompleted={workout.completed}
+                onPress={onWorkoutPress}
                 onRemove={onRemoveWorkout}
               />
             ))}
@@ -167,24 +125,31 @@ const DayRow = ({
               styles.emptyDayText,
               isToday && styles.emptyDayTextToday,
             ]}>
-              {isPast ? 'Rest day' : 'Tap to plan'}
+              {isPast ? 'Rest day' : 'No plans'}
             </Text>
           </View>
         )}
       </View>
 
-      {/* Add button */}
-      <View style={[
-        styles.addButtonContainer,
-        isToday && styles.addButtonContainerToday,
-      ]}>
+      {/* Add button - only this triggers the plan modal */}
+      <Pressable
+        onPress={() => onPlanDay(day.index)}
+        style={({ pressed }) => [
+          styles.addButtonContainer,
+          isToday && styles.addButtonContainerToday,
+          pressed && styles.addButtonPressed,
+        ]}
+        hitSlop={12}
+        accessibilityLabel={`Plan workout for ${day.label}`}
+        accessibilityRole="button"
+      >
         <Plus
           size={16}
           color={isToday ? COLORS.accent.primary : COLORS.text.tertiary}
           strokeWidth={2}
         />
-      </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 };
 
@@ -195,6 +160,7 @@ export default function WeeklyPlanCard({
   isCurrentWeek,
   today,
   onPlanDay,
+  onWorkoutPress,
   onRemoveWorkout,
 }) {
   // Calculate which days are in the past
@@ -240,6 +206,7 @@ export default function WeeklyPlanCard({
               plannedWorkouts={getPlannedForDay(day.index)}
               hasActualWorkout={hasWorkoutOnDay(day.index)}
               onPlanDay={onPlanDay}
+              onWorkoutPress={onWorkoutPress}
               onRemoveWorkout={onRemoveWorkout}
             />
             {idx < WEEK_DAYS.length - 1 && <View style={styles.divider} />}
@@ -302,9 +269,6 @@ const styles = StyleSheet.create({
   dayRowToday: {
     backgroundColor: COLORS.accent.primaryDim,
   },
-  dayRowPressed: {
-    opacity: 0.7,
-  },
 
   // Today indicator
   todayIndicator: {
@@ -320,10 +284,9 @@ const styles = StyleSheet.create({
 
   // Day label
   dayLabelContainer: {
-    width: 72,
+    width: 48,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
   },
   dayLabel: {
     ...TYPOGRAPHY.bodyBold,
@@ -334,18 +297,6 @@ const styles = StyleSheet.create({
   },
   dayLabelPast: {
     color: COLORS.text.tertiary,
-  },
-  todayBadge: {
-    backgroundColor: COLORS.accent.primary,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
-  },
-  todayBadgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: COLORS.text.inverse,
-    letterSpacing: 0.5,
   },
 
   // Content
@@ -376,10 +327,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 4,
     paddingLeft: 6,
-    paddingRight: 8,
+    paddingRight: 6,
     borderRadius: RADIUS.full,
     borderWidth: 1,
-    gap: 4,
+    gap: 2,
   },
   workoutPillContent: {
     flexDirection: 'row',
@@ -425,21 +376,15 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent.primaryDim,
     borderColor: COLORS.surface.borderAccent,
   },
+  addButtonPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.95 }],
+  },
 
   // Divider
   divider: {
     height: 1,
     backgroundColor: COLORS.surface.border,
     marginHorizontal: SPACING.lg,
-  },
-
-  // Checkmark animation
-  checkmarkContainer: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: COLORS.success,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

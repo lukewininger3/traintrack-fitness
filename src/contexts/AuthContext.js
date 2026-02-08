@@ -1,20 +1,94 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../config/supabase';
 
 export const AuthContext = createContext({
   user: null,
   session: null,
+  profile: null,
   loading: true,
+  profileLoading: true,
+  needsUsername: false,
+  needsOnboarding: false,
   signUp: async () => {},
   signIn: async () => {},
   signOut: async () => {},
   resetPassword: async () => {},
+  refreshProfile: async () => {},
+  setProfile: () => {},
 });
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+
+  // Check if user needs to set up username
+  const needsUsername = user && !profileLoading && !profile?.username;
+
+  // Check if user needs onboarding (has username but hasn't completed onboarding)
+  const needsOnboarding = user && !profileLoading && profile?.username && !onboardingCompleted;
+
+  // Fetch user profile from database
+  const fetchProfile = useCallback(async (userId) => {
+    if (!userId) {
+      setProfile(null);
+      setProfileLoading(false);
+      return null;
+    }
+
+    try {
+      setProfileLoading(true);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error && error.code === 'PGRST116') {
+        // Profile doesn't exist yet
+        setProfile(null);
+        setProfileLoading(false);
+        return null;
+      }
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        setProfile(null);
+        setProfileLoading(false);
+        return null;
+      }
+
+      setProfile(data);
+
+      // Check onboarding status from AsyncStorage
+      try {
+        const onboardingData = await AsyncStorage.getItem('@traintrack_onboarding');
+        setOnboardingCompleted(onboardingData ? JSON.parse(onboardingData).completed === true : false);
+      } catch {
+        setOnboardingCompleted(false);
+      }
+
+      setProfileLoading(false);
+      return data;
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      setProfile(null);
+      setProfileLoading(false);
+      return null;
+    }
+  }, []);
+
+  // Public method to refresh profile
+  const refreshProfile = useCallback(async () => {
+    if (user?.id) {
+      return await fetchProfile(user.id);
+    }
+    return null;
+  }, [user?.id, fetchProfile]);
 
   useEffect(() => {
     // Check for existing session on mount
@@ -22,6 +96,12 @@ export const AuthProvider = ({ children }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      // Fetch profile after getting session
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      } else {
+        setProfileLoading(false);
+      }
     });
 
     // Listen for auth state changes
@@ -29,11 +109,18 @@ export const AuthProvider = ({ children }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      // Fetch profile on auth change
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      } else {
+        setProfile(null);
+        setProfileLoading(false);
+      }
     });
 
     // Cleanup subscription on unmount
     return () => subscription.unsubscribe();
-  }, []);
+  }, [fetchProfile]);
 
   const signUp = async (email, password) => {
     try {
@@ -100,11 +187,17 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     session,
+    profile,
     loading,
+    profileLoading,
+    needsUsername,
+    needsOnboarding,
     signUp,
     signIn,
     signOut,
     resetPassword,
+    refreshProfile,
+    setProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

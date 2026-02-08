@@ -11,9 +11,9 @@ import { COLORS, TYPOGRAPHY, SPACING } from '../theme/design';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-const RING_SIZE = 180;
-const STROKE_WIDTH = 9;
-const RING_GAP = 13; // Gap between concentric rings
+const RING_SIZE = 140;
+const STROKE_WIDTH = 7;
+const RING_GAP = 10; // Gap between concentric rings
 const CENTER = RING_SIZE / 2;
 
 export default function WorkoutProgressRing({ plannedWorkouts = [] }) {
@@ -165,7 +165,7 @@ function ProgressRing({ ring }) {
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    paddingVertical: SPACING.lg,
+    paddingVertical: SPACING.md,
   },
   ringContainer: {
     width: RING_SIZE,
@@ -181,14 +181,14 @@ const styles = StyleSheet.create({
   completedCount: {
     ...TYPOGRAPHY.stat,
     color: COLORS.text.primary,
-    fontSize: 42,
-    lineHeight: 46,
+    fontSize: 32,
+    lineHeight: 36,
   },
   totalCount: {
     ...TYPOGRAPHY.h3,
     color: COLORS.text.tertiary,
-    fontSize: 18,
-    marginTop: -4,
+    fontSize: 14,
+    marginTop: -2,
   },
   emptyText: {
     ...TYPOGRAPHY.bodyBold,
@@ -204,8 +204,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: SPACING.lg,
-    marginTop: SPACING.md,
+    gap: SPACING.md,
+    marginTop: SPACING.sm,
     paddingHorizontal: SPACING.md,
   },
   legendItem: {

@@ -188,6 +188,7 @@ export const removeGoal = async (weekStart, goalId) => {
 /**
  * Add a planned workout to a specific day
  * Allows multiple workouts per day
+ * Now supports exercises array with optional distance for cardio
  */
 export const addPlannedWorkout = async (weekStart, plannedWorkout) => {
   try {
@@ -198,11 +199,13 @@ export const addPlannedWorkout = async (weekStart, plannedWorkout) => {
     }
 
     // Add new planned workout (allows multiple per day)
+    // exercises: [{ name: string, distance?: number (miles for cardio) }]
     goals.plannedWorkouts.push({
       ...plannedWorkout,
       id: Date.now(),
       completed: false,
       workoutId: null,
+      exercises: plannedWorkout.exercises || [],
     });
 
     // Sort by day of week, then by id (creation order)
@@ -214,6 +217,28 @@ export const addPlannedWorkout = async (weekStart, plannedWorkout) => {
     return await saveWeeklyGoals(goals);
   } catch (error) {
     console.error('Error adding planned workout:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Update a planned workout (for editing exercises)
+ */
+export const updatePlannedWorkout = async (weekStart, plannedWorkoutId, updates) => {
+  try {
+    const goals = await loadWeeklyGoals(weekStart);
+    if (!goals) return { success: false, error: 'No goals found' };
+
+    goals.plannedWorkouts = goals.plannedWorkouts.map(p => {
+      if (p.id === plannedWorkoutId) {
+        return { ...p, ...updates };
+      }
+      return p;
+    });
+
+    return await saveWeeklyGoals(goals);
+  } catch (error) {
+    console.error('Error updating planned workout:', error);
     return { success: false, error: error.message };
   }
 };
@@ -304,18 +329,15 @@ export const updateGoalProgress = async (workouts, weekStart = getWeekStart()) =
       const dayWorkouts = weekWorkouts.filter(w => w.date === plannedDate);
 
       // Find a matching workout that hasn't been used yet
-      // Prefer matching by workout type if specified, otherwise just by date
       let matchingWorkout = null;
 
-      // First try to match by type
       if (planned.workoutType) {
+        // If a specific type is planned, ONLY match that type
         matchingWorkout = dayWorkouts.find(w =>
           !usedWorkoutIds.has(w.id) && w.type === planned.workoutType
         );
-      }
-
-      // If no type match, try to match any unused workout on that day
-      if (!matchingWorkout) {
+      } else {
+        // If no specific type, match any unused workout on that day
         matchingWorkout = dayWorkouts.find(w => !usedWorkoutIds.has(w.id));
       }
 

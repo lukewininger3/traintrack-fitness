@@ -2,21 +2,153 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../config/supabase';
 
 const PR_STORAGE_KEY = '@traintrack_personal_records';
+const PR_MIGRATION_KEY = '@traintrack_pr_migration_v1';
+
+// Module-level flag to block background sync during data clear
+let _syncBlocked = false;
+
+// Mapping from old exercise names to new equipment-prefixed names
+const EXERCISE_NAME_MIGRATION = {
+  'Barbell Bench Press': 'BB Bench Press',
+  'Bench Press': 'BB Bench Press',
+  'Barbell Squat': 'BB Back Squat',
+  'Squat': 'BB Back Squat',
+  'Barbell Deadlift': 'BB Deadlift',
+  'Deadlift': 'BB Deadlift',
+  'Overhead Press': 'BB Overhead Press',
+  'Barbell Row': 'BB Bent Over Row',
+  'Bent Over Row': 'BB Bent Over Row',
+  'Barbell Curl': 'BB Curl',
+  'Dumbbell Bench Press': 'DB Bench Press',
+  'Dumbbell Press': 'DB Bench Press',
+  'Incline Dumbbell Press': 'DB Incline Bench Press',
+  'Dumbbell Curl': 'DB Curl',
+  'Dumbbell Shoulder Press': 'DB Overhead Press',
+  'Dumbbell Row': 'DB Row',
+  'Dumbbell Lateral Raise': 'DB Lateral Raises',
+  'Lateral Raises': 'DB Lateral Raises',
+  'Lateral Raise': 'DB Lateral Raises',
+  'Tricep Pushdown': 'Cable Rope Pushdown',
+  'Cable Row': 'Seated Cable Row',
+  'Front Squat': 'BB Front Squat',
+  'Romanian Deadlift': 'BB Romanian Deadlift',
+  'Calf Raise': 'Standing Calf Raises',
+  'Calf Raises': 'Standing Calf Raises',
+  'Face Pull': 'Face Pulls',
+  'Hammer Curl': 'DB Hammer Curl',
+  'Walking Lunges': 'DB Walking Lunges',
+  'Incline Bench Press': 'BB Incline Bench Press',
+  'Decline Bench Press': 'BB Decline Bench Press',
+  'Close-Grip Bench Press': 'BB Close-Grip Bench Press',
+  'Skull Crushers': 'BB Skull Crushers',
+  'Preacher Curl': 'BB Preacher Curl',
+  'Hip Thrust': 'BB Hip Thrust',
+  'Shrugs': 'BB Shrugs',
+  'Upright Row': 'BB Upright Row',
+  'Overhead Tricep Extension': 'DB Overhead Tricep Extension',
+};
 
 /**
- * Personal Record data structure
- * {
- *   id: number (Date.now()),
- *   visercise: string,
- *   category: string,
- *   weight: number,
- *   reps: number,
- *   estimatedOneRepMax: number,
- *   date: string (YYYY-MM-DD),
- *   workoutId: number,
- *   workoutName: string
- * }
+ * Migrate exercise name from old format to new equipment-prefixed format
+ * @param {string} exerciseName - Original exercise name
+ * @returns {string} Migrated exercise name (or original if no mapping exists)
  */
+function migrateExerciseName(exerciseName) {
+  return EXERCISE_NAME_MIGRATION[exerciseName] || exerciseName;
+}
+
+/**
+ * Migrate all PR records to use new exercise naming convention
+ * @param {Array} records - Array of PR objects
+ * @returns {Array} Migrated records with updated exercise names
+ */
+function migrateRecords(records) {
+  let hasChanges = false;
+  const migratedRecords = records.map(pr => {
+    const newName = migrateExerciseName(pr.exercise);
+    if (newName !== pr.exercise) {
+      hasChanges = true;
+      return { ...pr, exercise: newName };
+    }
+    return pr;
+  });
+
+  // Consolidate duplicate exercises (same exercise with different old names)
+  if (hasChanges) {
+    const consolidatedMap = new Map();
+    for (const pr of migratedRecords) {
+      const existing = consolidatedMap.get(pr.exercise);
+      if (!existing || pr.weight > existing.weight) {
+        consolidatedMap.set(pr.exercise, pr);
+      }
+    }
+    return Array.from(consolidatedMap.values());
+  }
+
+  return migratedRecords;
+}
+
+/**
+ * Run one-time migration for PR exercise names
+ * @returns {Promise<boolean>} Whether migration was performed
+ */
+async function runMigrationIfNeeded() {
+  try {
+    const migrated = await AsyncStorage.getItem(PR_MIGRATION_KEY);
+    if (migrated) return false;
+
+    const json = await AsyncStorage.getItem(PR_STORAGE_KEY);
+    if (!json) {
+      await AsyncStorage.setItem(PR_MIGRATION_KEY, 'true');
+      return false;
+    }
+
+    const records = JSON.parse(json);
+    const migratedRecords = migrateRecords(records);
+
+    // Save migrated records locally
+    await AsyncStorage.setItem(PR_STORAGE_KEY, JSON.stringify(migratedRecords));
+    await AsyncStorage.setItem(PR_MIGRATION_KEY, 'true');
+
+    // Update cloud records if user is logged in
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      // Update each migrated record in cloud
+      for (const pr of migratedRecords) {
+        const oldName = Object.entries(EXERCISE_NAME_MIGRATION)
+          .find(([_, newName]) => newName === pr.exercise)?.[0];
+
+        if (oldName) {
+          // Delete old record and insert updated one
+          await supabase
+            .from('personal_records')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('exercise', oldName);
+        }
+
+        await supabase
+          .from('personal_records')
+          .upsert({
+            user_id: user.id,
+            exercise: pr.exercise,
+            weight: pr.weight,
+            reps: pr.reps,
+            estimated_one_rep_max: pr.estimatedOneRepMax,
+            date: pr.date,
+            workout_id: pr.workoutId,
+            workout_name: pr.workoutName,
+          }, { onConflict: 'user_id,exercise' });
+      }
+    }
+
+    console.log('PR exercise name migration completed');
+    return true;
+  } catch (error) {
+    console.error('Error during PR migration:', error);
+    return false;
+  }
+}
 
 /**
  * Calculate estimated 1RM using Epley formula
@@ -27,17 +159,25 @@ const PR_STORAGE_KEY = '@traintrack_personal_records';
 export function calculateOneRepMax(weight, reps) {
   if (reps === 1) return weight;
   if (reps === 0 || weight === 0) return 0;
-  // Epley formula: 1RM = weight × (1 + reps/30)
   return Math.round(weight * (1 + reps / 30));
 }
 
 /**
- * Load all personal records
+ * Load all personal records.
+ * Runs migration if needed, tries cloud first (caches result locally), falls back to local.
  * @returns {Promise<Array>} Array of PR objects
  */
 export async function loadPersonalRecords() {
   try {
-    // Try to load from Supabase first
+    // Run migration for exercise name changes (one-time)
+    await runMigrationIfNeeded();
+
+    // If a clear is in progress, return local only (which will be empty)
+    if (_syncBlocked) {
+      const json = await AsyncStorage.getItem(PR_STORAGE_KEY);
+      return json ? JSON.parse(json) : [];
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
@@ -48,18 +188,28 @@ export async function loadPersonalRecords() {
         .order('date', { ascending: false });
 
       if (!error && data) {
-        // Cache locally
-        await AsyncStorage.setItem(PR_STORAGE_KEY, JSON.stringify(data));
-        return data;
+        // Map snake_case fields from Supabase to camelCase
+        const mappedData = data.map(pr => ({
+          id: pr.id,
+          exercise: pr.exercise,
+          weight: pr.weight,
+          reps: pr.reps,
+          estimatedOneRepMax: pr.estimated_one_rep_max,
+          date: pr.date,
+          workoutId: pr.workout_id,
+          workoutName: pr.workout_name,
+        }));
+        // Apply migration to cloud data as well (in case cloud has old names)
+        const migratedData = migrateRecords(mappedData);
+        await AsyncStorage.setItem(PR_STORAGE_KEY, JSON.stringify(migratedData));
+        return migratedData;
       }
     }
 
-    // Fallback to local storage
     const json = await AsyncStorage.getItem(PR_STORAGE_KEY);
     return json ? JSON.parse(json) : [];
   } catch (error) {
     console.error('Error loading personal records:', error);
-    // Try local cache on error
     try {
       const json = await AsyncStorage.getItem(PR_STORAGE_KEY);
       return json ? JSON.parse(json) : [];
@@ -70,7 +220,7 @@ export async function loadPersonalRecords() {
 }
 
 /**
- * Save personal records
+ * Save personal records locally
  * @param {Array} records - Array of PR objects
  */
 async function savePersonalRecords(records) {
@@ -92,7 +242,6 @@ export async function getPRForExercise(exerciseName) {
 
   if (exercisePRs.length === 0) return null;
 
-  // Return the one with highest weight lifted
   return exercisePRs.reduce((best, current) =>
     current.weight > best.weight ? current : best
   );
@@ -111,13 +260,18 @@ export async function getPRHistory(exerciseName) {
 }
 
 /**
- * Check a workout for new PRs and save them
+ * Check a workout for new PRs and save them.
+ * Only returns celebration-worthy PRs (exercise must have a previous record to beat).
  * @param {Object} workout - Workout object with exercises
- * @returns {Promise<Array>} Array of new PRs achieved
+ * @returns {Promise<Array>} Array of new PRs achieved (for celebration)
  */
 export async function checkAndUpdatePRs(workout) {
+  // Don't process PRs if a data clear is in progress
+  if (_syncBlocked) return [];
+
   const currentRecords = await loadPersonalRecords();
   const newPRs = [];
+  const changedRecords = [];
 
   // Skip cardio workouts
   if (['Running', 'Cycling', 'Swimming'].includes(workout.type)) {
@@ -125,13 +279,13 @@ export async function checkAndUpdatePRs(workout) {
   }
 
   for (const exercise of workout.exercises) {
-    // Skip if no sets or cardio exercise
     if (!exercise.sets || exercise.sets.length === 0) continue;
     if (exercise.sets[0].distance !== undefined && exercise.sets[0].distance > 0) continue;
 
-    // Find best set in this exercise (highest weight lifted)
-    let bestSet = null;
+    let bestWeightSet = null;
     let bestWeight = 0;
+    let best1RMSet = null;
+    let best1RM = 0;
 
     for (const set of exercise.sets) {
       const weight = parseFloat(set.weight) || 0;
@@ -140,77 +294,87 @@ export async function checkAndUpdatePRs(workout) {
       if (weight > 0 && reps > 0) {
         if (weight > bestWeight) {
           bestWeight = weight;
-          bestSet = { weight, reps };
+          bestWeightSet = { weight, reps };
+        }
+        const estimated1RM = calculateOneRepMax(weight, reps);
+        if (estimated1RM > best1RM) {
+          best1RM = estimated1RM;
+          best1RMSet = { weight, reps, estimated1RM };
         }
       }
     }
 
-    if (!bestSet) continue;
+    if (!bestWeightSet) continue;
 
-    // Check against current PR for this exercise
+    const bestSet = best1RMSet || bestWeightSet;
+    const estimated1RM = calculateOneRepMax(bestSet.weight, bestSet.reps);
+
     const currentPR = currentRecords.find(pr => pr.exercise === exercise.name);
 
-    // Create record data for this exercise
     const recordData = {
       id: Date.now() + Math.random(),
       exercise: exercise.name,
       weight: bestSet.weight,
       reps: bestSet.reps,
-      estimatedOneRepMax: calculateOneRepMax(bestSet.weight, bestSet.reps),
+      estimatedOneRepMax: estimated1RM,
       date: workout.date,
       workoutId: workout.id,
       workoutName: workout.name,
       previousWeight: currentPR?.weight || null,
       previousReps: currentPR?.reps || null,
+      previous1RM: currentPR?.estimatedOneRepMax || null,
     };
 
     if (currentPR) {
-      // Exercise was done before - check if this beats the record
-      if (bestWeight > currentPR.weight) {
-        // This is a real PR - beat an existing record!
+      const isWeightPR = bestWeight > currentPR.weight;
+      const is1RMPR = estimated1RM > (currentPR.estimatedOneRepMax || 0);
+
+      if (isWeightPR || is1RMPR) {
         newPRs.push(recordData);
         const index = currentRecords.findIndex(pr => pr.exercise === exercise.name);
         currentRecords[index] = recordData;
+        changedRecords.push(recordData);
       }
     } else {
-      // First time doing this exercise - save for tracking but NOT a celebratory PR
+      // First time doing this exercise - track but do NOT celebrate
       currentRecords.push(recordData);
+      changedRecords.push(recordData);
     }
   }
 
-  // Save updated records if anything changed
-  const recordsChanged = currentRecords.length > 0;
-  if (recordsChanged) {
-    // STEP 1: Save locally (instant)
+  if (changedRecords.length > 0) {
     await savePersonalRecords(currentRecords);
 
-    // STEP 2: Sync celebration-worthy PRs to cloud in background
-    if (newPRs.length > 0) {
-      syncPRsToCloud(newPRs).catch(err => {
-        console.error('Background PR sync failed:', err);
-      });
-    }
+    syncPRsToCloud(changedRecords).catch(err => {
+      console.error('Background PR sync failed:', err);
+    });
   }
 
   return newPRs;
 }
 
-// Background cloud sync for PRs
-async function syncPRsToCloud(newPRs) {
+/**
+ * Background cloud sync for PRs.
+ * Respects the _syncBlocked flag to avoid racing with data clears.
+ */
+async function syncPRsToCloud(prsToSync) {
+  if (_syncBlocked) return;
+
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Sync PRs in parallel - delete old then insert new for each exercise
-    await Promise.all(newPRs.map(async (pr) => {
-      // Delete existing PR for this exercise (if any)
+    await Promise.all(prsToSync.map(async (pr) => {
+      if (_syncBlocked) return;
+
       await supabase
         .from('personal_records')
         .delete()
         .eq('user_id', user.id)
         .eq('exercise', pr.exercise);
 
-      // Insert new PR
+      if (_syncBlocked) return;
+
       const { error } = await supabase
         .from('personal_records')
         .insert({
@@ -234,23 +398,37 @@ async function syncPRsToCloud(newPRs) {
 }
 
 /**
- * Get all PRs grouped by category/muscle group
+ * Get all PRs grouped by exercise category
  * @returns {Promise<Object>} PRs grouped by category
  */
 export async function getPRsByCategory() {
   const { EXERCISE_DATABASE } = await import('../constants/workoutTypes');
+  const { loadCustomExercises } = await import('./customExercises');
   const records = await loadPersonalRecords();
+
+  // Load custom exercises to get their categories
+  const customExercises = await loadCustomExercises();
+  const customExerciseMap = {};
+  for (const ce of customExercises) {
+    customExerciseMap[ce.name] = ce.category;
+  }
 
   const grouped = {};
 
   for (const pr of records) {
-    // Find which category this exercise belongs to
     let category = 'Other';
+
+    // First check built-in exercises
     for (const [cat, exercises] of Object.entries(EXERCISE_DATABASE)) {
       if (exercises.includes(pr.exercise)) {
         category = cat;
         break;
       }
+    }
+
+    // If not found in built-in, check custom exercises
+    if (category === 'Other' && customExerciseMap[pr.exercise]) {
+      category = customExerciseMap[pr.exercise];
     }
 
     if (!grouped[category]) {
@@ -259,9 +437,9 @@ export async function getPRsByCategory() {
     grouped[category].push(pr);
   }
 
-  // Sort each category by weight lifted
   for (const category of Object.keys(grouped)) {
-    grouped[category].sort((a, b) => b.weight - a.weight);
+    // Sort by estimated 1RM (fallback to weight if no 1RM)
+    grouped[category].sort((a, b) => (b.estimatedOneRepMax || b.weight) - (a.estimatedOneRepMax || a.weight));
   }
 
   return grouped;
@@ -283,17 +461,14 @@ export async function getPRStats() {
     };
   }
 
-  // Count PRs in last 30 days
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const recentPRs = records.filter(pr => new Date(pr.date) >= thirtyDaysAgo).length;
 
-  // Find top exercise by weight lifted
   const topExercise = records.reduce((best, current) =>
     current.weight > (best?.weight || 0) ? current : best
   , null);
 
-  // Total weight across all PRs
   const totalWeight = records.reduce((sum, pr) => sum + pr.weight, 0);
 
   return {
@@ -305,7 +480,42 @@ export async function getPRStats() {
 }
 
 /**
- * Delete a personal record
+ * Clear all personal records (local + cloud).
+ * Blocks background sync to prevent race conditions, deletes cloud first
+ * so that loadPersonalRecords() can't re-cache stale data.
+ */
+export async function clearAllPersonalRecords() {
+  _syncBlocked = true;
+
+  try {
+    // 1. Delete from cloud FIRST so loadPersonalRecords() can't re-cache
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { error } = await supabase
+        .from('personal_records')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error clearing cloud PRs:', error);
+      }
+    }
+
+    // 2. Set local to empty array (not remove — prevents stale fallback)
+    await AsyncStorage.setItem(PR_STORAGE_KEY, JSON.stringify([]));
+
+    // 3. Reset migration flag so it re-runs if sample data is loaded
+    await AsyncStorage.removeItem(PR_MIGRATION_KEY);
+  } catch (error) {
+    console.error('Error clearing personal records:', error);
+  } finally {
+    // Unblock sync after a delay to let any in-flight operations settle
+    setTimeout(() => { _syncBlocked = false; }, 2000);
+  }
+}
+
+/**
+ * Delete a personal record for a specific exercise
  * @param {string} exerciseName - Exercise to delete PR for
  */
 export async function deletePR(exerciseName) {
@@ -313,7 +523,6 @@ export async function deletePR(exerciseName) {
   const filtered = records.filter(pr => pr.exercise !== exerciseName);
   await savePersonalRecords(filtered);
 
-  // Try to delete from Supabase
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {

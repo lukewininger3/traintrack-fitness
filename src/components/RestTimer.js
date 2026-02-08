@@ -32,6 +32,8 @@ export default function RestTimerButton() {
           timer.isComplete && styles.floatingButtonComplete,
         ]}
         onPress={() => timer.setIsExpanded(true)}
+        accessibilityLabel={`Rest timer: ${timer.formattedTime}`}
+        accessibilityRole="button"
       >
         {/* Circular Progress Ring - depletes as time runs down */}
         {timer.isRunning && (
@@ -80,8 +82,8 @@ export default function RestTimerButton() {
         animationType="fade"
         onRequestClose={() => timer.setIsExpanded(false)}
       >
-        <View style={styles.overlay}>
-          <View style={styles.container}>
+        <Pressable style={styles.overlay} onPress={() => timer.setIsExpanded(false)}>
+          <Pressable style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.headerTitle}>REST TIMER</Text>
@@ -89,6 +91,8 @@ export default function RestTimerButton() {
                 <Pressable
                   style={styles.headerButton}
                   onPress={() => setShowSettings(!showSettings)}
+                  accessibilityLabel="Timer settings"
+                  accessibilityRole="button"
                 >
                   <Settings
                     size={20}
@@ -99,6 +103,8 @@ export default function RestTimerButton() {
                 <Pressable
                   style={styles.headerButton}
                   onPress={() => timer.setIsExpanded(false)}
+                  accessibilityLabel="Close timer"
+                  accessibilityRole="button"
                 >
                   <X size={20} color={COLORS.text.secondary} strokeWidth={2} />
                 </Pressable>
@@ -250,8 +256,8 @@ export default function RestTimerButton() {
                 </Pressable>
               ))}
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </>
   );

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { supabase } from '../config/supabase';
 import { updateGoalProgress } from './goalsStorage';
+import { shareWorkout } from './socialStorage';
 
 const STORAGE_KEYS = {
   WORKOUTS: '@traintrack_workouts',
@@ -22,6 +23,51 @@ export const SYNC_STATUS = {
 const getCurrentUser = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   return user;
+};
+
+// Helper to check if user has sharing enabled
+const getUserSharePreference = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('share_workouts')
+      .eq('id', userId)
+      .single();
+
+    if (error) return true; // Default to sharing if we can't check
+    return data?.share_workouts !== false; // Default to true
+  } catch {
+    return true;
+  }
+};
+
+// Helper to auto-share a workout to social feed
+const autoShareWorkout = async (workout, userId) => {
+  try {
+    const shouldShare = await getUserSharePreference(userId);
+    if (!shouldShare) return;
+
+    // Check if this workout is already shared
+    const { data: existing } = await supabase
+      .from('shared_workouts')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('workout_id', String(workout.id))
+      .single();
+
+    if (existing) return; // Already shared
+
+    // Share the workout
+    await shareWorkout({
+      id: String(workout.id),
+      name: workout.name,
+      type: workout.type,
+      duration: workout.duration || 0,
+      exercises: workout.exercises || [],
+    });
+  } catch (error) {
+    console.error('Auto-share failed:', error);
+  }
 };
 
 // Update sync status
@@ -166,7 +212,7 @@ const syncToCloud = async (workouts) => {
 
 // Save workouts - LOCAL FIRST, then background cloud sync
 export const saveWorkouts = async (workouts, options = {}) => {
-  const { silent = false } = options;
+  const { silent = false, newWorkoutId = null } = options;
 
   try {
     // STEP 1: Save locally FIRST (instant)
@@ -182,6 +228,22 @@ export const saveWorkouts = async (workouts, options = {}) => {
     syncToCloud(workouts).catch(err => {
       console.error('Background sync failed:', err);
     });
+
+    // STEP 4: Auto-share new workout to social feed (non-blocking)
+    if (newWorkoutId) {
+      const newWorkout = workouts.find(w => w.id === newWorkoutId);
+      if (newWorkout) {
+        getCurrentUser().then(user => {
+          if (user) {
+            autoShareWorkout(newWorkout, user.id).catch(err => {
+              console.error('Auto-share failed:', err);
+            });
+          }
+        }).catch(err => {
+          console.error('Failed to get user for auto-share:', err);
+        });
+      }
+    }
 
     return { success: true, cloudSync: true };
   } catch (error) {

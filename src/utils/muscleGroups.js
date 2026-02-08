@@ -47,91 +47,126 @@ export const MUSCLE_GROUP_COLORS = {
 };
 
 // Map exercises to primary and secondary muscles
-// Primary muscles: main muscles worked
-// Secondary muscles: supporting muscles engaged
 export const EXERCISE_MUSCLE_MAP = {
-  // Chest exercises
-  'Bench Press': { primary: ['chest'], secondary: ['triceps', 'shoulders'] },
-  'Incline Bench Press': { primary: ['chest'], secondary: ['shoulders', 'triceps'] },
-  'Decline Bench Press': { primary: ['chest'], secondary: ['triceps'] },
-  'Dumbbell Bench Press': { primary: ['chest'], secondary: ['triceps', 'shoulders'] },
-  'Incline Dumbbell Press': { primary: ['chest', 'shoulders'], secondary: ['triceps'] },
-  'Dumbbell Flyes': { primary: ['chest'], secondary: [] },
-  'Cable Flyes': { primary: ['chest'], secondary: [] },
-  'Chest Press Machine': { primary: ['chest'], secondary: ['triceps'] },
-  'Push-Ups': { primary: ['chest'], secondary: ['triceps', 'shoulders', 'core'] },
-  'Dips': { primary: ['chest', 'triceps'], secondary: ['shoulders'] },
-  'Pec Deck': { primary: ['chest'], secondary: [] },
+  // ── Chest ──
+  'BB Bench Press':         { primary: ['chest'], secondary: ['triceps', 'shoulders'] },
+  'DB Bench Press':         { primary: ['chest'], secondary: ['triceps', 'shoulders'] },
+  'SM Bench Press':         { primary: ['chest'], secondary: ['triceps', 'shoulders'] },
+  'BB Incline Bench Press': { primary: ['chest', 'shoulders'], secondary: ['triceps'] },
+  'DB Incline Bench Press': { primary: ['chest', 'shoulders'], secondary: ['triceps'] },
+  'SM Incline Bench Press': { primary: ['chest', 'shoulders'], secondary: ['triceps'] },
+  'BB Decline Bench Press': { primary: ['chest'], secondary: ['triceps'] },
+  'DB Decline Bench Press': { primary: ['chest'], secondary: ['triceps'] },
+  'DB Flyes':               { primary: ['chest'], secondary: [] },
+  'Cable Flyes':            { primary: ['chest'], secondary: [] },
+  'Chest Press Machine':    { primary: ['chest'], secondary: ['triceps'] },
+  'Pec Deck':               { primary: ['chest'], secondary: [] },
+  'Push-Ups':               { primary: ['chest'], secondary: ['triceps', 'shoulders', 'core'] },
+  'Dips':                   { primary: ['chest', 'triceps'], secondary: ['shoulders'] },
+  'Landmine Press':         { primary: ['chest', 'shoulders'], secondary: ['triceps', 'core'] },
+  'DB Pullover':            { primary: ['chest'], secondary: ['back'] },
 
-  // Back exercises
-  'Deadlift': { primary: ['back', 'hamstrings', 'glutes'], secondary: ['quads', 'core'] },
-  'Barbell Row': { primary: ['back'], secondary: ['biceps'] },
-  'Dumbbell Row': { primary: ['back'], secondary: ['biceps'] },
-  'T-Bar Row': { primary: ['back'], secondary: ['biceps'] },
-  'Seated Cable Row': { primary: ['back'], secondary: ['biceps'] },
-  'Lat Pulldown': { primary: ['back'], secondary: ['biceps'] },
-  'Pull-Ups': { primary: ['back'], secondary: ['biceps', 'core'] },
-  'Chin-Ups': { primary: ['back', 'biceps'], secondary: [] },
-  'Face Pulls': { primary: ['back', 'shoulders'], secondary: [] },
-  'Shrugs': { primary: ['back'], secondary: ['shoulders'] },
-  'Hyperextensions': { primary: ['back', 'glutes'], secondary: ['hamstrings'] },
+  // ── Back ──
+  'BB Deadlift':            { primary: ['back', 'hamstrings', 'glutes'], secondary: ['quads', 'core'] },
+  'BB Bent Over Row':       { primary: ['back'], secondary: ['biceps'] },
+  'DB Row':                 { primary: ['back'], secondary: ['biceps'] },
+  'T-Bar Row':              { primary: ['back'], secondary: ['biceps'] },
+  'Seated Cable Row':       { primary: ['back'], secondary: ['biceps'] },
+  'Lat Pulldown':           { primary: ['back'], secondary: ['biceps'] },
+  'Pull-Ups':               { primary: ['back'], secondary: ['biceps', 'core'] },
+  'Chin-Ups':               { primary: ['back', 'biceps'], secondary: [] },
+  'Face Pulls':             { primary: ['back', 'shoulders'], secondary: [] },
+  'BB Shrugs':              { primary: ['back'], secondary: ['shoulders'] },
+  'DB Shrugs':              { primary: ['back'], secondary: ['shoulders'] },
+  'SM Shrugs':              { primary: ['back'], secondary: ['shoulders'] },
+  'Hyperextensions':        { primary: ['back', 'glutes'], secondary: ['hamstrings'] },
+  'Pendlay Row':            { primary: ['back'], secondary: ['biceps', 'core'] },
+  'Chest Supported DB Row': { primary: ['back'], secondary: ['biceps'] },
+  'Cable Pullover':         { primary: ['back'], secondary: ['chest'] },
+  'Straight Arm Pulldown':  { primary: ['back'], secondary: [] },
 
-  // Shoulder exercises
-  'Overhead Press': { primary: ['shoulders'], secondary: ['triceps', 'core'] },
-  'Dumbbell Shoulder Press': { primary: ['shoulders'], secondary: ['triceps'] },
-  'Arnold Press': { primary: ['shoulders'], secondary: ['triceps'] },
-  'Lateral Raises': { primary: ['shoulders'], secondary: [] },
-  'Front Raises': { primary: ['shoulders'], secondary: [] },
-  'Rear Delt Flyes': { primary: ['shoulders'], secondary: ['back'] },
-  'Upright Rows': { primary: ['shoulders'], secondary: ['biceps'] },
-  'Cable Lateral Raises': { primary: ['shoulders'], secondary: [] },
+  // ── Shoulders ──
+  'BB Overhead Press':      { primary: ['shoulders'], secondary: ['triceps', 'core'] },
+  'DB Overhead Press':      { primary: ['shoulders'], secondary: ['triceps', 'core'] },
+  'SM Overhead Press':      { primary: ['shoulders'], secondary: ['triceps'] },
+  'Arnold Press':           { primary: ['shoulders'], secondary: ['triceps'] },
+  'DB Lateral Raises':      { primary: ['shoulders'], secondary: [] },
+  'Cable Lateral Raises':   { primary: ['shoulders'], secondary: [] },
+  'DB Front Raises':        { primary: ['shoulders'], secondary: [] },
+  'DB Rear Delt Flyes':     { primary: ['shoulders'], secondary: ['back'] },
+  'Cable Rear Delt Flyes':  { primary: ['shoulders'], secondary: ['back'] },
+  'Reverse Pec Deck':       { primary: ['shoulders'], secondary: ['back'] },
+  'BB Upright Row':         { primary: ['shoulders'], secondary: ['biceps'] },
+  'DB Upright Row':         { primary: ['shoulders'], secondary: ['biceps'] },
+  'Machine Shoulder Press': { primary: ['shoulders'], secondary: ['triceps'] },
 
-  // Biceps exercises
-  'Barbell Curl': { primary: ['biceps'], secondary: [] },
-  'Dumbbell Curl': { primary: ['biceps'], secondary: [] },
-  'Hammer Curl': { primary: ['biceps'], secondary: [] },
-  'Preacher Curl': { primary: ['biceps'], secondary: [] },
-  'Concentration Curl': { primary: ['biceps'], secondary: [] },
-  'Cable Curl': { primary: ['biceps'], secondary: [] },
-  'Incline Dumbbell Curl': { primary: ['biceps'], secondary: [] },
-  'Spider Curl': { primary: ['biceps'], secondary: [] },
-  '21s': { primary: ['biceps'], secondary: [] },
+  // ── Biceps ──
+  'BB Curl':                { primary: ['biceps'], secondary: [] },
+  'EZ Bar Curl':            { primary: ['biceps'], secondary: [] },
+  'DB Curl':                { primary: ['biceps'], secondary: [] },
+  'DB Hammer Curl':         { primary: ['biceps'], secondary: [] },
+  'BB Preacher Curl':       { primary: ['biceps'], secondary: [] },
+  'DB Preacher Curl':       { primary: ['biceps'], secondary: [] },
+  'DB Concentration Curl':  { primary: ['biceps'], secondary: [] },
+  'Cable Curl':             { primary: ['biceps'], secondary: [] },
+  'DB Incline Curl':        { primary: ['biceps'], secondary: [] },
+  'Spider Curl':            { primary: ['biceps'], secondary: [] },
+  'Reverse Curl':           { primary: ['biceps'], secondary: [] },
+  'Machine Curl':           { primary: ['biceps'], secondary: [] },
 
-  // Triceps exercises
-  'Tricep Pushdown': { primary: ['triceps'], secondary: [] },
-  'Overhead Tricep Extension': { primary: ['triceps'], secondary: [] },
-  'Skull Crushers': { primary: ['triceps'], secondary: [] },
-  'Close-Grip Bench Press': { primary: ['triceps'], secondary: ['chest'] },
-  'Tricep Dips': { primary: ['triceps'], secondary: ['chest', 'shoulders'] },
-  'Cable Overhead Extension': { primary: ['triceps'], secondary: [] },
-  'Diamond Push-Ups': { primary: ['triceps'], secondary: ['chest', 'shoulders'] },
-  'Kickbacks': { primary: ['triceps'], secondary: [] },
+  // ── Triceps ──
+  'Cable Rope Pushdown':         { primary: ['triceps'], secondary: [] },
+  'Cable Straight Bar Pushdown': { primary: ['triceps'], secondary: [] },
+  'BB Skull Crushers':           { primary: ['triceps'], secondary: [] },
+  'DB Skull Crushers':           { primary: ['triceps'], secondary: [] },
+  'BB Close-Grip Bench Press':   { primary: ['triceps'], secondary: ['chest'] },
+  'SM Close-Grip Bench Press':   { primary: ['triceps'], secondary: ['chest'] },
+  'Tricep Dips':                 { primary: ['triceps'], secondary: ['chest', 'shoulders'] },
+  'Cable Overhead Extension':    { primary: ['triceps'], secondary: [] },
+  'DB Overhead Tricep Extension': { primary: ['triceps'], secondary: [] },
+  'DB Kickbacks':                { primary: ['triceps'], secondary: [] },
+  'Diamond Push-Ups':            { primary: ['triceps'], secondary: ['chest', 'shoulders'] },
+  'Machine Tricep Extension':    { primary: ['triceps'], secondary: [] },
 
-  // Leg exercises
-  'Squat': { primary: ['quads', 'glutes'], secondary: ['hamstrings', 'core'] },
-  'Front Squat': { primary: ['quads'], secondary: ['glutes', 'core'] },
-  'Leg Press': { primary: ['quads', 'glutes'], secondary: ['hamstrings'] },
-  'Romanian Deadlift': { primary: ['hamstrings', 'glutes'], secondary: ['back'] },
-  'Leg Curl': { primary: ['hamstrings'], secondary: [] },
-  'Leg Extension': { primary: ['quads'], secondary: [] },
-  'Walking Lunges': { primary: ['quads', 'glutes'], secondary: ['hamstrings'] },
-  'Bulgarian Split Squat': { primary: ['quads', 'glutes'], secondary: ['hamstrings'] },
-  'Calf Raises': { primary: ['calves'], secondary: [] },
-  'Goblet Squat': { primary: ['quads', 'glutes'], secondary: ['core'] },
-  'Hack Squat': { primary: ['quads'], secondary: ['glutes'] },
-  'Step-Ups': { primary: ['quads', 'glutes'], secondary: ['hamstrings'] },
+  // ── Legs ──
+  'BB Back Squat':          { primary: ['quads', 'glutes'], secondary: ['hamstrings', 'core'] },
+  'BB Front Squat':         { primary: ['quads'], secondary: ['glutes', 'core'] },
+  'SM Squat':               { primary: ['quads', 'glutes'], secondary: ['hamstrings'] },
+  'Goblet Squat':           { primary: ['quads', 'glutes'], secondary: ['core'] },
+  'Hack Squat':             { primary: ['quads'], secondary: ['glutes'] },
+  'Leg Press':              { primary: ['quads', 'glutes'], secondary: ['hamstrings'] },
+  'BB Romanian Deadlift':   { primary: ['hamstrings', 'glutes'], secondary: ['back'] },
+  'DB Romanian Deadlift':   { primary: ['hamstrings', 'glutes'], secondary: ['back'] },
+  'BB Sumo Deadlift':       { primary: ['quads', 'glutes', 'hamstrings'], secondary: ['back', 'core'] },
+  'Leg Curl':               { primary: ['hamstrings'], secondary: [] },
+  'Leg Extension':          { primary: ['quads'], secondary: [] },
+  'DB Walking Lunges':      { primary: ['quads', 'glutes'], secondary: ['hamstrings'] },
+  'BB Walking Lunges':      { primary: ['quads', 'glutes'], secondary: ['hamstrings', 'core'] },
+  'SM Lunges':              { primary: ['quads', 'glutes'], secondary: ['hamstrings'] },
+  'Bulgarian Split Squat':  { primary: ['quads', 'glutes'], secondary: ['hamstrings'] },
+  'Standing Calf Raises':   { primary: ['calves'], secondary: [] },
+  'Seated Calf Raises':     { primary: ['calves'], secondary: [] },
+  'SM Calf Raises':         { primary: ['calves'], secondary: [] },
+  'DB Step-Ups':            { primary: ['quads', 'glutes'], secondary: ['hamstrings'] },
+  'BB Hip Thrust':          { primary: ['glutes'], secondary: ['hamstrings', 'core'] },
+  'SM Hip Thrust':          { primary: ['glutes'], secondary: ['hamstrings'] },
+  'Good Mornings':          { primary: ['hamstrings', 'glutes'], secondary: ['back', 'core'] },
 
-  // Core exercises
-  'Plank': { primary: ['core'], secondary: ['shoulders'] },
-  'Side Plank': { primary: ['core'], secondary: [] },
-  'Crunches': { primary: ['core'], secondary: [] },
-  'Bicycle Crunches': { primary: ['core'], secondary: [] },
-  'Russian Twists': { primary: ['core'], secondary: [] },
-  'Leg Raises': { primary: ['core'], secondary: [] },
-  'Ab Wheel': { primary: ['core'], secondary: ['shoulders'] },
-  'Cable Crunches': { primary: ['core'], secondary: [] },
-  'Mountain Climbers': { primary: ['core'], secondary: ['shoulders'] },
-  'Hanging Knee Raises': { primary: ['core'], secondary: [] },
+  // ── Core ──
+  'Plank':                  { primary: ['core'], secondary: ['shoulders'] },
+  'Side Plank':             { primary: ['core'], secondary: [] },
+  'Crunches':               { primary: ['core'], secondary: [] },
+  'Bicycle Crunches':       { primary: ['core'], secondary: [] },
+  'Russian Twists':         { primary: ['core'], secondary: [] },
+  'Hanging Leg Raises':     { primary: ['core'], secondary: [] },
+  'Ab Wheel':               { primary: ['core'], secondary: ['shoulders'] },
+  'Cable Crunches':         { primary: ['core'], secondary: [] },
+  'Mountain Climbers':      { primary: ['core'], secondary: ['shoulders'] },
+  'Hanging Knee Raises':    { primary: ['core'], secondary: [] },
+  'Pallof Press':           { primary: ['core'], secondary: [] },
+  'Cable Woodchoppers':     { primary: ['core'], secondary: ['shoulders'] },
+  'Dead Bug':               { primary: ['core'], secondary: [] },
+  'Decline Sit-Ups':        { primary: ['core'], secondary: [] },
 };
 
 // Category to primary muscle group mapping (for custom exercises or unknown exercises)
@@ -143,7 +178,7 @@ export const CATEGORY_MUSCLE_MAP = {
   Triceps: ['triceps'],
   Legs: ['quads', 'hamstrings', 'glutes', 'calves'],
   Core: ['core'],
-  Cardio: [], // Cardio doesn't target specific strength muscles
+  Cardio: [],
 };
 
 /**
@@ -153,12 +188,10 @@ export const CATEGORY_MUSCLE_MAP = {
  * @returns {Object} { primary: string[], secondary: string[] }
  */
 export function getMuscleGroups(exerciseName, category = null) {
-  // Check exact match first
   if (EXERCISE_MUSCLE_MAP[exerciseName]) {
     return EXERCISE_MUSCLE_MAP[exerciseName];
   }
 
-  // Fallback to category mapping
   if (category && CATEGORY_MUSCLE_MAP[category]) {
     return {
       primary: CATEGORY_MUSCLE_MAP[category],
@@ -166,7 +199,6 @@ export function getMuscleGroups(exerciseName, category = null) {
     };
   }
 
-  // Default - return empty
   return { primary: [], secondary: [] };
 }
 
@@ -189,13 +221,11 @@ export function analyzeMuscleGroupCoverage(workouts, days = 7) {
     };
   });
 
-  // Filter workouts within date range
   const recentWorkouts = workouts.filter(w => {
     const workoutDate = new Date(w.date);
     return workoutDate >= cutoffDate;
   });
 
-  // Analyze each workout
   recentWorkouts.forEach(workout => {
     if (!workout.exercises) return;
 
@@ -203,7 +233,6 @@ export function analyzeMuscleGroupCoverage(workouts, days = 7) {
       const muscles = getMuscleGroups(exercise.name);
       const workoutDate = new Date(workout.date);
 
-      // Count primary muscles
       muscles.primary.forEach(muscle => {
         if (muscleData[muscle]) {
           muscleData[muscle].count += 1;
@@ -213,7 +242,6 @@ export function analyzeMuscleGroupCoverage(workouts, days = 7) {
         }
       });
 
-      // Count secondary muscles (weighted less)
       muscles.secondary.forEach(muscle => {
         if (muscleData[muscle]) {
           muscleData[muscle].count += 0.5;
@@ -225,7 +253,6 @@ export function analyzeMuscleGroupCoverage(workouts, days = 7) {
     });
   });
 
-  // Calculate days since last training
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -247,9 +274,9 @@ export function analyzeMuscleGroupCoverage(workouts, days = 7) {
  */
 export function getRecoveryStatus(daysSince) {
   if (daysSince === null) return 'untrained';
-  if (daysSince >= 3) return 'recovered'; // Green - fully recovered
-  if (daysSince >= 1) return 'recent'; // Yellow - recently trained
-  return 'fatigued'; // Red - needs rest
+  if (daysSince >= 3) return 'recovered';
+  if (daysSince >= 1) return 'recent';
+  return 'fatigued';
 }
 
 /**

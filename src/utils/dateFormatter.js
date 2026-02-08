@@ -47,11 +47,25 @@ export const formatDateShort = (dateString) => {
 
 /**
  * Format date for long display (e.g., "January 15, 2024")
- * @param {string} dateString - Date string to format
+ * @param {string} dateString - Date string to format (YYYY-MM-DD or ISO timestamp)
  * @returns {string} Formatted date
  */
 export const formatDateLong = (dateString) => {
-  const date = parseLocalDate(dateString);
+  if (!dateString) return 'Unknown';
+
+  let date;
+  // Check if it's an ISO timestamp (contains 'T') or just a date
+  if (dateString.includes('T')) {
+    // ISO timestamp - parse directly
+    date = new Date(dateString);
+  } else {
+    // YYYY-MM-DD format - use local parsing
+    date = parseLocalDate(dateString);
+  }
+
+  // Check for invalid date
+  if (isNaN(date.getTime())) return 'Unknown';
+
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',

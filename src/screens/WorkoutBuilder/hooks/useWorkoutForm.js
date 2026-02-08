@@ -113,6 +113,7 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
     const template = templates.find(t => t.id === parseInt(templateId));
     if (template) {
       const now = new Date();
+      const isTemplateCardio = isCardioWorkoutType(template.type);
       dispatch({
         type: ACTIONS.SET_WORKOUT,
         payload: {
@@ -123,25 +124,34 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
           notes: '',
           exercises: template.exercises.map(ex => ({
             name: ex.name,
-            sets: ex.sets.map(set => ({
-              weight: set.weight || 0,
-              reps: set.reps || 0,
-              distance: set.distance || 0,
-              time: set.time || 0,
-              pace: set.pace || 0
-            })),
+            sets: ex.sets.map(set => {
+              // Only include relevant fields based on workout type
+              if (isTemplateCardio) {
+                return {
+                  distance: set.distance || 0,
+                  time: set.time || 0,
+                  pace: set.pace || 0
+                };
+              } else {
+                return {
+                  weight: set.weight || 0,
+                  reps: set.reps || 0
+                };
+              }
+            }),
             notes: ex.notes || ''
           }))
         }
       });
     }
-  }, [templateId]);
+  }, [templateId, isCardioWorkoutType]);
 
   // Load from repeat
   const loadFromRepeat = useCallback(() => {
     try {
       const data = JSON.parse(repeatData);
       const now = new Date();
+      const isRepeatCardio = isCardioWorkoutType(data.type);
       dispatch({
         type: ACTIONS.SET_WORKOUT,
         payload: {
@@ -152,13 +162,21 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
           notes: '',
           exercises: data.exercises.map(ex => ({
             name: ex.name,
-            sets: ex.sets.map(set => ({
-              weight: set.weight || 0,
-              reps: set.reps || 0,
-              distance: set.distance || 0,
-              time: set.time || 0,
-              pace: set.pace || 0
-            })),
+            sets: ex.sets.map(set => {
+              // Only include relevant fields based on workout type
+              if (isRepeatCardio) {
+                return {
+                  distance: set.distance || 0,
+                  time: set.time || 0,
+                  pace: set.pace || 0
+                };
+              } else {
+                return {
+                  weight: set.weight || 0,
+                  reps: set.reps || 0
+                };
+              }
+            }),
             notes: ex.notes || ''
           }))
         }
@@ -166,16 +184,21 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
     } catch (e) {
       console.error('Failed to parse repeat data:', e);
     }
-  }, [repeatData]);
+  }, [repeatData, isCardioWorkoutType]);
 
   // Load from workout details (from step 1)
   const loadFromWorkoutDetails = useCallback(async () => {
     try {
       const details = JSON.parse(workoutDetails);
       let exercises = [];
+      const isCardio = isCardioWorkoutType(details.type);
 
+      // If returning from a round-trip (builder → details → builder), use existing exercises directly
+      if (details.existingExercises && details.existingExercises.length > 0) {
+        exercises = details.existingExercises;
+      }
       // If editing, load existing exercises
-      if (isEditing) {
+      else if (isEditing) {
         const workouts = await loadWorkouts({ skipBackgroundRefresh: true });
         const existingWorkout = workouts.find(w => w.id === parseInt(editingWorkoutId));
         if (existingWorkout) {
@@ -189,13 +212,21 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
         if (template) {
           exercises = template.exercises.map(ex => ({
             name: ex.name,
-            sets: ex.sets.map(set => ({
-              weight: set.weight || 0,
-              reps: set.reps || 0,
-              distance: set.distance || 0,
-              time: set.time || 0,
-              pace: set.pace || 0
-            })),
+            sets: ex.sets.map(set => {
+              // Only include relevant fields based on workout type
+              if (isCardio) {
+                return {
+                  distance: set.distance || 0,
+                  time: set.time || 0,
+                  pace: set.pace || 0
+                };
+              } else {
+                return {
+                  weight: set.weight || 0,
+                  reps: set.reps || 0
+                };
+              }
+            }),
             notes: ex.notes || ''
           }));
         }
@@ -205,15 +236,63 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
         const repeatInfo = JSON.parse(repeatData);
         exercises = repeatInfo.exercises.map(ex => ({
           name: ex.name,
-          sets: ex.sets.map(set => ({
-            weight: set.weight || 0,
-            reps: set.reps || 0,
-            distance: set.distance || 0,
-            time: set.time || 0,
-            pace: set.pace || 0
-          })),
+          sets: ex.sets.map(set => {
+            // Only include relevant fields based on workout type
+            if (isCardio) {
+              return {
+                distance: set.distance || 0,
+                time: set.time || 0,
+                pace: set.pace || 0
+              };
+            } else {
+              return {
+                weight: set.weight || 0,
+                reps: set.reps || 0
+              };
+            }
+          }),
           notes: ex.notes || ''
         }));
+      }
+      // If from planned workout (Goals screen), convert planned exercises
+      else if (details.plannedExercises && details.plannedExercises.length > 0) {
+        exercises = details.plannedExercises.map(ex => {
+          if (isCardio) {
+            // For cardio, create a set with distance/time/pace fields
+            return {
+              name: ex.name,
+              sets: [{
+                distance: ex.distance || 0,
+                time: 0,
+                pace: 0
+              }],
+              notes: ''
+            };
+          } else {
+            // For strength exercises, check if planned sets with weights exist
+            if (ex.sets && ex.sets.length > 0) {
+              // Use planned sets with pre-filled weights, reps = 0 for user to fill in
+              return {
+                name: ex.name,
+                sets: ex.sets.map(s => ({
+                  weight: s.weight ? parseFloat(s.weight) : 0,
+                  reps: 0
+                })),
+                notes: ''
+              };
+            } else {
+              // No planned sets - create one empty set
+              return {
+                name: ex.name,
+                sets: [{
+                  weight: 0,
+                  reps: 0
+                }],
+                notes: ''
+              };
+            }
+          }
+        });
       }
 
       dispatch({
@@ -224,13 +303,14 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
           date: details.date,
           time: details.time,
           notes: details.notes || '',
-          exercises: exercises
+          exercises: exercises,
+          plannedWorkoutId: details.plannedWorkoutId || null,
         }
       });
     } catch (e) {
       console.error('Failed to parse workout details:', e);
     }
-  }, [workoutDetails, isEditing, editingWorkoutId, isFromTemplate, templateId, isRepeating, repeatData]);
+  }, [workoutDetails, isEditing, editingWorkoutId, isFromTemplate, templateId, isRepeating, repeatData, isCardioWorkoutType]);
 
   // Initialize workout data
   useEffect(() => {
@@ -360,8 +440,9 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
         );
         await saveWorkouts(updated);
       } else {
-        savedWorkout = { ...workoutToSave, id: Date.now() };
-        await saveWorkouts([...workouts, savedWorkout]);
+        const newId = Date.now();
+        savedWorkout = { ...workoutToSave, id: newId };
+        await saveWorkouts([...workouts, savedWorkout], { newWorkoutId: newId });
       }
 
       // Check for new PRs
