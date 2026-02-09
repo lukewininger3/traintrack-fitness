@@ -261,12 +261,20 @@ export const saveWorkouts = async (workouts, options = {}) => {
 
 // Load workouts - LOCAL FIRST (instant), optional background cloud refresh
 export const loadWorkouts = async (options = {}) => {
-  const { skipBackgroundRefresh = false } = options;
+  const { skipBackgroundRefresh = false, maxMonths = null } = options;
 
   // STEP 1: Return local data immediately (instant)
-  const localData = await loadFromLocalCache();
+  let localData = await loadFromLocalCache();
 
-  // STEP 2: Optionally trigger background cloud sync
+  // STEP 2: Optionally filter to recent months to reduce memory usage
+  if (maxMonths && localData.length > 0) {
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - maxMonths);
+    const cutoffStr = cutoffDate.toISOString().split('T')[0];
+    localData = localData.filter(w => w.date >= cutoffStr);
+  }
+
+  // STEP 3: Optionally trigger background cloud sync
   // Skip during save operations to avoid race conditions
   if (!skipBackgroundRefresh) {
     refreshFromCloud().catch(err => {

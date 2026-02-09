@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../config/supabase';
 
 const GOALS_STORAGE_KEY = '@traintrack_weekly_goals';
 const GOALS_HISTORY_KEY = '@traintrack_goals_history';
@@ -12,6 +13,14 @@ const formatLocalDate = (date) => {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+/**
+ * Get current user
+ */
+const getCurrentUser = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
 };
 
 /**
@@ -90,15 +99,130 @@ export const createDefaultGoals = (weekStart) => ({
 });
 
 /**
+ * Sync goals to cloud (background, non-blocking)
+ */
+const syncGoalsToCloud = async (goals) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('weekly_goals')
+      .upsert({
+        user_id: user.id,
+        week_start: goals.weekStart,
+        goals: goals.goals,
+        planned_workouts: goals.plannedWorkouts,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id,week_start',
+      });
+
+    if (error) {
+      console.error('Failed to sync goals to cloud:', error);
+    }
+  } catch (error) {
+    console.error('Cloud sync error:', error);
+  }
+};
+
+/**
+ * Refresh goals from cloud (background)
+ */
+const refreshGoalsFromCloud = async (weekStart) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from('weekly_goals')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('week_start', weekStart)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Failed to fetch goals from cloud:', error);
+      return null;
+    }
+
+    if (data) {
+      // Update local cache with cloud data
+      const cloudGoals = {
+        id: data.id,
+        weekStart: data.week_start,
+        goals: data.goals || [],
+        plannedWorkouts: data.planned_workouts || [],
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+
+      // Save to local
+      const localData = await AsyncStorage.getItem(GOALS_STORAGE_KEY);
+      const allGoals = localData ? JSON.parse(localData) : {};
+      allGoals[weekStart] = cloudGoals;
+      await AsyncStorage.setItem(GOALS_STORAGE_KEY, JSON.stringify(allGoals));
+
+      return cloudGoals;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Cloud refresh error:', error);
+    return null;
+  }
+};
+
+/**
+ * Sync all local goals to cloud (for migration)
+ */
+export const migrateGoalsToCloud = async () => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return;
+
+    const localData = await AsyncStorage.getItem(GOALS_STORAGE_KEY);
+    if (!localData) return;
+
+    const allGoals = JSON.parse(localData);
+
+    for (const weekStart of Object.keys(allGoals)) {
+      const goals = allGoals[weekStart];
+      await supabase
+        .from('weekly_goals')
+        .upsert({
+          user_id: user.id,
+          week_start: weekStart,
+          goals: goals.goals || [],
+          planned_workouts: goals.plannedWorkouts || [],
+          updated_at: goals.updatedAt || new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,week_start',
+        });
+    }
+
+    console.log('Goals migration complete');
+  } catch (error) {
+    console.error('Goals migration error:', error);
+  }
+};
+
+/**
  * Load current week's goals
  */
 export const loadWeeklyGoals = async (weekStart = getWeekStart()) => {
   try {
+    // Load from local first (instant)
     const data = await AsyncStorage.getItem(GOALS_STORAGE_KEY);
-    if (!data) return null;
+    const allGoals = data ? JSON.parse(data) : {};
+    const localGoals = allGoals[weekStart] || null;
 
-    const allGoals = JSON.parse(data);
-    return allGoals[weekStart] || null;
+    // Refresh from cloud in background
+    refreshGoalsFromCloud(weekStart).catch(err => {
+      console.error('Background goals refresh failed:', err);
+    });
+
+    return localGoals;
   } catch (error) {
     console.error('Error loading weekly goals:', error);
     return null;
@@ -127,6 +251,7 @@ export const loadAllWeeklyGoals = async () => {
  */
 export const saveWeeklyGoals = async (goals) => {
   try {
+    // Save locally first (instant)
     const data = await AsyncStorage.getItem(GOALS_STORAGE_KEY);
     const allGoals = data ? JSON.parse(data) : {};
 
@@ -136,6 +261,12 @@ export const saveWeeklyGoals = async (goals) => {
     };
 
     await AsyncStorage.setItem(GOALS_STORAGE_KEY, JSON.stringify(allGoals));
+
+    // Sync to cloud in background (non-blocking)
+    syncGoalsToCloud(allGoals[goals.weekStart]).catch(err => {
+      console.error('Background goals sync failed:', err);
+    });
+
     return { success: true };
   } catch (error) {
     console.error('Error saving weekly goals:', error);

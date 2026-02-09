@@ -1,5 +1,6 @@
 export const WORKOUT_TYPES = ['Strength', 'Running', 'Cycling', 'Swimming'];
 
+// Exercise database - static object (Proxy was causing issues with Hermes in production)
 export const EXERCISE_DATABASE = {
   Chest: [
     'BB Bench Press',

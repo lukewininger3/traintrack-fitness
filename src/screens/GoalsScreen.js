@@ -1,4 +1,4 @@
-import { BookOpen, Calendar, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, Edit3, Plus, Scale, Search, Target, Trash2, X } from 'lucide-react-native';
+import { Activity, BookOpen, Calendar, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, Edit3, Plus, Scale, Search, Target, Trash2, X } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -260,12 +260,25 @@ export default function GoalsScreen() {
   };
 
   const addExerciseToPlanned = (exerciseName) => {
-    // Check if already added
-    if (plannedExercises.some(e => e.name === exerciseName)) {
+    // For cardio types, allow multiple sessions (e.g., multiple Running sessions)
+    const isCardioSession = isCardioType(exerciseName);
+
+    // Check if already added (only for non-cardio exercises)
+    if (!isCardioSession && plannedExercises.some(e => e.name === exerciseName)) {
       Alert.alert('Already Added', 'This exercise is already in your plan');
       return;
     }
-    setPlannedExercises([...plannedExercises, { name: exerciseName, distance: null, sets: [] }]);
+
+    // For cardio, name sessions as "Session 1", "Session 2", etc.
+    let sessionName = exerciseName;
+    if (isCardioSession) {
+      const existingSessionCount = plannedExercises.filter(e =>
+        e.name.startsWith('Session') || e.name === exerciseName
+      ).length;
+      sessionName = `Session ${existingSessionCount + 1}`;
+    }
+
+    setPlannedExercises([...plannedExercises, { name: sessionName, distance: null, sets: [] }]);
     setShowExercisePicker(false);
     setExerciseSearchQuery('');
     setSelectedCategory(null);
@@ -311,6 +324,40 @@ export default function GoalsScreen() {
     const sets = (exercise.sets || []).filter((_, i) => i !== setIndex);
     updated[exerciseIndex] = { ...exercise, sets };
     setPlannedExercises(updated);
+  };
+
+  // Handle workout type change with warning if switching between cardio/strength with existing data
+  const handleWorkoutTypeChange = (newType) => {
+    // If same type, do nothing
+    if (newType === plannedWorkoutType) return;
+
+    // Check if switching between cardio and strength
+    const currentIsCardio = isCardioType(plannedWorkoutType);
+    const newIsCardio = isCardioType(newType);
+    const isSwitchingCategory = currentIsCardio !== newIsCardio;
+
+    // If switching category and there are exercises/sessions, warn the user
+    if (isSwitchingCategory && plannedExercises.length > 0) {
+      const currentLabel = currentIsCardio ? 'sessions' : 'exercises';
+      Alert.alert(
+        'Change Workout Type?',
+        `Switching to ${newIsCardio ? 'cardio' : 'strength'} will remove your current ${currentLabel}. Continue?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Continue',
+            style: 'destructive',
+            onPress: () => {
+              setPlannedExercises([]);
+              setPlannedWorkoutType(newType);
+            },
+          },
+        ]
+      );
+    } else {
+      // No data to lose or staying within same category, just switch
+      setPlannedWorkoutType(newType);
+    }
   };
 
   // Get filtered exercises based on search and category
@@ -856,14 +903,14 @@ export default function GoalsScreen() {
 
                 <Text style={styles.inputLabel}>WORKOUT TYPE</Text>
                 <View style={styles.typeButtons}>
-                  {['Strength', 'Running', 'Cycling', 'Swimming', 'Other'].map(type => (
+                  {['Strength', 'Running', 'Cycling', 'Swimming'].map(type => (
                     <Pressable
                       key={type}
                       style={[
                         styles.typeButton,
                         plannedWorkoutType === type && styles.typeButtonActive,
                       ]}
-                      onPress={() => setPlannedWorkoutType(type)}
+                      onPress={() => handleWorkoutTypeChange(type)}
                     >
                       <Text style={[
                         styles.typeButtonText,
@@ -875,12 +922,14 @@ export default function GoalsScreen() {
                   ))}
                 </View>
 
-                {/* Exercises Section */}
+                {/* Exercises/Sessions Section */}
                 <View style={styles.exercisesSection}>
                   <View style={styles.exercisesSectionHeader}>
-                    <Text style={styles.inputLabel}>EXERCISES</Text>
+                    <Text style={styles.inputLabel}>
+                      {isCardioType(plannedWorkoutType) ? 'SESSIONS' : 'EXERCISES'}
+                    </Text>
                     <Text style={styles.exercisesSectionSubtitle}>
-                      {isCardioType(plannedWorkoutType) ? 'Add activities and set distance' : 'Add exercises and optionally set target weights'}
+                      {isCardioType(plannedWorkoutType) ? 'Add sessions and set distance' : 'Add exercises and optionally set target weights'}
                     </Text>
                   </View>
 
@@ -890,7 +939,11 @@ export default function GoalsScreen() {
                         <View key={index} style={styles.plannedExerciseItem}>
                           <View style={styles.plannedExerciseHeader}>
                             <View style={styles.plannedExerciseInfo}>
-                              <Dumbbell size={16} color={COLORS.accent.primary} strokeWidth={2} />
+                              {isCardioType(plannedWorkoutType) ? (
+                                <Activity size={16} color={COLORS.accent.primary} strokeWidth={2} />
+                              ) : (
+                                <Dumbbell size={16} color={COLORS.accent.primary} strokeWidth={2} />
+                              )}
                               <Text style={styles.plannedExerciseName}>{exercise.name}</Text>
                             </View>
                             <Pressable
@@ -961,28 +1014,41 @@ export default function GoalsScreen() {
                     </View>
                   ) : (
                     <View style={styles.noExercisesPlanned}>
-                      <Dumbbell size={24} color={COLORS.text.tertiary} />
-                      <Text style={styles.noExercisesText}>No exercises added yet</Text>
+                      {isCardioType(plannedWorkoutType) ? (
+                        <Activity size={24} color={COLORS.text.tertiary} />
+                      ) : (
+                        <Dumbbell size={24} color={COLORS.text.tertiary} />
+                      )}
+                      <Text style={styles.noExercisesText}>
+                        {isCardioType(plannedWorkoutType) ? 'No sessions added yet' : 'No exercises added yet'}
+                      </Text>
                     </View>
                   )}
 
                   <TouchableOpacity
                     onPress={() => {
-                      openExercisePicker();
+                      if (isCardioType(plannedWorkoutType)) {
+                        // For cardio, add a session directly with the workout type name
+                        addExerciseToPlanned(plannedWorkoutType);
+                      } else {
+                        openExercisePicker();
+                      }
                     }}
                     style={styles.addExerciseButton}
                     activeOpacity={0.7}
                   >
                     <Plus size={18} color={COLORS.accent.primary} strokeWidth={2.5} />
-                    <Text style={styles.addExerciseButtonText}>Add Exercise</Text>
+                    <Text style={styles.addExerciseButtonText}>
+                      {isCardioType(plannedWorkoutType) ? 'Add Session' : 'Add Exercise'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
               </ScrollView>
 
               <View style={styles.planModalFooter}>
-                <Pressable onPress={handlePlanWorkout} style={styles.modalButton}>
-                  <Text style={styles.modalButtonText}>
+                <Pressable onPress={handlePlanWorkout} style={styles.planWorkoutButton}>
+                  <Text style={styles.planWorkoutButtonText}>
                     {editingWorkout ? 'Save Changes' : 'Plan Workout'}
                   </Text>
                 </Pressable>
@@ -2076,6 +2142,18 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background.primary,
     borderTopWidth: 1,
     borderTopColor: COLORS.surface.border,
+  },
+  planWorkoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    backgroundColor: COLORS.accent.primary,
+    borderRadius: RADIUS.md,
+  },
+  planWorkoutButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.inverse,
   },
 
   // Exercises Section

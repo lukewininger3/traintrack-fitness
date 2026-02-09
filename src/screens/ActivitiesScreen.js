@@ -4,12 +4,17 @@ import { Activity, Bike, Bookmark, Dumbbell, Edit2, FileText, MessageSquare, Plu
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   SectionList,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { loadWorkouts, saveWorkouts } from '../utils/storage';
@@ -428,41 +433,55 @@ export default function ActivitiesScreen() {
         </Pressable>
       </BottomSheet>
 
-      {/* Save as Template Bottom Sheet */}
-      <BottomSheet
-        isVisible={showTemplateModal}
-        onClose={() => setShowTemplateModal(false)}
-        height="35%"
+      {/* Save as Template Modal - Centered */}
+      <Modal
+        visible={showTemplateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTemplateModal(false)}
       >
-        <Text style={styles.templateModalTitle}>Save as Template</Text>
-        <Text style={styles.templateModalSubtitle}>Enter a name for this template</Text>
-        <TextInput
-          style={styles.templateModalInput}
-          value={templateName}
-          onChangeText={setTemplateName}
-          placeholder="Template name"
-          placeholderTextColor={COLORS.text.tertiary}
-          autoFocus
-        />
-        <View style={styles.templateModalButtons}>
-          <Pressable
-            style={styles.templateModalCancel}
-            onPress={() => {
-              setShowTemplateModal(false);
-              setTemplateName('');
-            }}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.templateModalOverlay}
           >
-            <Text style={styles.templateModalCancelText}>Cancel</Text>
-          </Pressable>
-          <Pressable
-            style={styles.templateModalSave}
-            onPress={confirmSaveAsTemplate}
-          >
-            <Bookmark size={18} color={COLORS.text.inverse} strokeWidth={2.5} />
-            <Text style={styles.templateModalSaveText}>Save</Text>
-          </Pressable>
-        </View>
-      </BottomSheet>
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={styles.templateModalContent}>
+                <Text style={styles.templateModalTitle}>Save as Template</Text>
+                <Text style={styles.templateModalSubtitle}>Enter a name for this template</Text>
+                <TextInput
+                  style={styles.templateModalInput}
+                  value={templateName}
+                  onChangeText={setTemplateName}
+                  placeholder="Template name"
+                  placeholderTextColor={COLORS.text.tertiary}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={confirmSaveAsTemplate}
+                />
+                <View style={styles.templateModalButtons}>
+                  <Pressable
+                    style={styles.templateModalCancel}
+                    onPress={() => {
+                      setShowTemplateModal(false);
+                      setTemplateName('');
+                    }}
+                  >
+                    <Text style={styles.templateModalCancelText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.templateModalSave}
+                    onPress={confirmSaveAsTemplate}
+                  >
+                    <Bookmark size={18} color={COLORS.text.inverse} strokeWidth={2.5} />
+                    <Text style={styles.templateModalSaveText}>Save</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -639,8 +658,7 @@ const styles = StyleSheet.create({
     color: COLORS.accent.primary,
   },
   modalScrollView: {
-    minHeight: 100,
-    maxHeight: 400,
+    flex: 1,
   },
   modalScrollContent: {
     padding: SPACING.lg,
@@ -702,7 +720,20 @@ const styles = StyleSheet.create({
     color: COLORS.tertiary.primary,
   },
 
-  // Template Save Sheet
+  // Template Save Modal - Centered
+  templateModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: SPACING.xl,
+  },
+  templateModalContent: {
+    width: '100%',
+    backgroundColor: COLORS.background.secondary,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+  },
   templateModalTitle: {
     ...TYPOGRAPHY.h3,
     color: COLORS.text.primary,

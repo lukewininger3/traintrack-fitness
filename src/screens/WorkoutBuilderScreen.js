@@ -417,12 +417,13 @@ export default function WorkoutBuilderScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
     >
       <View style={styles.header}>
-        {isEditing ? (
-          <Pressable
-            onPress={() => {
+        <Pressable
+          onPress={() => {
+            if (isEditing) {
+              // Editing existing workout - only changes will be lost
               Alert.alert(
                 'Discard Changes?',
-                'Any unsaved changes to this workout will be lost.',
+                'Your changes will not be saved. The original workout will remain unchanged.',
                 [
                   { text: 'Keep Editing', style: 'cancel' },
                   {
@@ -430,20 +431,35 @@ export default function WorkoutBuilderScreen() {
                     style: 'destructive',
                     onPress: () => {
                       resetTimer();
-                      router.back();
+                      router.replace('/activities');
                     },
                   },
                 ]
               );
-            }}
-            style={styles.closeButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <X size={22} color={COLORS.text.secondary} strokeWidth={2} />
-          </Pressable>
-        ) : (
-          <View style={styles.headerSpacer} />
-        )}
+            } else {
+              // New workout - entire workout will be discarded
+              Alert.alert(
+                'Discard Workout?',
+                'This workout will not be saved.',
+                [
+                  { text: 'Keep Editing', style: 'cancel' },
+                  {
+                    text: 'Discard',
+                    style: 'destructive',
+                    onPress: () => {
+                      resetTimer();
+                      router.replace('/activities');
+                    },
+                  },
+                ]
+              );
+            }
+          }}
+          style={styles.closeButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <X size={22} color={COLORS.text.secondary} strokeWidth={2} />
+        </Pressable>
         <Pressable
           style={styles.typeButton}
           onPress={navigateToEditDetails}

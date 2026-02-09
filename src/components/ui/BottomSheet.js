@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Dimensions, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -24,6 +24,7 @@ const DISMISS_THRESHOLD = 100;
  * - height (number|string): Sheet height as number (px) or percentage string e.g. '50%'
  * - children: Content to render inside the sheet
  * - scrollable (boolean): If true, wraps children in ScrollView
+ * - keyboardAvoiding (boolean): If true, wraps content in KeyboardAvoidingView
  */
 export default function BottomSheet({
   isVisible,
@@ -31,6 +32,7 @@ export default function BottomSheet({
   height: heightProp = '50%',
   children,
   scrollable = false,
+  keyboardAvoiding = false,
 }) {
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
@@ -120,7 +122,15 @@ export default function BottomSheet({
           </View>
 
           {/* Content */}
-          {scrollable ? (
+          {keyboardAvoiding ? (
+            <KeyboardAvoidingView
+              style={styles.content}
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? SCREEN_HEIGHT - sheetHeight + 20 : 0}
+            >
+              {children}
+            </KeyboardAvoidingView>
+          ) : scrollable ? (
             <ScrollView
               style={styles.scrollContent}
               contentContainerStyle={styles.scrollContentContainer}

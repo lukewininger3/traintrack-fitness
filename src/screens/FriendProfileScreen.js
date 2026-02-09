@@ -740,7 +740,8 @@ const styles = StyleSheet.create({
     color: COLORS.text.secondary,
   },
   exercisesList: {
-    maxHeight: 300,
+    flex: 1,
+    maxHeight: '50%',
   },
   exerciseItem: {
     backgroundColor: COLORS.surface.card,

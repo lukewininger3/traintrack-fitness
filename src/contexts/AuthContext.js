@@ -32,6 +32,16 @@ export const AuthProvider = ({ children }) => {
   // Check if user needs onboarding (has username but hasn't completed onboarding)
   const needsOnboarding = user && !profileLoading && profile?.username && !onboardingCompleted;
 
+  // Load onboarding status separately (non-blocking)
+  const loadOnboardingStatus = useCallback(async () => {
+    try {
+      const onboardingData = await AsyncStorage.getItem('@traintrack_onboarding');
+      setOnboardingCompleted(onboardingData ? JSON.parse(onboardingData).completed === true : false);
+    } catch {
+      setOnboardingCompleted(false);
+    }
+  }, []);
+
   // Fetch user profile from database
   const fetchProfile = useCallback(async (userId) => {
     if (!userId) {
@@ -42,6 +52,10 @@ export const AuthProvider = ({ children }) => {
 
     try {
       setProfileLoading(true);
+
+      // Start onboarding check in parallel (non-blocking)
+      loadOnboardingStatus();
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -63,15 +77,6 @@ export const AuthProvider = ({ children }) => {
       }
 
       setProfile(data);
-
-      // Check onboarding status from AsyncStorage
-      try {
-        const onboardingData = await AsyncStorage.getItem('@traintrack_onboarding');
-        setOnboardingCompleted(onboardingData ? JSON.parse(onboardingData).completed === true : false);
-      } catch {
-        setOnboardingCompleted(false);
-      }
-
       setProfileLoading(false);
       return data;
     } catch (error) {
@@ -80,7 +85,7 @@ export const AuthProvider = ({ children }) => {
       setProfileLoading(false);
       return null;
     }
-  }, []);
+  }, [loadOnboardingStatus]);
 
   // Public method to refresh profile
   const refreshProfile = useCallback(async () => {
@@ -142,19 +147,29 @@ export const AuthProvider = ({ children }) => {
         email,
         password,
       });
-      
+
       if (error) throw error;
-      
-      // Migrate local workouts to cloud after successful login
+
+      // Migrate local data to cloud after successful login
       if (data?.user) {
-        // Import the migration function
+        // Import the migration functions
         const { migrateLocalToCloud } = await import('../utils/storage');
-        // Run migration in background (don't wait)
+        const { migrateGoalsToCloud } = await import('../utils/goalsStorage');
+
+        // Run migrations in background (don't wait)
         migrateLocalToCloud().catch(() => {
-          // Migration error
+          // Workout migration error
         });
+        migrateGoalsToCloud().catch(() => {
+          // Goals migration error
+        });
+
+        // TESTING: Clear onboarding status to show walkthrough on every sign-in
+        // TODO: Remove this when done testing - onboarding should only show for new users
+        await AsyncStorage.removeItem('@traintrack_onboarding');
+        setOnboardingCompleted(false);
       }
-      
+
       return { data, error: null };
     } catch (error) {
       return { data: null, error };

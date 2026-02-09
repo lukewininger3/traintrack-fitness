@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Calendar as CalendarIcon, ChevronDown, ChevronRight } from 'lucide-react-native';
+import { Calendar as CalendarIcon, ChevronDown, ChevronRight, X } from 'lucide-react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Alert,
@@ -238,14 +238,27 @@ export default function WorkoutDetailsScreen() {
   };
 
   const navigateBack = () => {
-    Alert.alert(
-      'Discard Workout?',
-      'You\'ll lose any unsaved changes.',
-      [
-        { text: 'Keep Editing', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: () => router.replace('/activities') },
-      ]
-    );
+    if (isEditing) {
+      // Editing existing workout - only changes will be lost
+      Alert.alert(
+        'Discard Changes?',
+        'Your changes will not be saved. The original workout will remain unchanged.',
+        [
+          { text: 'Keep Editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => router.replace('/activities') },
+        ]
+      );
+    } else {
+      // New workout - entire workout will be discarded
+      Alert.alert(
+        'Discard Workout?',
+        'This workout will not be saved.',
+        [
+          { text: 'Keep Editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => router.replace('/activities') },
+        ]
+      );
+    }
   };
 
   const handleSave = async () => {
@@ -303,8 +316,8 @@ export default function WorkoutDetailsScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={navigateBack} style={styles.discardButton}>
-          <Text style={styles.discardText}>Discard</Text>
+        <Pressable onPress={navigateBack} style={styles.closeButton} hitSlop={12}>
+          <X size={22} color={COLORS.text.secondary} strokeWidth={2} />
         </Pressable>
         <Text style={styles.headerTitle}>
           {isEditing ? 'EDIT WORKOUT' : 'NEW WORKOUT'}
@@ -499,13 +512,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.surface.border,
   },
-  discardButton: {
-    paddingVertical: SPACING.sm,
-    paddingRight: SPACING.md,
-  },
-  discardText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.error,
+  closeButton: {
+    padding: SPACING.sm,
   },
   headerTitle: {
     ...TYPOGRAPHY.label,

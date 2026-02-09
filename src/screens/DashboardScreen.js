@@ -39,7 +39,8 @@ export default function DashboardScreen({ navigation }) {
   );
 
   const loadData = async () => {
-    const data = await loadWorkouts({ silent: true });
+    // Only load last 6 months of workouts to reduce memory usage
+    const data = await loadWorkouts({ silent: true, maxMonths: 6 });
     setWorkouts(data || []);
     setWeekStreak(calculateWeekStreak(data || []));
 
