@@ -1,4 +1,4 @@
-import { Check, GripVertical, History, Link, MessageSquare, Plus, Trash2, TrendingUp, X } from 'lucide-react-native';
+import { Check, GripVertical, History, Link, MessageSquare, Plus, Trash2, X } from 'lucide-react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -12,7 +12,8 @@ import Animated, {
   FadeOut,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../../theme/design';
+import { TYPOGRAPHY, SPACING, RADIUS } from '../../../theme/design';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 // Format time in minutes to mm:ss format
 const formatPace = (paceInMinutes) => {
@@ -34,9 +35,8 @@ const calculatePace = (distance, time) => {
 };
 
 // Input field with unit suffix and smart placeholder behavior
-const SetInputField = React.forwardRef(({ value, onChangeText, placeholder, unit, keyboardType, isConfirmed, testID }, ref) => {
+const SetInputField = React.forwardRef(({ value, onChangeText, placeholder, unit, keyboardType, isConfirmed, testID, themeColors }, ref) => {
   const [isFocused, setIsFocused] = useState(false);
-  const [hasBeenEdited, setHasBeenEdited] = useState(false);
   const internalRef = useRef(null);
   const inputRef = ref || internalRef;
 
@@ -44,10 +44,10 @@ const SetInputField = React.forwardRef(({ value, onChangeText, placeholder, unit
   // Convert to string to handle both string "0" and number 0
   const stringValue = value?.toString() || '';
   const hasValue = stringValue !== '';
-  // Show greyed style only for truly empty, unfocused, unedited, unconfirmed fields
-  // If confirmed, NEVER show placeholder style (user intentionally confirmed the set)
-  const showPlaceholderStyle = !isConfirmed && !hasValue && !isFocused && !hasBeenEdited;
-  const displayValue = isFocused ? stringValue : (hasValue ? stringValue : '');
+
+  // Always show "0" for numeric fields with no value - never show greyed out
+  // If value is 0 or empty, display "0" in normal style
+  const displayValue = hasValue ? stringValue : '0';
 
   const handleFocus = () => {
     setIsFocused(true);
@@ -55,42 +55,43 @@ const SetInputField = React.forwardRef(({ value, onChangeText, placeholder, unit
 
   const handleBlur = () => {
     setIsFocused(false);
+    // If field is empty when blurred, default to 0
+    if (!stringValue || stringValue === '') {
+      onChangeText('0');
+    }
   };
 
   const handleChangeText = (text) => {
-    setHasBeenEdited(true);
     onChangeText(text);
   };
 
   return (
     <View style={[
       styles.inputWithUnit,
-      isConfirmed && styles.inputWithUnitConfirmed,
+      { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border },
+      isConfirmed && { borderColor: themeColors.success + '50', backgroundColor: themeColors.success + '08' },
     ]}>
       <TextInput
         ref={inputRef}
-        style={[
-          styles.setInput,
-          showPlaceholderStyle && styles.setInputPlaceholder,
-        ]}
-        value={displayValue}
+        style={[styles.setInput, { color: themeColors.text.primary }]}
+        value={isFocused ? stringValue : displayValue}
         onChangeText={handleChangeText}
         onFocus={handleFocus}
         onBlur={handleBlur}
         keyboardType={keyboardType}
-        placeholder={isFocused ? '' : '0'}
-        placeholderTextColor={COLORS.text.tertiary}
+        placeholder=""
+        placeholderTextColor={themeColors.text.tertiary}
         selectTextOnFocus
       />
       {unit ? (
-        <Text style={[styles.unitSuffix, showPlaceholderStyle && styles.unitSuffixDim]}>{unit}</Text>
+        <Text style={[styles.unitSuffix, { color: themeColors.text.secondary }]}>{unit}</Text>
       ) : null}
     </View>
   );
 });
 
 // Animated checkmark for set confirmation
-const ConfirmButton = ({ isConfirmed, canConfirm, onConfirm }) => {
+const ConfirmButton = ({ isConfirmed, canConfirm, onConfirm, themeColors }) => {
   const scale = useSharedValue(1);
 
   const handlePress = () => {
@@ -113,14 +114,15 @@ const ConfirmButton = ({ isConfirmed, canConfirm, onConfirm }) => {
         onPress={handlePress}
         style={[
           styles.confirmButton,
-          isConfirmed && styles.confirmButtonActive,
-          !canConfirm && !isConfirmed && styles.confirmButtonDisabled,
+          { backgroundColor: themeColors.surface.card, borderColor: themeColors.success },
+          isConfirmed && { backgroundColor: themeColors.success, borderColor: themeColors.success },
+          !canConfirm && !isConfirmed && { borderColor: themeColors.surface.border, opacity: 0.4 },
         ]}
         disabled={!canConfirm && !isConfirmed}
       >
         <Check
           size={14}
-          color={isConfirmed ? COLORS.text.inverse : (canConfirm ? COLORS.success : COLORS.text.tertiary)}
+          color={isConfirmed ? themeColors.text.inverse : (canConfirm ? themeColors.success : themeColors.text.tertiary)}
           strokeWidth={2.5}
         />
       </Pressable>
@@ -129,17 +131,17 @@ const ConfirmButton = ({ isConfirmed, canConfirm, onConfirm }) => {
 };
 
 // Collapsible previous session panel
-const PreviousSessionPanel = ({ previousSession, isCardio, isVisible }) => {
+const PreviousSessionPanel = ({ previousSession, isCardio, isVisible, themeColors }) => {
   if (!previousSession || !previousSession.sets || previousSession.sets.length === 0 || !isVisible) return null;
 
   return (
     <Animated.View
       entering={FadeIn.duration(200)}
       exiting={FadeOut.duration(150)}
-      style={styles.previousPanel}
+      style={[styles.previousPanel, { backgroundColor: themeColors.tertiary.dim }]}
     >
       <View style={styles.previousHeader}>
-        <Text style={styles.previousDate}>{previousSession.date}</Text>
+        <Text style={[styles.previousDate, { color: themeColors.tertiary.primary }]}>{previousSession.date}</Text>
       </View>
       <View style={styles.previousSets}>
         {previousSession.sets.map((set, idx) => {
@@ -147,16 +149,16 @@ const PreviousSessionPanel = ({ previousSession, isCardio, isVisible }) => {
             const pace = calculatePace(set.distance, set.time);
             const paceFormatted = formatPace(pace);
             return (
-              <View key={idx} style={styles.previousSetPill}>
-                <Text style={styles.previousSetText}>
+              <View key={idx} style={[styles.previousSetPill, { backgroundColor: themeColors.tertiary.primary + '25' }]}>
+                <Text style={[styles.previousSetText, { color: themeColors.tertiary.primary }]}>
                   {set.distance || 0} mi • {set.time || 0} min{paceFormatted ? ` • ${paceFormatted}/mi` : ''}
                 </Text>
               </View>
             );
           }
           return (
-            <View key={idx} style={styles.previousSetPill}>
-              <Text style={styles.previousSetText}>
+            <View key={idx} style={[styles.previousSetPill, { backgroundColor: themeColors.tertiary.primary + '25' }]}>
+              <Text style={[styles.previousSetText, { color: themeColors.tertiary.primary }]}>
                 {set.weight || 0} lbs × {set.reps || 0}
               </Text>
             </View>
@@ -183,8 +185,8 @@ export default function ExerciseCard({
   onUpdateSuperset,
   onMoveUp,
   onMoveDown,
-  estimated1RM,
 }) {
+  const { colors: themeColors } = useTheme();
   const [showNotes, setShowNotes] = useState(!!exercise.notes);
   const [showPrevious, setShowPrevious] = useState(false);
   const [localNotes, setLocalNotes] = useState(exercise.notes || '');
@@ -416,17 +418,17 @@ export default function ExerciseCard({
       {/* Superset connector line - shows above card if part of superset and not first */}
       {isInSuperset && !isFirstInSuperset && (
         <View style={styles.supersetConnector}>
-          <View style={styles.supersetLine} />
-          <View style={styles.supersetBadge}>
-            <Text style={styles.supersetBadgeText}>SUPERSET</Text>
+          <View style={[styles.supersetLine, { backgroundColor: themeColors.warning }]} />
+          <View style={[styles.supersetBadge, { backgroundColor: themeColors.warningDim }]}>
+            <Text style={[styles.supersetBadgeText, { color: themeColors.warning }]}>SUPERSET</Text>
           </View>
-          <View style={styles.supersetLine} />
+          <View style={[styles.supersetLine, { backgroundColor: themeColors.warning }]} />
         </View>
       )}
 
       <View
         ref={cardRef}
-        style={styles.exerciseCard}
+        style={[styles.exerciseCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
       >
         {/* Header */}
         <View style={styles.exerciseHeader}>
@@ -434,29 +436,23 @@ export default function ExerciseCard({
           {canDrag && (
             <GestureDetector gesture={dragGesture}>
               <Animated.View style={styles.dragHandle}>
-                <GripVertical size={16} color={COLORS.text.tertiary} strokeWidth={2} />
+                <GripVertical size={16} color={themeColors.text.tertiary} strokeWidth={2} />
               </Animated.View>
             </GestureDetector>
           )}
           <View style={styles.exerciseNameRow}>
-            <Text style={styles.exerciseName}>{exercise.name}</Text>
-            {estimated1RM && !isCardioExercise && (
-              <View style={styles.oneRMBadge}>
-                <TrendingUp size={10} color={COLORS.accent.primary} strokeWidth={2.5} />
-                <Text style={styles.oneRMText}>{Math.round(estimated1RM)}</Text>
-              </View>
-            )}
+            <Text style={[styles.exerciseName, { color: themeColors.text.primary }]}>{exercise.name}</Text>
           </View>
           <View style={styles.exerciseActions}>
             {/* Superset button - links with exercise below */}
             {!isCardioWorkout && index < totalExercises - 1 && (
               <Pressable
                 onPress={handleSupersetToggle}
-                style={[styles.actionButton, isLinkedToNext && styles.actionButtonSuperset]}
+                style={[styles.actionButton, isLinkedToNext && { backgroundColor: themeColors.warningDim }]}
               >
                 <Link
                   size={15}
-                  color={isLinkedToNext ? COLORS.warning : COLORS.text.tertiary}
+                  color={isLinkedToNext ? themeColors.warning : themeColors.text.tertiary}
                   strokeWidth={2}
                 />
               </Pressable>
@@ -464,23 +460,23 @@ export default function ExerciseCard({
             {hasPreviousSession && (
               <Pressable
                 onPress={togglePrevious}
-                style={[styles.actionButton, showPrevious && styles.actionButtonActive]}
+                style={[styles.actionButton, showPrevious && { backgroundColor: themeColors.tertiary.dim }]}
               >
                 <History
                   size={15}
-                  color={showPrevious ? COLORS.tertiary.primary : COLORS.text.tertiary}
+                  color={showPrevious ? themeColors.tertiary.primary : themeColors.text.tertiary}
                   strokeWidth={2}
                 />
               </Pressable>
             )}
             <Pressable
               onPress={toggleNotes}
-              style={[styles.actionButton, showNotes && styles.actionButtonActive]}
+              style={[styles.actionButton, showNotes && { backgroundColor: themeColors.tertiary.dim }]}
             >
               <MessageSquare
                 size={15}
-                color={showNotes || exercise.notes ? COLORS.tertiary.primary : COLORS.text.tertiary}
-                fill={exercise.notes ? COLORS.tertiary.primary : 'transparent'}
+                color={showNotes || exercise.notes ? themeColors.tertiary.primary : themeColors.text.tertiary}
+                fill={exercise.notes ? themeColors.tertiary.primary : 'transparent'}
                 strokeWidth={2}
               />
             </Pressable>
@@ -490,7 +486,7 @@ export default function ExerciseCard({
           >
             <Trash2
               size={15}
-              color={COLORS.error}
+              color={themeColors.error}
               strokeWidth={2}
             />
           </Pressable>
@@ -502,19 +498,20 @@ export default function ExerciseCard({
           previousSession={previousSession}
           isCardio={isCardioExercise}
           isVisible={showPrevious}
+          themeColors={themeColors}
         />
 
         {/* Notes Section (collapsible) */}
         {showNotes && (
           <View style={styles.notesSection}>
             <TextInput
-              style={styles.notesInput}
+              style={[styles.notesInput, { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border, color: themeColors.text.primary }]}
               value={localNotes}
               onChangeText={setLocalNotes}
               onBlur={handleNotesBlur}
               onFocus={handleNotesFocus}
               placeholder="Add notes..."
-              placeholderTextColor={COLORS.text.tertiary}
+              placeholderTextColor={themeColors.text.tertiary}
               multiline
             />
           </View>
@@ -528,14 +525,14 @@ export default function ExerciseCard({
             <View style={styles.setNumberHeader} />
             {isCardioExercise ? (
               <>
-                <Text style={styles.setHeaderLabel}>Dist</Text>
-                <Text style={styles.setHeaderLabel}>Time</Text>
-                <Text style={[styles.setHeaderLabel, styles.setHeaderLabelPace]}>Pace</Text>
+                <Text style={[styles.setHeaderLabel, { color: themeColors.text.tertiary }]}>Dist</Text>
+                <Text style={[styles.setHeaderLabel, { color: themeColors.text.tertiary }]}>Time</Text>
+                <Text style={[styles.setHeaderLabel, styles.setHeaderLabelPace, { color: themeColors.text.tertiary }]}>Pace</Text>
               </>
             ) : (
               <>
-                <Text style={styles.setHeaderLabel}>Weight</Text>
-                <Text style={styles.setHeaderLabel}>Reps</Text>
+                <Text style={[styles.setHeaderLabel, { color: themeColors.text.tertiary }]}>Weight</Text>
+                <Text style={[styles.setHeaderLabel, { color: themeColors.text.tertiary }]}>Reps</Text>
               </>
             )}
             <View style={styles.setActionsHeader} />
@@ -551,7 +548,7 @@ export default function ExerciseCard({
                 key={setIdx}
                 style={[
                   styles.setRow,
-                  isConfirmed && styles.setRowConfirmed
+                  isConfirmed && { backgroundColor: themeColors.success + '0F' }
                 ]}
               >
                 <Pressable
@@ -562,12 +559,12 @@ export default function ExerciseCard({
                 >
                   <X
                     size={12}
-                    color={exercise.sets.length <= 1 ? COLORS.surface.border : COLORS.error}
+                    color={exercise.sets.length <= 1 ? themeColors.surface.border : themeColors.error}
                     strokeWidth={2.5}
                   />
                 </Pressable>
-                <View style={[styles.setNumber, isConfirmed && styles.setNumberConfirmed]}>
-                  <Text style={[styles.setNumberText, isConfirmed && styles.setNumberTextConfirmed]}>
+                <View style={[styles.setNumber, { backgroundColor: themeColors.accent.primaryDim }, isConfirmed && { backgroundColor: themeColors.success }]}>
+                  <Text style={[styles.setNumberText, { color: themeColors.accent.primary }, isConfirmed && { color: themeColors.text.inverse }]}>
                     {setIdx + 1}
                   </Text>
                 </View>
@@ -581,6 +578,7 @@ export default function ExerciseCard({
                       keyboardType="decimal-pad"
                       unit="mi"
                       isConfirmed={isConfirmed}
+                      themeColors={themeColors}
                     />
                     <SetInputField
                       value={set.time?.toString() || ''}
@@ -588,12 +586,13 @@ export default function ExerciseCard({
                       keyboardType="decimal-pad"
                       unit="min"
                       isConfirmed={isConfirmed}
+                      themeColors={themeColors}
                     />
                     <View style={styles.paceDisplay}>
-                      <Text style={[styles.paceText, !paceFormatted && styles.paceTextEmpty]}>
+                      <Text style={[styles.paceText, { color: themeColors.accent.primary }, !paceFormatted && { color: themeColors.text.tertiary }]}>
                         {paceFormatted || '--:--'}
                       </Text>
-                      <Text style={styles.paceUnit}>/mi</Text>
+                      <Text style={[styles.paceUnit, { color: themeColors.text.tertiary }]}>/mi</Text>
                     </View>
                   </>
                 ) : (
@@ -605,6 +604,7 @@ export default function ExerciseCard({
                       keyboardType="decimal-pad"
                       unit="lbs"
                       isConfirmed={isConfirmed}
+                      themeColors={themeColors}
                     />
                     <SetInputField
                       value={set.reps?.toString() || ''}
@@ -612,6 +612,7 @@ export default function ExerciseCard({
                       keyboardType="number-pad"
                       unit=""
                       isConfirmed={isConfirmed}
+                      themeColors={themeColors}
                     />
                   </>
                 )}
@@ -622,6 +623,7 @@ export default function ExerciseCard({
                     isConfirmed={isConfirmed}
                     canConfirm={canConfirmSet(set)}
                     onConfirm={() => handleSetConfirm(setIdx)}
+                    themeColors={themeColors}
                   />
                 </View>
               </View>
@@ -629,9 +631,9 @@ export default function ExerciseCard({
           })}
 
           {/* Add Set Button */}
-          <Pressable onPress={handleAddSet} style={styles.addSetButton}>
-            <Plus size={14} color={COLORS.accent.primary} strokeWidth={2.5} />
-            <Text style={styles.addSetText}>Add Set</Text>
+          <Pressable onPress={handleAddSet} style={[styles.addSetButton, { borderColor: themeColors.surface.border }]}>
+            <Plus size={14} color={themeColors.accent.primary} strokeWidth={2.5} />
+            <Text style={[styles.addSetText, { color: themeColors.accent.primary }]}>Add Set</Text>
           </Pressable>
         </View>
       </View>
@@ -641,44 +643,25 @@ export default function ExerciseCard({
 
 const styles = StyleSheet.create({
   exerciseCard: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.sm,
-    marginBottom: SPACING.sm
+    marginBottom: SPACING.sm,
   },
   exerciseHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.xs
+    marginBottom: SPACING.xs,
   },
   exerciseNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1
+    flex: 1,
   },
   exerciseName: {
     ...TYPOGRAPHY.bodyBold,
     fontSize: 14,
-    color: COLORS.text.primary,
-  },
-  oneRMBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: COLORS.accent.primaryDim,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: RADIUS.full,
-    marginLeft: SPACING.sm,
-  },
-  oneRMText: {
-    ...TYPOGRAPHY.caption,
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.accent.primary,
   },
   exerciseActions: {
     flexDirection: 'row',
@@ -696,12 +679,6 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
     borderRadius: RADIUS.sm,
   },
-  actionButtonActive: {
-    backgroundColor: COLORS.tertiary.dim,
-  },
-  actionButtonSuperset: {
-    backgroundColor: 'rgba(255, 193, 7, 0.15)',
-  },
 
   // Superset styles
   supersetConnector: {
@@ -714,11 +691,9 @@ const styles = StyleSheet.create({
   supersetLine: {
     flex: 1,
     height: 2,
-    backgroundColor: COLORS.warning,
     opacity: 0.4,
   },
   supersetBadge: {
-    backgroundColor: 'rgba(255, 193, 7, 0.2)',
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
     borderRadius: RADIUS.full,
@@ -727,13 +702,12 @@ const styles = StyleSheet.create({
   supersetBadgeText: {
     ...TYPOGRAPHY.label,
     fontSize: 8,
-    color: COLORS.warning,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
+
   // Previous Session Panel
   previousPanel: {
-    backgroundColor: COLORS.tertiary.dim,
     borderRadius: RADIUS.sm,
     padding: SPACING.sm,
     marginBottom: SPACING.sm,
@@ -744,7 +718,6 @@ const styles = StyleSheet.create({
   previousDate: {
     ...TYPOGRAPHY.caption,
     fontSize: 10,
-    color: COLORS.tertiary.primary,
     fontWeight: '600',
   },
   previousSets: {
@@ -753,7 +726,6 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
   },
   previousSetPill: {
-    backgroundColor: 'rgba(0, 212, 255, 0.15)',
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
     borderRadius: RADIUS.full,
@@ -761,7 +733,6 @@ const styles = StyleSheet.create({
   previousSetText: {
     ...TYPOGRAPHY.caption,
     fontSize: 11,
-    color: COLORS.tertiary.primary,
     fontWeight: '600',
   },
 
@@ -770,13 +741,10 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   notesInput: {
-    backgroundColor: COLORS.background.elevated,
     borderRadius: RADIUS.sm,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.sm,
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.primary,
     minHeight: 50,
     textAlignVertical: 'top',
   },
@@ -801,7 +769,6 @@ const styles = StyleSheet.create({
   setHeaderLabel: {
     ...TYPOGRAPHY.label,
     fontSize: 9,
-    color: COLORS.text.tertiary,
     textAlign: 'center',
     flex: 1,
     marginHorizontal: SPACING.xs,
@@ -819,9 +786,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     borderRadius: RADIUS.sm,
   },
-  setRowConfirmed: {
-    backgroundColor: 'rgba(0, 255, 136, 0.06)',
-  },
   removeSetButton: {
     width: 20,
     height: 26,
@@ -836,37 +800,24 @@ const styles = StyleSheet.create({
     height: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.accent.primaryDim,
     borderRadius: RADIUS.sm,
     marginRight: SPACING.md,
   },
-  setNumberConfirmed: {
-    backgroundColor: COLORS.success,
-  },
   setNumberText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.accent.primary,
     fontSize: 11,
   },
-  setNumberTextConfirmed: {
-    color: COLORS.text.inverse,
-  },
+
   // Input with unit container
   inputWithUnit: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background.elevated,
     borderRadius: RADIUS.sm,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     height: 34,
     marginHorizontal: SPACING.xs,
     paddingRight: 4,
-  },
-  inputWithUnitConfirmed: {
-    borderColor: 'rgba(0, 255, 136, 0.3)',
-    backgroundColor: 'rgba(0, 255, 136, 0.05)',
   },
   setInput: {
     flex: 1,
@@ -874,24 +825,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     fontSize: 15,
     fontWeight: '600',
-    color: COLORS.text.primary,
     textAlign: 'center',
     height: 32,
-  },
-  setInputPlaceholder: {
-    color: COLORS.text.tertiary,
-  },
-  setInputConfirmed: {
-    color: COLORS.text.primary,
   },
   unitSuffix: {
     fontSize: 11,
     fontWeight: '600',
-    color: COLORS.text.secondary,
     marginRight: 2,
-  },
-  unitSuffixDim: {
-    color: COLORS.text.tertiary,
   },
 
   // Pace display
@@ -905,15 +845,10 @@ const styles = StyleSheet.create({
   paceText: {
     fontSize: 13,
     fontWeight: '600',
-    color: COLORS.accent.primary,
-  },
-  paceTextEmpty: {
-    color: COLORS.text.tertiary,
   },
   paceUnit: {
     fontSize: 10,
     fontWeight: '500',
-    color: COLORS.text.tertiary,
     marginLeft: 1,
   },
 
@@ -929,19 +864,9 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.surface.card,
     borderWidth: 1.5,
-    borderColor: COLORS.success,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  confirmButtonActive: {
-    backgroundColor: COLORS.success,
-    borderColor: COLORS.success,
-  },
-  confirmButtonDisabled: {
-    borderColor: COLORS.surface.border,
-    opacity: 0.4,
   },
 
   addSetButton: {
@@ -953,13 +878,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
     borderRadius: RADIUS.sm,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     borderStyle: 'dashed',
   },
   addSetText: {
     ...TYPOGRAPHY.caption,
     fontSize: 11,
     fontWeight: '600',
-    color: COLORS.accent.primary,
   },
 });

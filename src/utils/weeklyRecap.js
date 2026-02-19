@@ -6,6 +6,16 @@ import { EXERCISE_DATABASE } from '../constants/workoutTypes';
 const RECAP_DISMISSED_KEY = '@traintrack_recap_dismissed';
 
 /**
+ * Parse a YYYY-MM-DD string as local date (avoiding timezone issues)
+ * @param {string} dateString - Date string in YYYY-MM-DD format
+ * @returns {Date} Date object in local timezone
+ */
+function parseLocalDate(dateString) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+/**
  * Get the Monday of the current week (ISO week start)
  */
 function getMonday(date = new Date()) {
@@ -55,7 +65,7 @@ export async function generateWeeklyRecap() {
 
     // Filter workouts for the previous week
     const weekWorkouts = allWorkouts.filter(w => {
-      const d = new Date(w.date);
+      const d = parseLocalDate(w.date);
       return d >= prevMonday && d <= prevSunday;
     });
 
@@ -63,7 +73,7 @@ export async function generateWeeklyRecap() {
 
     // Filter workouts for the week before (comparison)
     const priorWeekWorkouts = allWorkouts.filter(w => {
-      const d = new Date(w.date);
+      const d = parseLocalDate(w.date);
       return d >= twoWeeksAgo && d < prevMonday;
     });
 
@@ -99,7 +109,7 @@ export async function generateWeeklyRecap() {
     // PRs set this week
     const prs = await loadPersonalRecords();
     const weekPRs = prs.filter(pr => {
-      const d = new Date(pr.date);
+      const d = parseLocalDate(pr.date);
       return d >= prevMonday && d <= prevSunday;
     });
 
@@ -192,13 +202,13 @@ export async function getCurrentWeekStats() {
 
     // Current week workouts
     const weekWorkouts = workoutsData.filter(w => {
-      const d = new Date(w.date);
+      const d = parseLocalDate(w.date);
       return d >= thisMonday && d <= thisSunday;
     });
 
     // Previous week workouts (for comparison)
     const prevWeekWorkouts = workoutsData.filter(w => {
-      const d = new Date(w.date);
+      const d = parseLocalDate(w.date);
       return d >= prevMonday && d <= prevSunday;
     });
 
@@ -213,7 +223,7 @@ export async function getCurrentWeekStats() {
     // PRs this week
     const prs = await loadPersonalRecords();
     const weekPRs = prs.filter(pr => {
-      const d = new Date(pr.date);
+      const d = parseLocalDate(pr.date);
       return d >= thisMonday && d <= thisSunday;
     });
 
@@ -224,9 +234,32 @@ export async function getCurrentWeekStats() {
       workoutTypeCounts[type] = (workoutTypeCounts[type] || 0) + 1;
     }
 
+    // Calculate volume (weight × reps)
+    const calculateVolume = (workouts) => {
+      let vol = 0;
+      for (const w of workouts) {
+        for (const ex of w.exercises || []) {
+          for (const set of ex.sets || []) {
+            const weight = parseFloat(set.weight) || 0;
+            const reps = parseInt(set.reps) || 0;
+            if (weight > 0 && reps > 0) vol += weight * reps;
+          }
+        }
+      }
+      return vol;
+    };
+
+    const totalVolume = calculateVolume(weekWorkouts);
+    const prevVolume = calculateVolume(prevWeekWorkouts);
+
     // Workout change percentage
     const workoutChange = prevWeekTotal > 0
       ? Math.round(((totalWorkouts - prevWeekTotal) / prevWeekTotal) * 100)
+      : null;
+
+    // Volume change percentage
+    const volumeChange = prevVolume > 0
+      ? Math.round(((totalVolume - prevVolume) / prevVolume) * 100)
       : null;
 
     return {
@@ -236,6 +269,8 @@ export async function getCurrentWeekStats() {
       workoutChange,
       prsCount: weekPRs.length,
       workoutTypes: workoutTypeCounts,
+      totalVolume: Math.round(totalVolume),
+      volumeChange,
     };
   } catch (error) {
     console.error('Error generating current week stats:', error);

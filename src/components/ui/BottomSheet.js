@@ -10,7 +10,9 @@ import Animated, {
   interpolate,
   Extrapolation,
 } from 'react-native-reanimated';
-import { COLORS, RADIUS, SPACING } from '../../theme/design';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { RADIUS, SPACING } from '../../theme/design';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const DISMISS_THRESHOLD = 100;
@@ -34,9 +36,14 @@ export default function BottomSheet({
   scrollable = false,
   keyboardAvoiding = false,
 }) {
+  const { colors: themeColors } = useTheme();
+  const insets = useSafeAreaInsets();
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
   const context = useSharedValue({ y: 0 });
+
+  // Bottom padding for home indicator safe area
+  const bottomPadding = Math.max(insets.bottom, SPACING.lg);
 
   const sheetHeight =
     typeof heightProp === 'string' && heightProp.endsWith('%')
@@ -112,16 +119,16 @@ export default function BottomSheet({
         <Animated.View
           style={[
             styles.sheet,
-            { height: sheetHeight },
+            { height: sheetHeight, backgroundColor: themeColors.background.elevated },
             sheetAnimatedStyle,
           ]}
         >
           {/* Handle */}
           <View style={styles.handleContainer}>
-            <View style={styles.handle} />
+            <View style={[styles.handle, { backgroundColor: themeColors.surface.borderLight }]} />
           </View>
 
-          {/* Content */}
+          {/* Content - children should handle their own padding for non-scrollable sheets */}
           {keyboardAvoiding ? (
             <KeyboardAvoidingView
               style={styles.content}
@@ -133,14 +140,14 @@ export default function BottomSheet({
           ) : scrollable ? (
             <ScrollView
               style={styles.scrollContent}
-              contentContainerStyle={styles.scrollContentContainer}
+              contentContainerStyle={[styles.scrollContentContainer, { paddingBottom: bottomPadding }]}
               showsVerticalScrollIndicator={false}
               bounces={false}
             >
               {children}
             </ScrollView>
           ) : (
-            <View style={styles.content}>{children}</View>
+            <View style={styles.contentNoPadding}>{children}</View>
           )}
         </Animated.View>
       </GestureDetector>
@@ -159,15 +166,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   sheet: {
-    backgroundColor: COLORS.background.secondary,
     borderTopLeftRadius: RADIUS.xl,
     borderTopRightRadius: RADIUS.xl,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 16,
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 20,
   },
   handleContainer: {
     alignItems: 'center',
@@ -175,14 +181,16 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.sm,
   },
   handle: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: COLORS.surface.border,
   },
   content: {
     flex: 1,
     padding: SPACING.lg,
+  },
+  contentNoPadding: {
+    flex: 1,
   },
   scrollContent: {
     flex: 1,

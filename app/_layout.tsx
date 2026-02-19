@@ -4,10 +4,12 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
 import { TimerProvider } from '../src/contexts/TimerContext';
+import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
 import ErrorBoundary from '../src/components/ErrorBoundary';
 
 function RootLayoutNav() {
   const { user, loading, profileLoading, needsUsername, needsOnboarding } = useAuth();
+  const { colors } = useTheme();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
 
@@ -37,8 +39,8 @@ function RootLayoutNav() {
   // Show loading screen while checking auth/profile or navigation not ready
   if (loading || profileLoading || !navigationState?.key) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#BFFF00" />
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background.primary }]}>
+        <ActivityIndicator size="large" color={colors.accent.primary} />
       </View>
     );
   }
@@ -47,7 +49,7 @@ function RootLayoutNav() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: '#0A0A0A' },
+        contentStyle: { backgroundColor: colors.background.primary },
         animation: 'fade',
       }}
     >
@@ -97,11 +99,13 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ErrorBoundary fallbackMessage="The app encountered an error. Please restart the app.">
-        <AuthProvider>
-          <TimerProvider>
-            <RootLayoutNav />
-          </TimerProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <TimerProvider>
+              <RootLayoutNav />
+            </TimerProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </ErrorBoundary>
     </GestureHandlerRootView>
   );
@@ -112,6 +116,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0A0A0A',
   },
 });

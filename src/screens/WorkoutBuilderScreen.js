@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Award, EllipsisVertical, Pencil, Plus, Trash2, Trophy, X } from 'lucide-react-native';
+import { Award, EllipsisVertical, Timer, Pencil, Plus, Trash2, Trophy, X } from 'lucide-react-native';
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Alert,
@@ -14,6 +14,7 @@ import {
   TextInput,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -24,9 +25,10 @@ import Animated, {
 import { EXERCISE_DATABASE, getAllCategories, searchBuiltInExercises } from '../constants/workoutTypes';
 import { exerciseExists, loadCustomExercises, saveCustomExercise } from '../utils/customExercises';
 import { saveAsTemplate } from '../utils/workoutTemplates';
-import { getAllBestOneRepMaxes } from '../utils/oneRepMax';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { useTheme } from '../contexts/ThemeContext';
 import RestTimerButton from '../components/RestTimer';
+import TempoGuide from '../components/TempoGuide';
 import { useTimer } from '../contexts/TimerContext';
 import CustomExerciseForm from './WorkoutBuilder/components/CustomExerciseForm';
 import ExerciseCard from './WorkoutBuilder/components/ExerciseCard';
@@ -34,6 +36,7 @@ import { useWorkoutForm } from './WorkoutBuilder/hooks/useWorkoutForm';
 import Confetti from '../components/Confetti';
 
 export default function WorkoutBuilderScreen() {
+  const { colors: themeColors } = useTheme();
   const params = useLocalSearchParams();
   const editingWorkoutId = params?.workoutId;
   const templateId = params?.templateId;
@@ -50,22 +53,14 @@ export default function WorkoutBuilderScreen() {
     setWorkout,
     saveWorkoutData,
     findPreviousSession,
+    discardWorkout,
   } = useWorkoutForm({ editingWorkoutId, templateId, repeatData, workoutDetails });
 
   // Track previous sessions for each exercise
   const [previousSessions, setPreviousSessions] = useState({});
-  // Best estimated 1RM per exercise (for badges)
-  const [best1RMMap, setBest1RMMap] = useState({});
 
   // Timer for auto-start after logging sets
   const { reset: resetTimer, onSetLogged } = useTimer();
-
-  // Load best 1RM map on mount
-  useEffect(() => {
-    getAllBestOneRepMaxes().then(map => {
-      if (isMountedRef.current) setBest1RMMap(map);
-    });
-  }, []);
 
   // Load previous sessions when exercises change
   useEffect(() => {
@@ -94,6 +89,7 @@ export default function WorkoutBuilderScreen() {
 
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [selectedMuscleGroup, setSelectedMuscleGroup] = useState(null);
+  const [showTempoGuide, setShowTempoGuide] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [customExercises, setCustomExercises] = useState([]);
@@ -412,11 +408,11 @@ export default function WorkoutBuilderScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: themeColors.background.primary }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
     >
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: themeColors.background.primary, borderBottomColor: themeColors.surface.border }]}>
         <Pressable
           onPress={() => {
             if (isEditing) {
@@ -429,8 +425,9 @@ export default function WorkoutBuilderScreen() {
                   {
                     text: 'Discard',
                     style: 'destructive',
-                    onPress: () => {
+                    onPress: async () => {
                       resetTimer();
+                      await discardWorkout();
                       router.replace('/activities');
                     },
                   },
@@ -446,8 +443,9 @@ export default function WorkoutBuilderScreen() {
                   {
                     text: 'Discard',
                     style: 'destructive',
-                    onPress: () => {
+                    onPress: async () => {
                       resetTimer();
+                      await discardWorkout();
                       router.replace('/activities');
                     },
                   },
@@ -458,24 +456,24 @@ export default function WorkoutBuilderScreen() {
           style={styles.closeButton}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <X size={22} color={COLORS.text.secondary} strokeWidth={2} />
+          <X size={22} color={themeColors.text.secondary} strokeWidth={2} />
         </Pressable>
         <Pressable
-          style={styles.typeButton}
+          style={[styles.typeButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
           onPress={navigateToEditDetails}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={styles.typeButtonText}>{workout.type}</Text>
-          <Pencil size={12} color={COLORS.text.secondary} strokeWidth={2} />
+          <Text style={[styles.typeButtonText, { color: themeColors.text.primary }]}>{workout.type}</Text>
+          <Pencil size={12} color={themeColors.text.secondary} strokeWidth={2} />
         </Pressable>
         <View style={styles.headerRight}>
           <Pressable
             onPress={saveWorkout}
-            style={[styles.saveButtonContainer, isSaving && styles.saveButtonDisabled]}
+            style={[styles.saveButtonContainer, { backgroundColor: themeColors.accent.primary }, isSaving && { opacity: 0.5 }]}
             disabled={isSaving}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={[styles.saveButtonText, isSaving && styles.saveButtonTextDisabled]}>
+            <Text style={[styles.saveButtonText, { color: themeColors.text.inverse }]}>
               {isSaving ? 'Saving...' : 'Save'}
             </Text>
           </Pressable>
@@ -493,7 +491,7 @@ export default function WorkoutBuilderScreen() {
             style={styles.moreButton}
             hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
           >
-            <EllipsisVertical size={18} color={COLORS.text.secondary} strokeWidth={2} />
+            <EllipsisVertical size={18} color={themeColors.text.secondary} strokeWidth={2} />
           </Pressable>
         </View>
       </View>
@@ -506,13 +504,29 @@ export default function WorkoutBuilderScreen() {
         contentContainerStyle={styles.scrollContentContainer}
       >
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{sectionLabel.toUpperCase()}</Text>
+          <Text style={[styles.sectionTitle, { color: themeColors.text.tertiary }]}>{sectionLabel.toUpperCase()}</Text>
+          {!isCurrentCardioWorkout && (
+            <Pressable
+              onPress={() => setShowTempoGuide(!showTempoGuide)}
+              style={[styles.tempoToggleButton, { backgroundColor: themeColors.surface.card }, showTempoGuide && { backgroundColor: themeColors.accent.primary }]}
+              hitSlop={8}
+            >
+              <Timer size={16} color={showTempoGuide ? themeColors.text.inverse : themeColors.text.secondary} strokeWidth={2} />
+              <Text style={[styles.tempoToggleText, { color: themeColors.text.secondary }, showTempoGuide && { color: themeColors.text.inverse }]}>Tempo</Text>
+            </Pressable>
+          )}
         </View>
 
+        {/* Tempo Guide */}
+        <TempoGuide
+          visible={showTempoGuide}
+          onClose={() => setShowTempoGuide(false)}
+        />
+
         {workout.exercises.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>{emptyStateText}</Text>
-            <Text style={styles.emptySubtext}>Tap the button below to get started</Text>
+          <View style={[styles.emptyState, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+            <Text style={[styles.emptyText, { color: themeColors.text.secondary }]}>{emptyStateText}</Text>
+            <Text style={[styles.emptySubtext, { color: themeColors.text.tertiary }]}>Tap the button below to get started</Text>
           </View>
         ) : (
           workout.exercises.map((exercise, index) => (
@@ -547,7 +561,6 @@ export default function WorkoutBuilderScreen() {
               }}
               onMoveUp={(idx) => moveExercise(idx, idx - 1)}
               onMoveDown={(idx) => moveExercise(idx, idx + 1)}
-              estimated1RM={best1RMMap[exercise.name] || null}
             />
           ))
         )}
@@ -557,7 +570,7 @@ export default function WorkoutBuilderScreen() {
       </ScrollView>
 
       {/* Sticky Add Exercise Button */}
-      <View style={styles.stickyAddButtonContainer}>
+      <View style={[styles.stickyAddButtonContainer, { backgroundColor: themeColors.background.primary, borderTopColor: themeColors.surface.border }]}>
         <Pressable
           onPress={() => {
             if (isCurrentCardioWorkout) {
@@ -566,10 +579,10 @@ export default function WorkoutBuilderScreen() {
               setShowExercisePicker(true);
             }
           }}
-          style={styles.stickyAddButton}
+          style={[styles.stickyAddButton, { backgroundColor: themeColors.accent.primary }]}
         >
-          <Plus size={20} color={COLORS.text.inverse} strokeWidth={2.5} />
-          <Text style={styles.stickyAddButtonText}>{addButtonLabel}</Text>
+          <Plus size={20} color={themeColors.text.inverse} strokeWidth={2.5} />
+          <Text style={[styles.stickyAddButtonText, { color: themeColors.text.inverse }]}>{addButtonLabel}</Text>
         </Pressable>
       </View>
 
@@ -587,12 +600,13 @@ export default function WorkoutBuilderScreen() {
           }
         }}
       >
-        <KeyboardAvoidingView
-          style={styles.exerciseModalContainer}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={0}
-        >
-          <View style={styles.modalHeader}>
+        <SafeAreaView style={[styles.exerciseModalContainer, { backgroundColor: themeColors.background.primary }]} edges={['top', 'bottom']}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={0}
+          >
+          <View style={[styles.modalHeader, { backgroundColor: themeColors.background.primary, borderBottomColor: themeColors.surface.border }]}>
             <Pressable
               onPress={() => {
                 if (customExerciseScreen === 'manage') {
@@ -605,12 +619,12 @@ export default function WorkoutBuilderScreen() {
               style={styles.modalBackButton}
             >
               {customExerciseScreen === 'manage' ? (
-                <Text style={styles.modalBackText}>← Back</Text>
+                <Text style={[styles.modalBackText, { color: themeColors.accent.primary }]}>← Back</Text>
               ) : (
-                <X size={24} color={COLORS.text.primary} strokeWidth={2} />
+                <X size={24} color={themeColors.text.primary} strokeWidth={2} />
               )}
             </Pressable>
-            <Text style={styles.modalTitle}>
+            <Text style={[styles.modalTitle, { color: themeColors.text.primary }]}>
               {customExerciseScreen === 'manage' ? 'CUSTOM EXERCISES' : 'ADD EXERCISE'}
             </Text>
             <View style={{ width: 60 }} />
@@ -623,8 +637,8 @@ export default function WorkoutBuilderScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.customExerciseForm}>
-                <Text style={styles.formTitle}>
+              <View style={[styles.customExerciseForm, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+                <Text style={[styles.formTitle, { color: themeColors.text.primary }]}>
                   {editingCustomExercise ? 'Edit Exercise' : 'Create New Exercise'}
                 </Text>
 
@@ -642,8 +656,8 @@ export default function WorkoutBuilderScreen() {
 
               {customExercises.length > 0 && (
                 <>
-                  <View style={styles.divider} />
-                  <Text style={styles.existingExercisesTitle}>YOUR CUSTOM EXERCISES</Text>
+                  <View style={[styles.divider, { backgroundColor: themeColors.surface.border }]} />
+                  <Text style={[styles.existingExercisesTitle, { color: themeColors.text.secondary }]}>YOUR CUSTOM EXERCISES</Text>
 
                   {getAllCategories().map(category => {
                     const exercisesInCategory = customExercises.filter(ex => ex.category === category);
@@ -652,22 +666,22 @@ export default function WorkoutBuilderScreen() {
 
                     return (
                       <View key={category} style={styles.manageCategorySection}>
-                        <Text style={styles.manageCategoryTitle}>{category}</Text>
+                        <Text style={[styles.manageCategoryTitle, { color: themeColors.text.primary }]}>{category}</Text>
                         {exercisesInCategory.map(exercise => (
-                          <View key={exercise.id} style={styles.manageExerciseCard}>
-                            <Text style={styles.manageExerciseName} numberOfLines={1}>{exercise.name}</Text>
+                          <View key={exercise.id} style={[styles.manageExerciseCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+                            <Text style={[styles.manageExerciseName, { color: themeColors.text.primary }]} numberOfLines={1}>{exercise.name}</Text>
                             <View style={styles.exerciseCardActions}>
                               <Pressable
                                 onPress={() => setEditingCustomExercise(exercise)}
                                 style={styles.cardEditButton}
                               >
-                                <Text style={styles.cardEditButtonText}>Edit</Text>
+                                <Text style={[styles.cardEditButtonText, { color: themeColors.accent.primary }]}>Edit</Text>
                               </Pressable>
                               <Pressable
                                 onPress={() => handleDeleteCustomExercise(exercise.id, exercise.name)}
                                 style={styles.cardDeleteButton}
                               >
-                                <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
+                                <Trash2 size={18} color={themeColors.error} strokeWidth={2} />
                               </Pressable>
                             </View>
                           </View>
@@ -687,9 +701,9 @@ export default function WorkoutBuilderScreen() {
             >
               <View style={styles.searchSection}>
                 <TextInput
-                  style={styles.searchInput}
+                  style={[styles.searchInput, { backgroundColor: themeColors.surface.card, color: themeColors.text.primary, borderColor: themeColors.surface.border }]}
                   placeholder="Search exercises..."
-                  placeholderTextColor={COLORS.text.tertiary}
+                  placeholderTextColor={themeColors.text.tertiary}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   autoCapitalize="none"
@@ -700,9 +714,9 @@ export default function WorkoutBuilderScreen() {
                     setEditingCustomExercise(null);
                     setCustomExerciseScreen('manage');
                   }}
-                  style={styles.manageCustomButton}
+                  style={[styles.manageCustomButton, { borderColor: themeColors.accent.primary }]}
                 >
-                  <Text style={styles.manageCustomButtonText}>
+                  <Text style={[styles.manageCustomButtonText, { color: themeColors.accent.primary }]}>
                     {customExercises.length > 0
                       ? `Manage Custom Exercises (${customExercises.length})`
                       : 'Create Custom Exercise'}
@@ -712,7 +726,7 @@ export default function WorkoutBuilderScreen() {
 
               {searchQuery.trim() ? (
                 <View>
-                  <Text style={styles.searchResultsTitle}>SEARCH RESULTS</Text>
+                  <Text style={[styles.searchResultsTitle, { color: themeColors.text.secondary }]}>SEARCH RESULTS</Text>
                   {(() => {
                     const builtInResults = searchBuiltInExercises(searchQuery).map(r => ({
                       ...r,
@@ -733,9 +747,9 @@ export default function WorkoutBuilderScreen() {
 
                     if (allResults.length === 0) {
                       return (
-                        <View style={styles.emptySearchResults}>
-                          <Text style={styles.emptySearchText}>No exercises found</Text>
-                          <Text style={styles.emptySearchSubtext}>
+                        <View style={[styles.emptySearchResults, { backgroundColor: themeColors.surface.card }]}>
+                          <Text style={[styles.emptySearchText, { color: themeColors.text.secondary }]}>No exercises found</Text>
+                          <Text style={[styles.emptySearchSubtext, { color: themeColors.text.tertiary }]}>
                             Try a different search or create a custom exercise
                           </Text>
                         </View>
@@ -748,17 +762,17 @@ export default function WorkoutBuilderScreen() {
                           <Pressable
                             key={result.isCustom ? `custom-${result.id}` : `built-in-${idx}`}
                             onPress={() => addExerciseToWorkout(result.name)}
-                            style={styles.exerciseOption}
+                            style={[styles.exerciseOption, { borderBottomColor: themeColors.surface.border }]}
                           >
                             <View style={styles.exerciseOptionRow}>
-                              <Text style={styles.exerciseOptionText}>{result.name}</Text>
+                              <Text style={[styles.exerciseOptionText, { color: themeColors.text.primary }]}>{result.name}</Text>
                               {result.isCustom && (
-                                <View style={styles.customBadge}>
-                                  <Text style={styles.customBadgeText}>CUSTOM</Text>
+                                <View style={[styles.customBadge, { backgroundColor: themeColors.accent.primaryDim }]}>
+                                  <Text style={[styles.customBadgeText, { color: themeColors.accent.primary }]}>CUSTOM</Text>
                                 </View>
                               )}
                             </View>
-                            <Text style={styles.exerciseCategoryTag}>{result.category}</Text>
+                            <Text style={[styles.exerciseCategoryTag, { color: themeColors.text.tertiary }]}>{result.category}</Text>
                           </Pressable>
                             ))}
                           </>
@@ -769,15 +783,15 @@ export default function WorkoutBuilderScreen() {
                     <>
                       {!selectedMuscleGroup ? (
                         <>
-                          <Text style={styles.browseCategoriesTitle}>BROWSE BY CATEGORY</Text>
+                          <Text style={[styles.browseCategoriesTitle, { color: themeColors.text.secondary }]}>BROWSE BY CATEGORY</Text>
                           <View style={styles.muscleGrid}>
                             {getAllCategories().map(group => (
                               <Pressable
                                 key={group}
                                 onPress={() => setSelectedMuscleGroup(group)}
-                                style={styles.muscleButton}
+                                style={[styles.muscleButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
                               >
-                                <Text style={styles.muscleButtonText}>{group}</Text>
+                                <Text style={[styles.muscleButtonText, { color: themeColors.text.primary }]}>{group}</Text>
                               </Pressable>
                             ))}
                           </View>
@@ -788,7 +802,7 @@ export default function WorkoutBuilderScreen() {
                             onPress={() => setSelectedMuscleGroup(null)}
                             style={styles.backToCategoriesButton}
                           >
-                            <Text style={styles.backToCategoriesText}>← Back to categories</Text>
+                            <Text style={[styles.backToCategoriesText, { color: themeColors.accent.primary }]}>← Back to categories</Text>
                           </Pressable>
 
                           {(() => {
@@ -813,13 +827,13 @@ export default function WorkoutBuilderScreen() {
                               <Pressable
                                 key={exercise.isCustom ? `custom-${exercise.id}` : `built-in-${idx}`}
                                 onPress={() => addExerciseToWorkout(exercise.name)}
-                                style={styles.exerciseOption}
+                                style={[styles.exerciseOption, { borderBottomColor: themeColors.surface.border }]}
                               >
                                 <View style={styles.exerciseOptionRow}>
-                                  <Text style={styles.exerciseOptionText}>{exercise.name}</Text>
+                                  <Text style={[styles.exerciseOptionText, { color: themeColors.text.primary }]}>{exercise.name}</Text>
                                   {exercise.isCustom && (
-                                    <View style={styles.customBadge}>
-                                      <Text style={styles.customBadgeText}>CUSTOM</Text>
+                                    <View style={[styles.customBadge, { backgroundColor: themeColors.accent.primaryDim }]}>
+                                      <Text style={[styles.customBadgeText, { color: themeColors.accent.primary }]}>CUSTOM</Text>
                                     </View>
                                   )}
                                 </View>
@@ -835,7 +849,8 @@ export default function WorkoutBuilderScreen() {
 
           {/* Rest Timer inside the exercise modal */}
           <RestTimerButton />
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
       {/* Rest Timer - always visible in bottom-left corner */}
@@ -852,16 +867,16 @@ export default function WorkoutBuilderScreen() {
         onRequestClose={closePRCelebration}
       >
         <Pressable style={styles.prModalOverlay} onPress={closePRCelebration}>
-          <Pressable style={styles.prModalContainer}>
+          <Pressable style={[styles.prModalContainer, { backgroundColor: themeColors.surface.card }]}>
             {/* Animated Trophy Icon with Glow */}
-            <Animated.View style={[styles.prTrophyContainer, styles.prTrophyGlow, trophyAnimatedStyle, trophyGlowStyle]}>
-              <Trophy size={48} color={COLORS.warning} strokeWidth={1.5} fill={COLORS.warning} />
+            <Animated.View style={[styles.prTrophyContainer, { backgroundColor: themeColors.warningDim }, trophyAnimatedStyle, trophyGlowStyle]}>
+              <Trophy size={48} color={themeColors.warning} strokeWidth={1.5} fill={themeColors.warning} />
             </Animated.View>
 
             {/* Animated Title */}
             <Animated.View style={titleAnimatedStyle}>
-              <Text style={styles.prModalTitle}>NEW PR{newPRs.length > 1 ? 's' : ''}!</Text>
-              <Text style={styles.prModalSubtitle}>
+              <Text style={[styles.prModalTitle, { color: themeColors.text.primary }]}>NEW PR{newPRs.length > 1 ? 's' : ''}!</Text>
+              <Text style={[styles.prModalSubtitle, { color: themeColors.text.secondary }]}>
                 You crushed {newPRs.length} personal record{newPRs.length > 1 ? 's' : ''}
               </Text>
             </Animated.View>
@@ -869,24 +884,24 @@ export default function WorkoutBuilderScreen() {
             {/* Animated PR List */}
             <Animated.View style={[styles.prList, prListAnimatedStyle]}>
               {newPRs.map((pr, index) => (
-                <View key={index} style={styles.prListItem}>
-                  <View style={styles.prListIcon}>
-                    <Award size={16} color={COLORS.accent.primary} strokeWidth={2} />
+                <View key={index} style={[styles.prListItem, { backgroundColor: themeColors.background.elevated }]}>
+                  <View style={[styles.prListIcon, { backgroundColor: themeColors.accent.primaryDim }]}>
+                    <Award size={16} color={themeColors.accent.primary} strokeWidth={2} />
                   </View>
                   <View style={styles.prListInfo}>
-                    <Text style={styles.prListExercise}>{pr.exercise}</Text>
-                    <Text style={styles.prListValue}>
+                    <Text style={[styles.prListExercise, { color: themeColors.text.primary }]}>{pr.exercise}</Text>
+                    <Text style={[styles.prListValue, { color: themeColors.text.secondary }]}>
                       {pr.weight} lbs × {pr.reps} reps
                     </Text>
                     {pr.previousWeight && (
-                      <Text style={styles.prListPrevious}>
+                      <Text style={[styles.prListPrevious, { color: themeColors.text.tertiary }]}>
                         Previous: {pr.previousWeight} lbs × {pr.previousReps} reps
                       </Text>
                     )}
                   </View>
-                  <View style={styles.prListE1RM}>
-                    <Text style={styles.prListE1RMLabel}>1RM</Text>
-                    <Text style={styles.prListE1RMValue}>{pr.estimatedOneRepMax}</Text>
+                  <View style={[styles.prListE1RM, { backgroundColor: themeColors.warning + '20' }]}>
+                    <Text style={[styles.prListE1RMLabel, { color: themeColors.warning }]}>1RM</Text>
+                    <Text style={[styles.prListE1RMValue, { color: themeColors.warning }]}>{pr.estimatedOneRepMax}</Text>
                   </View>
                 </View>
               ))}
@@ -895,21 +910,21 @@ export default function WorkoutBuilderScreen() {
             {/* Buttons */}
             <View style={styles.prModalButtons}>
               <Pressable
-                style={styles.prModalDismiss}
+                style={[styles.prModalDismiss, { backgroundColor: themeColors.accent.primary }]}
                 onPress={closePRCelebration}
               >
-                <Text style={styles.prModalDismissText}>Continue</Text>
+                <Text style={[styles.prModalDismissText, { color: themeColors.text.inverse }]}>Continue</Text>
               </Pressable>
 
               <Pressable
-                style={styles.prModalViewAll}
+                style={[styles.prModalViewAll, { borderColor: themeColors.surface.border }]}
                 onPress={() => {
                   resetPRCelebration();
                   setShowPRCelebration(false);
                   router.push('/personal-records');
                 }}
               >
-                <Text style={styles.prModalViewAllText}>View All PRs</Text>
+                <Text style={[styles.prModalViewAllText, { color: themeColors.text.primary }]}>View All PRs</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -922,7 +937,6 @@ export default function WorkoutBuilderScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background.primary
   },
 
   // Header
@@ -933,9 +947,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: 60,
     paddingBottom: SPACING.md,
-    backgroundColor: COLORS.background.secondary,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface.border
   },
   headerSpacer: {
     width: 60,
@@ -948,23 +960,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: COLORS.surface.card,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
     borderRadius: RADIUS.full,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
   },
   typeButtonText: {
     ...TYPOGRAPHY.caption,
     fontWeight: '600',
-    color: COLORS.text.primary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   headerSubtitle: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.secondary,
     marginTop: 2,
   },
   headerRight: {
@@ -976,56 +984,32 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   saveButtonContainer: {
-    backgroundColor: COLORS.accent.primary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: RADIUS.md,
   },
   saveButtonText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.inverse,
-  },
-  saveButtonDisabled: {
-    backgroundColor: COLORS.text.tertiary,
-    opacity: 0.6,
-  },
-  saveButtonTextDisabled: {
-    color: COLORS.text.secondary,
   },
 
   // Content
   content: {
     flex: 1,
-    padding: SPACING.lg
+    padding: SPACING.lg,
   },
 
   // Section
   section: {
-    marginBottom: SPACING.lg
+    marginBottom: SPACING.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.md
+    marginBottom: SPACING.md,
   },
   sectionTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-    backgroundColor: COLORS.accent.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.md
-  },
-  addButtonText: {
-    ...TYPOGRAPHY.caption,
-    fontWeight: '700',
-    color: COLORS.text.inverse
   },
 
   scrollContentContainer: {
@@ -1041,102 +1025,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.xl,
     paddingTop: SPACING.md,
-    backgroundColor: COLORS.background.primary,
     borderTopWidth: 1,
-    borderTopColor: COLORS.surface.border,
   },
   stickyAddButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.sm,
-    backgroundColor: COLORS.accent.primary,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.md,
   },
   stickyAddButtonText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.inverse,
   },
 
   // Empty State
   emptyState: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.xxxl,
-    alignItems: 'center'
+    alignItems: 'center',
   },
   emptyText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.secondary,
-    marginBottom: SPACING.xs
+    marginBottom: SPACING.xs,
   },
   emptySubtext: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary
-  },
-
-  // Exercise Card
-  exerciseCard: {
-    backgroundColor: COLORS.surface.card,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.surface.border,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm
-  },
-  exerciseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.md
-  },
-  exerciseNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    flex: 1
-  },
-  exerciseName: {
-    ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.primary
-  },
-  noteIndicator: {
-    padding: SPACING.xs
-  },
-  exerciseActions: {
-    flexDirection: 'row',
-    gap: SPACING.md
-  },
-  editIconButton: {
-    padding: SPACING.xs
-  },
-  deleteIconButton: {
-    padding: SPACING.xs
-  },
-  editText: {
-    ...TYPOGRAPHY.caption,
-    fontWeight: '600',
-    color: COLORS.accent.primary
-  },
-  setRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: COLORS.background.elevated,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.xs
-  },
-  setLabel: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.text.tertiary
-  },
-  setValue: {
-    ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.primary
   },
 
   // Modal Overlay
@@ -1144,30 +1059,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
   },
 
   // Picker Modal
   pickerModal: {
-    backgroundColor: COLORS.background.secondary,
     borderRadius: RADIUS.xl,
     padding: SPACING.xl,
     width: '85%',
-    maxHeight: '70%'
+    maxHeight: '70%',
   },
   pickerHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: COLORS.surface.border,
     alignSelf: 'center',
     marginBottom: SPACING.lg,
   },
   pickerTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.primary,
     marginBottom: SPACING.lg,
-    textAlign: 'center'
+    textAlign: 'center',
   },
   pickerOption: {
     flexDirection: 'row',
@@ -1176,52 +1088,12 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderRadius: RADIUS.lg,
     marginBottom: SPACING.sm,
-    backgroundColor: COLORS.surface.card,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
-  },
-  pickerOptionSelected: {
-    backgroundColor: COLORS.accent.primaryDim,
-    borderColor: COLORS.surface.borderAccent,
-  },
-  pickerOptionText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.text.primary
-  },
-  pickerOptionTextSelected: {
-    color: COLORS.accent.primary,
-    fontWeight: '600'
-  },
-  selectedDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.accent.primary,
-  },
-
-  // Date Picker Modal
-  datePickerModal: {
-    backgroundColor: COLORS.background.secondary,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.xl,
-    width: '90%'
-  },
-  confirmButton: {
-    backgroundColor: COLORS.accent.primary,
-    padding: SPACING.md,
-    borderRadius: RADIUS.md,
-    marginTop: SPACING.lg
-  },
-  confirmButtonText: {
-    ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.inverse,
-    textAlign: 'center'
   },
 
   // Exercise Modal
   exerciseModalContainer: {
     flex: 1,
-    backgroundColor: COLORS.background.primary
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1230,20 +1102,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: 60,
     paddingBottom: SPACING.md,
-    backgroundColor: COLORS.background.secondary,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface.border
   },
   modalBackButton: {
     width: 60,
   },
   modalBackText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.accent.primary,
   },
   modalTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.primary
   },
   modalDoneButton: {
     width: 60,
@@ -1251,112 +1119,45 @@ const styles = StyleSheet.create({
   },
   modalDoneText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.accent.primary,
   },
   modalContent: {
-    flex: 1
+    flex: 1,
   },
   modalContentContainer: {
     padding: SPACING.lg,
-    paddingBottom: 120
-  },
-
-  // Selected Exercise
-  selectedExercise: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.text.primary,
-    marginBottom: SPACING.md
-  },
-
-  // Exercise Notes
-  exerciseNotesSection: {
-    marginBottom: SPACING.xl
-  },
-  exerciseNotesHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm
-  },
-  exerciseNotesLabel: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.text.tertiary
-  },
-  notesInput: {
-    backgroundColor: COLORS.surface.card,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.surface.border,
-    padding: SPACING.md,
-    ...TYPOGRAPHY.body,
-    color: COLORS.text.primary,
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-
-  // Sets
-  setsTitle: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary,
-    marginBottom: SPACING.md
-  },
-  addSetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.surface.card,
-    borderWidth: 1,
-    borderColor: COLORS.surface.border,
-    padding: SPACING.md,
-    borderRadius: RADIUS.lg,
-    marginTop: SPACING.sm
-  },
-  addSetButtonText: {
-    ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.primary
+    paddingBottom: 120,
   },
 
   // Search
   searchSection: {
-    marginBottom: SPACING.xl
+    marginBottom: SPACING.xl,
   },
   searchInput: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.md,
     ...TYPOGRAPHY.body,
-    color: COLORS.text.primary,
-    marginBottom: SPACING.md
+    marginBottom: SPACING.md,
   },
   searchResultsTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary,
-    marginBottom: SPACING.md
+    marginBottom: SPACING.md,
   },
   browseCategoriesTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary,
-    marginBottom: SPACING.md
+    marginBottom: SPACING.md,
   },
   emptySearchResults: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.xl,
-    borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.xxxl,
-    alignItems: 'center'
+    alignItems: 'center',
   },
   emptySearchText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.secondary,
-    marginBottom: SPACING.sm
+    marginBottom: SPACING.sm,
   },
   emptySearchSubtext: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
     textAlign: 'center',
   },
 
@@ -1364,148 +1165,124 @@ const styles = StyleSheet.create({
   muscleGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.sm
+    gap: SPACING.sm,
   },
   muscleButton: {
-    backgroundColor: COLORS.surface.card,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.lg,
-    width: '48%'
+    width: '48%',
   },
   muscleButtonText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.primary,
-    textAlign: 'center'
+    textAlign: 'center',
   },
   backToCategoriesButton: {
-    marginBottom: SPACING.lg
+    marginBottom: SPACING.lg,
   },
   backToCategoriesText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.accent.primary
   },
 
   // Exercise Options
   exerciseOption: {
-    backgroundColor: COLORS.surface.card,
-    borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.md,
     borderRadius: RADIUS.lg,
-    marginBottom: SPACING.sm
+    marginBottom: SPACING.sm,
   },
   exerciseOptionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
   },
   exerciseOptionText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.primary
   },
   exerciseCategoryTag: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
-    marginTop: SPACING.xs
+    marginTop: SPACING.xs,
   },
 
   // Custom Exercise
   customBadge: {
-    backgroundColor: COLORS.accent.primaryDim,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
     borderRadius: RADIUS.sm,
-    marginLeft: SPACING.sm
+    marginLeft: SPACING.sm,
   },
   customBadgeText: {
     ...TYPOGRAPHY.caption,
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 0.5,
-    color: COLORS.accent.primary
   },
   manageCustomButton: {
-    backgroundColor: COLORS.accent.primaryDim,
     borderWidth: 1,
-    borderColor: COLORS.surface.borderAccent,
     padding: SPACING.md,
     borderRadius: RADIUS.lg,
-    alignItems: 'center'
+    alignItems: 'center',
   },
   manageCustomButtonText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.accent.primary
   },
 
   // Custom Exercise Form
   customExerciseForm: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.lg,
-    marginBottom: SPACING.xl
+    marginBottom: SPACING.xl,
   },
   formTitle: {
     ...TYPOGRAPHY.h4,
-    color: COLORS.text.primary,
-    marginBottom: SPACING.lg
+    marginBottom: SPACING.lg,
   },
   divider: {
     height: 1,
-    backgroundColor: COLORS.surface.border,
-    marginVertical: SPACING.xl
+    marginVertical: SPACING.xl,
   },
   existingExercisesTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary,
-    marginBottom: SPACING.lg
+    marginBottom: SPACING.lg,
   },
 
   // Manage Category
   manageCategorySection: {
-    marginBottom: SPACING.xl
+    marginBottom: SPACING.xl,
   },
   manageCategoryTitle: {
     ...TYPOGRAPHY.h4,
-    color: COLORS.text.primary,
-    marginBottom: SPACING.md
+    marginBottom: SPACING.md,
   },
   manageExerciseCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.surface.card,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.md,
     borderRadius: RADIUS.lg,
-    marginBottom: SPACING.sm
+    marginBottom: SPACING.sm,
   },
   manageExerciseName: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.primary,
     flex: 1,
     marginRight: SPACING.md,
   },
   exerciseCardActions: {
     flexDirection: 'row',
     gap: SPACING.md,
-    alignItems: 'center'
+    alignItems: 'center',
   },
   cardEditButton: {
-    padding: SPACING.xs
+    padding: SPACING.xs,
   },
   cardEditButtonText: {
     ...TYPOGRAPHY.caption,
     fontWeight: '600',
-    color: COLORS.accent.primary
   },
   cardDeleteButton: {
-    padding: SPACING.xs
+    padding: SPACING.xs,
   },
 
   // PR Celebration Modal
@@ -1518,34 +1295,24 @@ const styles = StyleSheet.create({
   prModalContainer: {
     width: '90%',
     maxWidth: 400,
-    backgroundColor: COLORS.background.secondary,
     borderRadius: RADIUS.xl,
     padding: SPACING.xl,
-    borderWidth: 1,
-    borderColor: COLORS.surface.borderAccent,
     alignItems: 'center',
   },
   prTrophyContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255, 214, 0, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.lg,
   },
-  prTrophyGlow: {
-    shadowColor: COLORS.warning,
-    shadowOffset: { width: 0, height: 0 },
-  },
   prModalTitle: {
     ...TYPOGRAPHY.h1,
-    color: COLORS.warning,
     textAlign: 'center',
   },
   prModalSubtitle: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.secondary,
     textAlign: 'center',
     marginTop: SPACING.xs,
     marginBottom: SPACING.xl,
@@ -1557,10 +1324,7 @@ const styles = StyleSheet.create({
   prListItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
   },
@@ -1568,7 +1332,6 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: COLORS.accent.primaryDim,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.md,
@@ -1578,21 +1341,17 @@ const styles = StyleSheet.create({
   },
   prListExercise: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.primary,
   },
   prListValue: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.accent.primary,
     marginTop: 2,
   },
   prListPrevious: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
     marginTop: 2,
   },
   prListE1RM: {
     alignItems: 'center',
-    backgroundColor: COLORS.accent.primaryDim,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     borderRadius: RADIUS.sm,
@@ -1600,39 +1359,44 @@ const styles = StyleSheet.create({
   prListE1RMLabel: {
     ...TYPOGRAPHY.label,
     fontSize: 8,
-    color: COLORS.accent.primary,
   },
   prListE1RMValue: {
     ...TYPOGRAPHY.statSmall,
     fontSize: 16,
-    color: COLORS.accent.primary,
   },
   prModalButtons: {
     width: '100%',
     gap: SPACING.sm,
   },
   prModalDismiss: {
-    backgroundColor: COLORS.accent.primary,
     padding: SPACING.md,
     borderRadius: RADIUS.md,
     alignItems: 'center',
   },
   prModalDismissText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.inverse,
   },
   prModalViewAll: {
-    backgroundColor: COLORS.surface.card,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.md,
     borderRadius: RADIUS.md,
     alignItems: 'center',
   },
   prModalViewAllText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.primary,
   },
 
-  // Template Button
+  // Tempo Guide Toggle
+  tempoToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.full,
+  },
+  tempoToggleText: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '600',
+  },
 });

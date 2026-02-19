@@ -1,6 +1,7 @@
-import { ChevronLeft, ChevronRight, ChevronRight as ArrowRight, Dumbbell, Activity, Bike, Waves, Flame, Play } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, ChevronRight as ArrowRight, Dumbbell, Activity, Bike, Waves, Flame, Play, RotateCcw, X } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  Alert,
   Dimensions,
   Modal,
   Pressable,
@@ -9,12 +10,14 @@ import {
   Text,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { calculateWeekStreak } from '../utils/calculations';
-import { getTodayString, loadWorkouts } from '../utils/storage';
+import { getTodayString, loadWorkouts, loadInProgressWorkout, clearInProgressWorkout } from '../utils/storage';
 import { loadWeeklyGoals, getWeekStart, getDateFromDayOfWeek } from '../utils/goalsStorage';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const DAY_WIDTH = (width - SPACING.lg * 2 - SPACING.lg * 2 - 52 - 14) / 7;
@@ -22,12 +25,14 @@ const DAY_HEIGHT = DAY_WIDTH + 4;
 
 export default function DashboardScreen({ navigation }) {
   const router = useRouter();
+  const { colors: themeColors } = useTheme();
   const [workouts, setWorkouts] = useState([]);
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [weekStreak, setWeekStreak] = useState(0);
   const [selectedWorkouts, setSelectedWorkouts] = useState(null);
   const [todayPlannedWorkouts, setTodayPlannedWorkouts] = useState([]);
+  const [inProgressWorkout, setInProgressWorkout] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -56,6 +61,10 @@ export default function DashboardScreen({ navigation }) {
     } else {
       setTodayPlannedWorkouts([]);
     }
+
+    // Check for in-progress workout
+    const savedWorkout = await loadInProgressWorkout();
+    setInProgressWorkout(savedWorkout);
   };
 
   // Calculate stats for the viewed calendar month
@@ -106,7 +115,7 @@ export default function DashboardScreen({ navigation }) {
   };
 
   const getWorkoutColor = (type) => {
-    return COLORS.workoutTypes[type] || COLORS.text.tertiary;
+    return themeColors.workoutTypes[type] || themeColors.text.tertiary;
   };
 
   // Start a planned workout - navigate to workout builder with planned data
@@ -126,6 +135,50 @@ export default function DashboardScreen({ navigation }) {
         workoutDetails: JSON.stringify(workoutDetails),
       },
     });
+  };
+
+  // Continue an in-progress workout
+  const continueWorkout = () => {
+    if (!inProgressWorkout) return;
+
+    const { workout, editingWorkoutId, isEditing } = inProgressWorkout;
+
+    // Navigate to workout builder with the saved state
+    const workoutDetails = {
+      name: workout.name,
+      type: workout.type,
+      date: workout.date,
+      time: workout.time,
+      notes: workout.notes,
+      existingExercises: workout.exercises || [],
+    };
+
+    router.push({
+      pathname: '/workout-builder',
+      params: {
+        editingWorkoutId: isEditing ? editingWorkoutId : undefined,
+        workoutDetails: JSON.stringify(workoutDetails),
+      },
+    });
+  };
+
+  // Discard an in-progress workout
+  const discardInProgressWorkout = () => {
+    Alert.alert(
+      'Discard Workout?',
+      'This will delete your unsaved workout progress.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: async () => {
+            await clearInProgressWorkout();
+            setInProgressWorkout(null);
+          },
+        },
+      ]
+    );
   };
 
   const previousMonth = () => {
@@ -241,28 +294,28 @@ export default function DashboardScreen({ navigation }) {
   const today = getTodayString();
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView style={[styles.container, { backgroundColor: themeColors.background.primary }]} showsVerticalScrollIndicator={false}>
       <View style={styles.content}>
         {/* Calendar Card */}
-        <View style={styles.calendarCard}>
+        <View style={[styles.calendarCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
           {/* Month Nav with Week Streak */}
           <View style={styles.monthNav}>
-            <Pressable onPress={previousMonth} style={styles.navButton}>
-              <ChevronLeft size={20} color={COLORS.text.primary} strokeWidth={2.5} />
+            <Pressable onPress={previousMonth} style={[styles.navButton, { backgroundColor: themeColors.background.elevated }]}>
+              <ChevronLeft size={20} color={themeColors.text.primary} strokeWidth={2.5} />
             </Pressable>
 
             <View style={styles.monthCenter}>
-              <Text style={styles.monthText}>{getCurrentMonthName()}</Text>
+              <Text style={[styles.monthText, { color: themeColors.text.primary }]}>{getCurrentMonthName()}</Text>
             </View>
 
-            <Pressable onPress={nextMonth} style={styles.navButton}>
-              <ChevronRight size={20} color={COLORS.text.primary} strokeWidth={2.5} />
+            <Pressable onPress={nextMonth} style={[styles.navButton, { backgroundColor: themeColors.background.elevated }]}>
+              <ChevronRight size={20} color={themeColors.text.primary} strokeWidth={2.5} />
             </Pressable>
           </View>
 
           <View style={styles.dayHeaders}>
             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
-              <Text key={idx} style={styles.dayHeader}>{day}</Text>
+              <Text key={idx} style={[styles.dayHeader, { color: themeColors.text.tertiary }]}>{day}</Text>
             ))}
             <View style={styles.weekHeaderSpacer} />
           </View>
@@ -300,7 +353,7 @@ export default function DashboardScreen({ navigation }) {
                       >
                         <View style={[
                           styles.dayInner,
-                          day?.isToday && styles.dayToday,
+                          day?.isToday && { backgroundColor: themeColors.accent.primary },
                           day?.hasWorkout && !day?.isToday && {
                             backgroundColor: primaryColor + '20',
                             borderWidth: 1.5,
@@ -311,16 +364,16 @@ export default function DashboardScreen({ navigation }) {
                             <View style={styles.workoutIconCenter}>
                               {React.createElement(getWorkoutIcon(workoutTypes[0]), {
                                 size: 18,
-                                color: day?.isToday ? COLORS.text.inverse : primaryColor,
+                                color: day?.isToday ? themeColors.text.inverse : primaryColor,
                                 strokeWidth: 2.5
                               })}
                             </View>
                           ) : (
                             <Text style={[
                               styles.dayText,
-                              day?.isToday && styles.dayTextToday,
-                              isFutureDay && styles.dayTextFuture,
-                              !isFutureDay && !day?.isToday && styles.dayTextPast
+                              { color: themeColors.text.secondary },
+                              day?.isToday && { color: themeColors.text.inverse, fontWeight: '700' },
+                              isFutureDay && { color: themeColors.text.tertiary },
                             ]}>
                               {day?.day}
                             </Text>
@@ -334,18 +387,18 @@ export default function DashboardScreen({ navigation }) {
                 {/* Week Indicator */}
                 <View style={styles.weekIndicator}>
                   {isCurrentWeek && weekStreak > 0 ? (
-                    <View style={styles.streakBadge}>
+                    <View style={[styles.streakBadge, { backgroundColor: themeColors.streakDim, borderColor: themeColors.streak }]}>
                       <Flame
                         size={14}
-                        color={COLORS.secondary.primary}
+                        color={themeColors.streak}
                         strokeWidth={2.5}
                       />
-                      <Text style={styles.streakBadgeNumber}>{weekStreak}</Text>
+                      <Text style={[styles.streakBadgeNumber, { color: themeColors.streak }]}>{weekStreak}</Text>
                     </View>
                   ) : hasWorkoutThisWeek ? (
-                    <View style={styles.weekCircleFilled} />
+                    <View style={[styles.weekCircleFilled, { backgroundColor: themeColors.streak }]} />
                   ) : (
-                    <View style={styles.weekCircle} />
+                    <View style={[styles.weekCircle, { borderColor: themeColors.surface.border }]} />
                   )}
                 </View>
               </View>
@@ -355,19 +408,19 @@ export default function DashboardScreen({ navigation }) {
           {/* Legend */}
           {/* Monthly Stats Footer */}
           {!viewedMonthStats.isFuture && (
-            <View style={styles.calendarFooter}>
+            <View style={[styles.calendarFooter, { borderTopColor: themeColors.surface.border }]}>
               <View style={styles.calendarStats}>
-                <Text style={styles.calendarStatsNumber}>{viewedMonthStats.totalWorkouts}</Text>
-                <Text style={styles.calendarStatsLabel}>workouts</Text>
+                <Text style={[styles.calendarStatsNumber, { color: themeColors.text.primary }]}>{viewedMonthStats.totalWorkouts}</Text>
+                <Text style={[styles.calendarStatsLabel, { color: themeColors.text.tertiary }]}>workouts</Text>
               </View>
-              <View style={styles.calendarStatsDivider} />
+              <View style={[styles.calendarStatsDivider, { backgroundColor: themeColors.surface.border }]} />
               <View style={[
                 styles.calendarChangeBadge,
-                isPositiveChange ? styles.calendarChangeBadgePositive : styles.calendarChangeBadgeNegative
+                { backgroundColor: isPositiveChange ? themeColors.successDim : themeColors.errorDim }
               ]}>
                 <Text style={[
                   styles.calendarChangeBadgeText,
-                  isPositiveChange ? styles.calendarChangeBadgeTextPositive : styles.calendarChangeBadgeTextNegative
+                  { color: isPositiveChange ? themeColors.success : themeColors.error }
                 ]}>
                   {isPositiveChange ? '+' : ''}{viewedMonthStats.change} vs last month
                 </Text>
@@ -376,7 +429,7 @@ export default function DashboardScreen({ navigation }) {
           )}
 
           <View style={styles.legend}>
-            {Object.entries(COLORS.workoutTypes)
+            {Object.entries(themeColors.workoutTypes)
               .filter(([type]) => type !== 'Other')
               .map(([type, color]) => (
                 <View key={type} style={styles.legendItem}>
@@ -385,26 +438,57 @@ export default function DashboardScreen({ navigation }) {
                     color: color,
                     strokeWidth: 2.5
                   })}
-                  <Text style={styles.legendText}>{type}</Text>
+                  <Text style={[styles.legendText, { color: themeColors.text.tertiary }]}>{type}</Text>
                 </View>
               ))}
           </View>
         </View>
 
+        {/* Continue Workout Card - shows when there's an unsaved workout */}
+        {inProgressWorkout && (
+          <View style={[styles.continueWorkoutCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+            <View style={styles.continueWorkoutHeader}>
+              <View style={[styles.continueWorkoutIcon, { backgroundColor: themeColors.background.elevated }]}>
+                <RotateCcw size={18} color={themeColors.text.secondary} strokeWidth={2.5} />
+              </View>
+              <View style={styles.continueWorkoutInfo}>
+                <Text style={[styles.continueWorkoutTitle, { color: themeColors.text.secondary }]}>CONTINUE WORKOUT</Text>
+                <Text style={[styles.continueWorkoutSubtitle, { color: themeColors.text.secondary }]}>
+                  {inProgressWorkout.workout?.name || 'Untitled workout'}
+                  {inProgressWorkout.workout?.exercises?.length > 0 &&
+                    ` • ${inProgressWorkout.workout.exercises.length} exercise${inProgressWorkout.workout.exercises.length !== 1 ? 's' : ''}`
+                  }
+                </Text>
+              </View>
+              <Pressable
+                onPress={discardInProgressWorkout}
+                style={[styles.discardButton, { backgroundColor: themeColors.background.elevated }]}
+                hitSlop={8}
+              >
+                <X size={18} color={themeColors.text.tertiary} strokeWidth={2} />
+              </Pressable>
+            </View>
+            <Pressable style={[styles.continueButton, { backgroundColor: themeColors.accent.primary }]} onPress={continueWorkout}>
+              <Text style={[styles.continueButtonText, { color: themeColors.text.inverse }]}>Continue</Text>
+              <ArrowRight size={16} color={themeColors.text.inverse} strokeWidth={2.5} />
+            </Pressable>
+          </View>
+        )}
+
         {/* Today's Workout Card */}
         {todayPlannedWorkouts.length > 0 ? (
-          <View style={styles.todayWorkoutCard}>
+          <View style={[styles.todayWorkoutCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.borderAccent }]}>
             <View style={styles.todayWorkoutHeader}>
-              <View style={styles.todayWorkoutIcon}>
-                <Play size={18} color={COLORS.accent.primary} strokeWidth={2.5} fill={COLORS.accent.primary} />
+              <View style={[styles.todayWorkoutIcon, { backgroundColor: themeColors.accent.primaryDim }]}>
+                <Play size={18} color={themeColors.accent.primary} strokeWidth={2.5} fill={themeColors.accent.primary} />
               </View>
-              <Text style={styles.todayWorkoutTitle}>TODAY'S WORKOUT</Text>
+              <Text style={[styles.todayWorkoutTitle, { color: themeColors.accent.primary }]}>TODAY'S WORKOUT</Text>
             </View>
 
             {todayPlannedWorkouts.map((workout, index) => (
               <Pressable
                 key={workout.id}
-                style={styles.todayWorkoutItem}
+                style={[styles.todayWorkoutItem, { backgroundColor: themeColors.background.elevated }]}
                 onPress={() => startPlannedWorkout(workout)}
               >
                 <View style={styles.todayWorkoutInfo}>
@@ -416,32 +500,32 @@ export default function DashboardScreen({ navigation }) {
                     })}
                   </View>
                   <View style={styles.todayWorkoutDetails}>
-                    <Text style={styles.todayWorkoutName}>{workout.name}</Text>
-                    <Text style={styles.todayWorkoutMeta}>
+                    <Text style={[styles.todayWorkoutName, { color: themeColors.text.primary }]}>{workout.name}</Text>
+                    <Text style={[styles.todayWorkoutMeta, { color: themeColors.text.tertiary }]}>
                       {workout.workoutType}
                       {workout.exercises?.length > 0 && ` • ${workout.exercises.length} exercises`}
                     </Text>
                   </View>
                 </View>
-                <View style={styles.startWorkoutButton}>
-                  <Text style={styles.startWorkoutText}>Start</Text>
-                  <ArrowRight size={16} color={COLORS.accent.primary} strokeWidth={2.5} />
+                <View style={[styles.startWorkoutButton, { backgroundColor: themeColors.accent.primaryDim }]}>
+                  <Text style={[styles.startWorkoutText, { color: themeColors.accent.primary }]}>Start</Text>
+                  <ArrowRight size={16} color={themeColors.accent.primary} strokeWidth={2.5} />
                 </View>
               </Pressable>
             ))}
           </View>
         ) : (
           <Pressable
-            style={styles.noWorkoutCard}
+            style={[styles.noWorkoutCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
             onPress={() => router.push('/(tabs)/goals')}
           >
             <View style={styles.noWorkoutContent}>
-              <View style={styles.noWorkoutIcon}>
-                <Dumbbell size={24} color={COLORS.text.tertiary} strokeWidth={2} />
+              <View style={[styles.noWorkoutIcon, { backgroundColor: themeColors.background.elevated }]}>
+                <Dumbbell size={24} color={themeColors.text.primary} strokeWidth={2} />
               </View>
               <View style={styles.noWorkoutText}>
-                <Text style={styles.noWorkoutTitle}>No workout planned today</Text>
-                <Text style={styles.noWorkoutHint}>Tap to plan your workouts →</Text>
+                <Text style={[styles.noWorkoutTitle, { color: themeColors.text.primary }]}>No workout planned today</Text>
+                <Text style={[styles.noWorkoutHint, { color: themeColors.text.secondary }]}>Tap to plan your workouts →</Text>
               </View>
             </View>
           </Pressable>
@@ -456,14 +540,14 @@ export default function DashboardScreen({ navigation }) {
           presentationStyle="pageSheet"
           onRequestClose={() => setSelectedWorkouts(null)}
         >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeaderCompact}>
-              <View style={styles.modalHandle} />
+          <SafeAreaView style={[styles.modalContainer, { backgroundColor: themeColors.background.elevated }]} edges={['top', 'bottom']}>
+            <View style={[styles.modalHeaderCompact, { backgroundColor: themeColors.background.primary }]}>
+              <View style={[styles.modalHandle, { backgroundColor: themeColors.surface.border }]} />
               <Pressable
                 onPress={() => setSelectedWorkouts(null)}
                 style={styles.doneButton}
               >
-                <Text style={styles.doneButtonText}>Done</Text>
+                <Text style={[styles.doneButtonText, { color: themeColors.accent.primary }]}>Done</Text>
               </Pressable>
             </View>
 
@@ -479,17 +563,17 @@ export default function DashboardScreen({ navigation }) {
                       })}
                     </View>
                     <View style={styles.workoutHeaderText}>
-                      <Text style={styles.workoutName}>{workout.name}</Text>
-                      <Text style={styles.workoutMeta}>{workout.type} • {workout.date}</Text>
+                      <Text style={[styles.workoutName, { color: themeColors.text.primary }]}>{workout.name}</Text>
+                      <Text style={[styles.workoutMeta, { color: themeColors.text.secondary }]}>{workout.type} • {workout.date}</Text>
                     </View>
                   </View>
                   {workout.exercises?.map((exercise, idx) => (
-                    <View key={idx} style={styles.exerciseCard}>
-                      <Text style={styles.exerciseName}>{exercise.name}</Text>
+                    <View key={idx} style={[styles.exerciseCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+                      <Text style={[styles.exerciseName, { color: themeColors.text.primary }]}>{exercise.name}</Text>
                       {exercise.sets?.map((set, setIdx) => (
-                        <View key={setIdx} style={styles.setRow}>
-                          <Text style={styles.setLabel}>SET {setIdx + 1}</Text>
-                          <Text style={styles.setValue}>
+                        <View key={setIdx} style={[styles.setRow, { backgroundColor: themeColors.background.elevated }]}>
+                          <Text style={[styles.setLabel, { color: themeColors.text.tertiary }]}>SET {setIdx + 1}</Text>
+                          <Text style={[styles.setValue, { color: themeColors.text.primary }]}>
                             {set.distance > 0 && set.time > 0
                               ? `${set.distance} mi • ${set.time} min`
                               : `${set.weight} lbs × ${set.reps} reps`}
@@ -501,7 +585,7 @@ export default function DashboardScreen({ navigation }) {
                 </View>
               ))}
             </ScrollView>
-          </View>
+          </SafeAreaView>
         </Modal>
       )}
     </ScrollView>
@@ -707,10 +791,10 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
   },
   calendarChangeBadgePositive: {
-    backgroundColor: 'rgba(0, 255, 136, 0.15)',
+    backgroundColor: COLORS.successDim,
   },
   calendarChangeBadgeNegative: {
-    backgroundColor: 'rgba(255, 59, 59, 0.15)',
+    backgroundColor: COLORS.errorDim,
   },
   calendarChangeBadgeText: {
     ...TYPOGRAPHY.caption,
@@ -854,7 +938,7 @@ const styles = StyleSheet.create({
   // Modal
   modalContainer: {
     flex: 1,
-    backgroundColor: COLORS.background.primary,
+    backgroundColor: COLORS.background.elevated,
   },
   modalHeaderCompact: {
     alignItems: 'center',
@@ -940,5 +1024,63 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     fontSize: 13,
     color: COLORS.text.primary,
+  },
+
+  // Continue Workout Card
+  continueWorkoutCard: {
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1.5,
+    borderColor: COLORS.secondary.primary,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  continueWorkoutHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  continueWorkoutIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.secondary.dim,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueWorkoutInfo: {
+    flex: 1,
+  },
+  continueWorkoutTitle: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.secondary.primary,
+    fontSize: 11,
+  },
+  continueWorkoutSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
+    marginTop: 2,
+  },
+  discardButton: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.background.elevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    backgroundColor: COLORS.secondary.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.sm,
+  },
+  continueButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.inverse,
   },
 });

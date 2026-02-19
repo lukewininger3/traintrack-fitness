@@ -1,8 +1,9 @@
-import { useReducer, useEffect, useCallback, useState } from 'react';
-import { Alert } from 'react-native';
-import { getTodayString, loadWorkouts, saveWorkouts } from '../../../utils/storage';
+import { useReducer, useEffect, useCallback, useState, useRef } from 'react';
+import { Alert, AppState } from 'react-native';
+import { getTodayString, loadWorkouts, saveWorkouts, saveInProgressWorkout, clearInProgressWorkout } from '../../../utils/storage';
 import { loadTemplates } from '../../../utils/workoutTemplates';
 import { checkAndUpdatePRs } from '../../../utils/personalRecords';
+import { loadCustomExercises } from '../../../utils/customExercises';
 import { EXERCISE_DATABASE } from '../../../constants/workoutTypes';
 
 // Action types
@@ -87,9 +88,22 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
     return type === 'Running' || type === 'Cycling' || type === 'Swimming';
   }, []);
 
-  const isCardioExercise = useCallback((exerciseName) => {
-    return EXERCISE_DATABASE.Cardio?.includes(exerciseName);
+  // Track custom exercises for cardio detection
+  const [customExercises, setCustomExercises] = useState([]);
+
+  useEffect(() => {
+    loadCustomExercises().then(setCustomExercises);
   }, []);
+
+  const isCardioExercise = useCallback((exerciseName) => {
+    // Check built-in cardio exercises
+    if (EXERCISE_DATABASE.Cardio?.includes(exerciseName)) {
+      return true;
+    }
+    // Check custom exercises with Cardio category
+    const customExercise = customExercises.find(ex => ex.name === exerciseName);
+    return customExercise?.category === 'Cardio';
+  }, [customExercises]);
 
   // Load editing workout
   const loadEditingWorkout = useCallback(async () => {
@@ -336,6 +350,61 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
     }
   }, [hasWorkoutDetails, isEditing, isFromTemplate, isRepeating, loadFromWorkoutDetails, loadEditingWorkout, loadFromTemplate, loadFromRepeat]);
 
+  // Auto-save workout state to prevent data loss
+  const autoSaveTimeoutRef = useRef(null);
+  const lastSavedRef = useRef(null);
+
+  // Save when workout changes (debounced)
+  useEffect(() => {
+    // Only auto-save if workout has meaningful data (name or exercises)
+    const hasMeaningfulData = workout.name.trim() || workout.exercises.length > 0;
+    if (!hasMeaningfulData) return;
+
+    // Clear any pending save
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Debounce the save
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      const workoutJson = JSON.stringify(workout);
+      // Only save if data has actually changed
+      if (workoutJson !== lastSavedRef.current) {
+        saveInProgressWorkout({
+          workout,
+          editingWorkoutId: editingWorkoutId || null,
+          isEditing,
+        });
+        lastSavedRef.current = workoutJson;
+      }
+    }, 1000); // Save 1 second after last change
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [workout, editingWorkoutId, isEditing]);
+
+  // Save immediately when app goes to background
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        const hasMeaningfulData = workout.name.trim() || workout.exercises.length > 0;
+        if (hasMeaningfulData) {
+          saveInProgressWorkout({
+            workout,
+            editingWorkoutId: editingWorkoutId || null,
+            isEditing,
+          });
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, [workout, editingWorkoutId, isEditing]);
+
   // Action dispatchers
   const setWorkout = useCallback((workoutData) => {
     dispatch({ type: ACTIONS.SET_WORKOUT, payload: workoutData });
@@ -434,11 +503,12 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
       let savedWorkout;
 
       if (isEditing) {
-        savedWorkout = { ...workoutToSave, id: parseInt(editingWorkoutId) };
+        const workoutId = parseInt(editingWorkoutId);
+        savedWorkout = { ...workoutToSave, id: workoutId };
         const updated = workouts.map(w =>
-          w.id === parseInt(editingWorkoutId) ? { ...w, ...workoutToSave } : w
+          w.id === workoutId ? { ...w, ...workoutToSave } : w
         );
-        await saveWorkouts(updated);
+        await saveWorkouts(updated, { updatedWorkoutId: workoutId });
       } else {
         const newId = Date.now();
         savedWorkout = { ...workoutToSave, id: newId };
@@ -447,6 +517,9 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
 
       // Check for new PRs
       const achievedPRs = await checkAndUpdatePRs(savedWorkout);
+
+      // Clear the in-progress workout since we've saved successfully
+      await clearInProgressWorkout();
 
       setIsSaving(false);
       return { success: true, savedWorkout, achievedPRs };
@@ -478,6 +551,11 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
     return null;
   }, [isEditing, editingWorkoutId]);
 
+  // Discard workout (clear in-progress state)
+  const discardWorkout = useCallback(async () => {
+    await clearInProgressWorkout();
+  }, []);
+
   return {
     workout,
     isEditing,
@@ -499,5 +577,6 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
     handleTypeChange,
     saveWorkoutData,
     findPreviousSession,
+    discardWorkout,
   };
 }

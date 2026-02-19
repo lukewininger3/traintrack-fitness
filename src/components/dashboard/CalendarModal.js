@@ -17,7 +17,8 @@ import {
   Waves,
   Flame,
 } from 'lucide-react-native';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../theme/design';
+import { TYPOGRAPHY, SPACING, RADIUS } from '../../theme/design';
+import { useTheme } from '../../contexts/ThemeContext';
 import { getTodayString } from '../../utils/storage';
 
 const { width } = Dimensions.get('window');
@@ -35,10 +36,6 @@ const getWorkoutIcon = (type) => {
   return icons[type] || Activity;
 };
 
-const getWorkoutColor = (type) => {
-  return COLORS.workoutTypes[type] || COLORS.text.tertiary;
-};
-
 /**
  * CalendarModal - Full calendar view with workout details
  * @param {boolean} visible - Modal visibility
@@ -47,6 +44,11 @@ const getWorkoutColor = (type) => {
  * @param {number} weekStreak - Current week streak
  */
 export default function CalendarModal({ visible, onClose, workouts = [], weekStreak = 0 }) {
+  const { colors: themeColors } = useTheme();
+
+  const getWorkoutColor = (type) => {
+    return themeColors.workoutTypes[type] || themeColors.text.tertiary;
+  };
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [selectedWorkouts, setSelectedWorkouts] = useState(null);
@@ -177,37 +179,37 @@ export default function CalendarModal({ visible, onClose, workouts = [], weekStr
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <View style={styles.modalHandle} />
+      <View style={[styles.modalContainer, { backgroundColor: themeColors.background.primary }]}>
+        <View style={[styles.modalHeader, { backgroundColor: themeColors.background.primary }]}>
+          <View style={[styles.modalHandle, { backgroundColor: themeColors.surface.border }]} />
           <Pressable onPress={onClose} style={styles.doneButton}>
-            <Text style={styles.doneButtonText}>Done</Text>
+            <Text style={[styles.doneButtonText, { color: themeColors.accent.primary }]}>Done</Text>
           </Pressable>
         </View>
 
         <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
           {/* Calendar */}
-          <View style={styles.calendarCard}>
+          <View style={[styles.calendarCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
             {/* Month Nav */}
             <View style={styles.monthNav}>
-              <Pressable onPress={previousMonth} style={styles.navButton}>
-                <ChevronLeft size={20} color={COLORS.text.primary} strokeWidth={2.5} />
+              <Pressable onPress={previousMonth} style={[styles.navButton, { backgroundColor: themeColors.background.elevated }]}>
+                <ChevronLeft size={20} color={themeColors.text.primary} strokeWidth={2.5} />
               </Pressable>
 
               <View style={styles.monthCenter}>
-                <Text style={styles.monthText}>{getCurrentMonthName()}</Text>
-                <Text style={styles.monthCount}>{monthWorkoutCount} workouts</Text>
+                <Text style={[styles.monthText, { color: themeColors.text.primary }]}>{getCurrentMonthName()}</Text>
+                <Text style={[styles.monthCount, { color: themeColors.text.tertiary }]}>{monthWorkoutCount} workouts</Text>
               </View>
 
-              <Pressable onPress={nextMonth} style={styles.navButton}>
-                <ChevronRight size={20} color={COLORS.text.primary} strokeWidth={2.5} />
+              <Pressable onPress={nextMonth} style={[styles.navButton, { backgroundColor: themeColors.background.elevated }]}>
+                <ChevronRight size={20} color={themeColors.text.primary} strokeWidth={2.5} />
               </Pressable>
             </View>
 
             {/* Day Headers */}
             <View style={styles.dayHeaders}>
               {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
-                <Text key={idx} style={styles.dayHeader}>{day}</Text>
+                <Text key={idx} style={[styles.dayHeader, { color: themeColors.text.tertiary }]}>{day}</Text>
               ))}
               <View style={styles.weekHeaderSpacer} />
             </View>
@@ -246,7 +248,7 @@ export default function CalendarModal({ visible, onClose, workouts = [], weekStr
                         >
                           <View style={[
                             styles.dayInner,
-                            day?.isToday && styles.dayToday,
+                            day?.isToday && { backgroundColor: themeColors.accent.primary },
                             day?.hasWorkout && !day?.isToday && {
                               backgroundColor: primaryColor + '20',
                               borderWidth: 1.5,
@@ -258,7 +260,7 @@ export default function CalendarModal({ visible, onClose, workouts = [], weekStr
                                 <View style={styles.workoutIconCenter}>
                                   {React.createElement(getWorkoutIcon(workoutTypes[0]), {
                                     size: 18,
-                                    color: day?.isToday ? COLORS.text.inverse : primaryColor,
+                                    color: day?.isToday ? themeColors.text.inverse : primaryColor,
                                     strokeWidth: 2.5,
                                   })}
                                 </View>
@@ -282,9 +284,9 @@ export default function CalendarModal({ visible, onClose, workouts = [], weekStr
                             ) : (
                               <Text style={[
                                 styles.dayText,
-                                day?.isToday && styles.dayTextToday,
-                                isFutureDay && styles.dayTextFuture,
-                                !isFutureDay && !day?.isToday && styles.dayTextPast,
+                                { color: themeColors.text.secondary },
+                                day?.isToday && { color: themeColors.text.inverse, fontWeight: '700' },
+                                isFutureDay && { color: themeColors.text.tertiary },
                               ]}>
                                 {day?.day}
                               </Text>
@@ -301,16 +303,16 @@ export default function CalendarModal({ visible, onClose, workouts = [], weekStr
                       <View style={styles.fireStreakContainer}>
                         <Flame
                           size={32}
-                          color={COLORS.accent.primary}
-                          fill={COLORS.accent.primary}
+                          color={themeColors.warning}
+                          fill={themeColors.warning}
                           strokeWidth={1.5}
                         />
                         <Text style={styles.fireStreakNumber}>{weekStreak}</Text>
                       </View>
                     ) : hasWorkoutThisWeek ? (
-                      <View style={styles.weekCircleFilled} />
+                      <View style={[styles.weekCircleFilled, { backgroundColor: themeColors.accent.primary }]} />
                     ) : (
-                      <View style={styles.weekCircle} />
+                      <View style={[styles.weekCircle, { borderColor: themeColors.surface.border }]} />
                     )}
                   </View>
                 </View>
@@ -318,8 +320,8 @@ export default function CalendarModal({ visible, onClose, workouts = [], weekStr
             })}
 
             {/* Legend */}
-            <View style={styles.legend}>
-              {Object.entries(COLORS.workoutTypes)
+            <View style={[styles.legend, { borderTopColor: themeColors.surface.border }]}>
+              {Object.entries(themeColors.workoutTypes)
                 .filter(([type]) => type !== 'Other')
                 .map(([type, color]) => (
                   <View key={type} style={styles.legendItem}>
@@ -328,7 +330,7 @@ export default function CalendarModal({ visible, onClose, workouts = [], weekStr
                       color: color,
                       strokeWidth: 2.5,
                     })}
-                    <Text style={styles.legendText}>{type}</Text>
+                    <Text style={[styles.legendText, { color: themeColors.text.tertiary }]}>{type}</Text>
                   </View>
                 ))}
             </View>
@@ -343,14 +345,14 @@ export default function CalendarModal({ visible, onClose, workouts = [], weekStr
             presentationStyle="pageSheet"
             onRequestClose={() => setSelectedWorkouts(null)}
           >
-            <View style={styles.modalContainer}>
-              <View style={styles.modalHeader}>
-                <View style={styles.modalHandle} />
+            <View style={[styles.modalContainer, { backgroundColor: themeColors.background.primary }]}>
+              <View style={[styles.modalHeader, { backgroundColor: themeColors.background.primary }]}>
+                <View style={[styles.modalHandle, { backgroundColor: themeColors.surface.border }]} />
                 <Pressable
                   onPress={() => setSelectedWorkouts(null)}
                   style={styles.doneButton}
                 >
-                  <Text style={styles.doneButtonText}>Done</Text>
+                  <Text style={[styles.doneButtonText, { color: themeColors.accent.primary }]}>Done</Text>
                 </Pressable>
               </View>
 
@@ -366,17 +368,17 @@ export default function CalendarModal({ visible, onClose, workouts = [], weekStr
                         })}
                       </View>
                       <View style={styles.workoutHeaderText}>
-                        <Text style={styles.workoutName}>{workout.name}</Text>
-                        <Text style={styles.workoutMeta}>{workout.type} • {workout.date}</Text>
+                        <Text style={[styles.workoutName, { color: themeColors.text.primary }]}>{workout.name}</Text>
+                        <Text style={[styles.workoutMeta, { color: themeColors.text.secondary }]}>{workout.type} • {workout.date}</Text>
                       </View>
                     </View>
                     {workout.exercises?.map((exercise, idx) => (
-                      <View key={idx} style={styles.exerciseCard}>
-                        <Text style={styles.exerciseName}>{exercise.name}</Text>
+                      <View key={idx} style={[styles.exerciseCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+                        <Text style={[styles.exerciseName, { color: themeColors.text.primary }]}>{exercise.name}</Text>
                         {exercise.sets?.map((set, setIdx) => (
-                          <View key={setIdx} style={styles.setRow}>
-                            <Text style={styles.setLabel}>SET {setIdx + 1}</Text>
-                            <Text style={styles.setValue}>
+                          <View key={setIdx} style={[styles.setRow, { backgroundColor: themeColors.background.elevated }]}>
+                            <Text style={[styles.setLabel, { color: themeColors.text.tertiary }]}>SET {setIdx + 1}</Text>
+                            <Text style={[styles.setValue, { color: themeColors.text.primary }]}>
                               {set.distance > 0 && set.time > 0
                                 ? `${set.distance} mi • ${set.time} min`
                                 : `${set.weight} lbs × ${set.reps} reps`}
@@ -399,20 +401,17 @@ export default function CalendarModal({ visible, onClose, workouts = [], weekStr
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
-    backgroundColor: COLORS.background.primary,
   },
   modalHeader: {
     alignItems: 'center',
     paddingTop: SPACING.md,
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.sm,
-    backgroundColor: COLORS.background.primary,
   },
   modalHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: COLORS.surface.border,
     marginBottom: SPACING.sm,
   },
   doneButton: {
@@ -421,16 +420,13 @@ const styles = StyleSheet.create({
   },
   doneButtonText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.accent.primary,
   },
   modalScroll: {
     padding: SPACING.lg,
   },
   calendarCard: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.lg,
   },
   monthNav: {
@@ -443,7 +439,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: RADIUS.md,
-    backgroundColor: COLORS.background.elevated,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -453,12 +448,10 @@ const styles = StyleSheet.create({
   monthText: {
     ...TYPOGRAPHY.label,
     fontSize: 14,
-    color: COLORS.text.primary,
     letterSpacing: 1,
   },
   monthCount: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
     marginTop: 2,
   },
   dayHeaders: {
@@ -471,7 +464,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     ...TYPOGRAPHY.label,
     fontSize: 10,
-    color: COLORS.text.tertiary,
     marginHorizontal: 1,
   },
   weekHeaderSpacer: {
@@ -506,24 +498,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.sm,
     position: 'relative',
   },
-  dayToday: {
-    backgroundColor: COLORS.accent.primary,
-    borderWidth: 0,
-  },
   dayText: {
     ...TYPOGRAPHY.caption,
     fontWeight: '600',
-    color: COLORS.text.secondary,
-  },
-  dayTextToday: {
-    color: COLORS.text.inverse,
-    fontWeight: '700',
-  },
-  dayTextFuture: {
-    color: COLORS.text.tertiary,
-  },
-  dayTextPast: {
-    color: COLORS.text.secondary,
   },
   workoutIconCenter: {
     alignItems: 'center',
@@ -551,13 +528,11 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     borderWidth: 1.5,
-    borderColor: COLORS.surface.border,
   },
   weekCircleFilled: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: COLORS.accent.primary,
   },
   fireStreakContainer: {
     position: 'relative',
@@ -584,7 +559,6 @@ const styles = StyleSheet.create({
     marginTop: SPACING.lg,
     paddingTop: SPACING.md,
     borderTopWidth: 1,
-    borderTopColor: COLORS.surface.border,
   },
   legendItem: {
     flexDirection: 'row',
@@ -594,7 +568,6 @@ const styles = StyleSheet.create({
   legendText: {
     ...TYPOGRAPHY.caption,
     fontSize: 10,
-    color: COLORS.text.tertiary,
   },
   workoutSection: {
     marginBottom: SPACING.lg,
@@ -617,31 +590,25 @@ const styles = StyleSheet.create({
   },
   workoutName: {
     ...TYPOGRAPHY.h4,
-    color: COLORS.text.primary,
   },
   workoutMeta: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.secondary,
     marginTop: 2,
   },
   exerciseCard: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
   },
   exerciseName: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.primary,
     marginBottom: SPACING.sm,
   },
   setRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.background.elevated,
     borderRadius: RADIUS.sm,
     padding: SPACING.sm,
     marginBottom: 4,
@@ -649,11 +616,9 @@ const styles = StyleSheet.create({
   setLabel: {
     ...TYPOGRAPHY.label,
     fontSize: 10,
-    color: COLORS.text.tertiary,
   },
   setValue: {
     ...TYPOGRAPHY.body,
     fontSize: 13,
-    color: COLORS.text.primary,
   },
 });

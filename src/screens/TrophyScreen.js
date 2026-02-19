@@ -43,19 +43,22 @@ import Animated, {
 import { loadWorkouts } from '../utils/storage';
 import { loadAllWeeklyGoals } from '../utils/goalsStorage';
 import { loadWeightData, getConsecutiveDaysLogged } from '../utils/weightStorage';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { useTheme } from '../contexts/ThemeContext';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
+// Tier colors work well in both light and dark mode
 const TIER_COLORS = {
   bronze: { primary: '#CD7F32', dim: 'rgba(205, 127, 50, 0.15)' },
-  silver: { primary: '#C0C0C0', dim: 'rgba(192, 192, 192, 0.15)' },
-  gold: { primary: '#FFD700', dim: 'rgba(255, 215, 0, 0.15)' },
-  platinum: { primary: '#E5E4E2', dim: 'rgba(229, 228, 226, 0.20)' },
-  diamond: { primary: '#00D4FF', dim: 'rgba(0, 212, 255, 0.15)' }
+  silver: { primary: '#A8A29E', dim: 'rgba(168, 162, 158, 0.15)' },
+  gold: { primary: '#D4AF37', dim: 'rgba(212, 175, 55, 0.15)' },
+  platinum: { primary: '#8B9A7B', dim: 'rgba(139, 154, 123, 0.15)' },
+  diamond: { primary: '#B9F2FF', dim: 'rgba(185, 242, 255, 0.15)' }
 };
 
 export default function TrophyScreen() {
+  const { colors: themeColors } = useTheme();
   const [badges, setBadges] = useState({
     totalWorkouts: 0,
     consecutiveWeeks: 0,
@@ -422,20 +425,24 @@ export default function TrophyScreen() {
         key={badge.id}
         onPress={handlePress}
         entering={FadeInDown.delay(index * 50).springify().damping(15)}
-        style={[styles.badgeCard, earned && styles.badgeCardEarned]}
+        style={[
+          styles.badgeCard,
+          { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border },
+          earned && { borderColor: themeColors.surface.borderAccent }
+        ]}
       >
         <Animated.View style={[
           styles.badgeIconContainer,
-          { backgroundColor: earned ? tierColor.dim : COLORS.background.elevated },
+          { backgroundColor: earned ? tierColor.dim : themeColors.background.elevated },
           earned && { shadowColor: tierColor.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 8 }
         ]}>
           {earned ? (
             <Icon size={28} color={tierColor.primary} strokeWidth={2.5} />
           ) : (
-            <Lock size={22} color={COLORS.text.tertiary} strokeWidth={2} />
+            <Lock size={22} color={themeColors.text.tertiary} strokeWidth={2} />
           )}
         </Animated.View>
-        <Text style={[styles.badgeTitle, earned && styles.badgeTitleEarned]} numberOfLines={1}>
+        <Text style={[styles.badgeTitle, { color: themeColors.text.tertiary }, earned && { color: themeColors.text.primary }]} numberOfLines={1}>
           {badge.title}
         </Text>
         {earned ? (
@@ -445,7 +452,7 @@ export default function TrophyScreen() {
             </Text>
           </View>
         ) : (
-          <Text style={styles.badgeProgress}>
+          <Text style={[styles.badgeProgress, { color: themeColors.text.tertiary }]}>
             {progress}/{threshold}
           </Text>
         )}
@@ -469,33 +476,37 @@ export default function TrophyScreen() {
         key={badge.id}
         onPress={handlePress}
         entering={FadeInDown.delay(index * 80).springify().damping(15)}
-        style={[styles.specialBadgeCard, badge.earned && styles.specialBadgeCardEarned]}
+        style={[
+          styles.specialBadgeCard,
+          { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border },
+          badge.earned && { borderColor: themeColors.surface.borderAccent }
+        ]}
       >
-        <View style={[styles.specialAccent, { backgroundColor: badge.earned ? tierColor.primary : COLORS.surface.border }]} />
+        <View style={[styles.specialAccent, { backgroundColor: badge.earned ? tierColor.primary : themeColors.surface.border }]} />
         <View style={styles.specialContent}>
           <Animated.View style={[
             styles.specialIconContainer,
-            { backgroundColor: badge.earned ? tierColor.dim : COLORS.background.elevated },
+            { backgroundColor: badge.earned ? tierColor.dim : themeColors.background.elevated },
             badge.earned && { shadowColor: tierColor.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 10 }
           ]}>
             {badge.earned ? (
               <Icon size={32} color={tierColor.primary} strokeWidth={2.5} />
             ) : (
-              <Lock size={24} color={COLORS.text.tertiary} strokeWidth={2} />
+              <Lock size={24} color={themeColors.text.tertiary} strokeWidth={2} />
             )}
           </Animated.View>
           <View style={styles.specialInfo}>
-            <Text style={[styles.specialTitle, badge.earned && styles.specialTitleEarned]}>
+            <Text style={[styles.specialTitle, { color: themeColors.text.tertiary }, badge.earned && { color: themeColors.text.primary }]}>
               {badge.title}
             </Text>
-            <Text style={styles.specialDescription}>{badge.description}</Text>
+            <Text style={[styles.specialDescription, { color: themeColors.text.tertiary }]}>{badge.description}</Text>
           </View>
           {badge.earned ? (
             <View style={[styles.specialTierPill, { backgroundColor: tierColor.dim }]}>
               <Trophy size={14} color={tierColor.primary} fill={tierColor.primary} strokeWidth={2} />
             </View>
           ) : badge.progress !== null && (
-            <Text style={styles.specialProgress}>{badge.progress}/{badge.total}</Text>
+            <Text style={[styles.specialProgress, { color: themeColors.text.tertiary }]}>{badge.progress}/{badge.total}</Text>
           )}
         </View>
       </AnimatedPressable>
@@ -503,33 +514,33 @@ export default function TrophyScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView style={[styles.container, { backgroundColor: themeColors.background.primary }]} showsVerticalScrollIndicator={false}>
       <View style={styles.content}>
         {/* Hero Stats */}
         <Animated.View
           entering={FadeIn.delay(100).springify()}
-          style={styles.heroCard}
+          style={[styles.heroCard, { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }]}
         >
           <View style={styles.heroTop}>
             <Animated.View
               entering={FadeInDown.delay(200).springify().damping(12)}
-              style={styles.heroIconContainer}
+              style={[styles.heroIconContainer, { backgroundColor: themeColors.background.primary }]}
             >
-              <Crown size={36} color={COLORS.accent.primary} fill={COLORS.accent.primary} strokeWidth={2} />
+              <Crown size={36} color={themeColors.accent.primary} fill={themeColors.accent.primary} strokeWidth={2} />
             </Animated.View>
             <View style={styles.heroStats}>
-              <Text style={styles.heroNumber}>{totalUnlocked}</Text>
-              <Text style={styles.heroLabel}>/ {totalBadges} BADGES</Text>
+              <Text style={[styles.heroNumber, { color: themeColors.text.primary }]}>{totalUnlocked}</Text>
+              <Text style={[styles.heroLabel, { color: themeColors.text.secondary }]}>/ {totalBadges} BADGES</Text>
             </View>
           </View>
           <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
+            <View style={[styles.progressBar, { backgroundColor: themeColors.background.primary }]}>
               <Animated.View
                 entering={FadeIn.delay(400)}
-                style={[styles.progressFill, { width: `${(totalUnlocked / totalBadges) * 100}%` }]}
+                style={[styles.progressFill, { width: `${(totalUnlocked / totalBadges) * 100}%`, backgroundColor: themeColors.accent.primary }]}
               />
             </View>
-            <Text style={styles.progressText}>
+            <Text style={[styles.progressText, { color: themeColors.text.secondary }]}>
               {Math.round((totalUnlocked / totalBadges) * 100)}% Complete
             </Text>
           </View>
@@ -538,10 +549,10 @@ export default function TrophyScreen() {
         {/* Workout Milestones */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Zap size={18} color={COLORS.accent.primary} strokeWidth={2.5} />
-            <Text style={styles.sectionTitle}>WORKOUT MILESTONES</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>{unlockedWorkout}/{workoutBadges.length}</Text>
+            <Zap size={18} color={themeColors.accent.primary} strokeWidth={2.5} />
+            <Text style={[styles.sectionTitle, { color: themeColors.text.primary }]}>WORKOUT MILESTONES</Text>
+            <View style={[styles.countBadge, { backgroundColor: themeColors.surface.card }]}>
+              <Text style={[styles.countText, { color: themeColors.text.tertiary }]}>{unlockedWorkout}/{workoutBadges.length}</Text>
             </View>
           </View>
           <View style={styles.badgeGrid}>
@@ -560,10 +571,10 @@ export default function TrophyScreen() {
         {/* Consistency Streaks */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Flame size={18} color={COLORS.secondary.primary} strokeWidth={2.5} />
-            <Text style={styles.sectionTitle}>CONSISTENCY STREAKS</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>{unlockedConsistency}/{consistencyBadges.length}</Text>
+            <Flame size={18} color={themeColors.secondary.primary} strokeWidth={2.5} />
+            <Text style={[styles.sectionTitle, { color: themeColors.text.primary }]}>CONSISTENCY STREAKS</Text>
+            <View style={[styles.countBadge, { backgroundColor: themeColors.surface.card }]}>
+              <Text style={[styles.countText, { color: themeColors.text.tertiary }]}>{unlockedConsistency}/{consistencyBadges.length}</Text>
             </View>
           </View>
           <View style={styles.badgeGrid}>
@@ -582,10 +593,10 @@ export default function TrophyScreen() {
         {/* Special Achievements */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Sparkles size={18} color={COLORS.tertiary.primary} strokeWidth={2.5} />
-            <Text style={styles.sectionTitle}>SPECIAL ACHIEVEMENTS</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>{unlockedSpecial}/{specialBadges.length}</Text>
+            <Sparkles size={18} color={themeColors.tertiary.primary} strokeWidth={2.5} />
+            <Text style={[styles.sectionTitle, { color: themeColors.text.primary }]}>SPECIAL ACHIEVEMENTS</Text>
+            <View style={[styles.countBadge, { backgroundColor: themeColors.surface.card }]}>
+              <Text style={[styles.countText, { color: themeColors.text.tertiary }]}>{unlockedSpecial}/{specialBadges.length}</Text>
             </View>
           </View>
           <View style={styles.specialBadgesContainer}>
@@ -596,10 +607,10 @@ export default function TrophyScreen() {
         {/* Weekly Goals */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Target size={18} color={COLORS.success} strokeWidth={2.5} />
-            <Text style={styles.sectionTitle}>WEEKLY GOALS</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>{unlockedGoal}/{goalBadges.length}</Text>
+            <Target size={18} color={themeColors.success} strokeWidth={2.5} />
+            <Text style={[styles.sectionTitle, { color: themeColors.text.primary }]}>WEEKLY GOALS</Text>
+            <View style={[styles.countBadge, { backgroundColor: themeColors.surface.card }]}>
+              <Text style={[styles.countText, { color: themeColors.text.tertiary }]}>{unlockedGoal}/{goalBadges.length}</Text>
             </View>
           </View>
           <View style={styles.specialBadgesContainer}>
@@ -610,10 +621,10 @@ export default function TrophyScreen() {
         {/* Weight Progress */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Heart size={18} color={COLORS.accent.primary} strokeWidth={2.5} />
-            <Text style={styles.sectionTitle}>WEIGHT PROGRESS</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>{unlockedWeight}/{weightBadges.length}</Text>
+            <Heart size={18} color={themeColors.accent.primary} strokeWidth={2.5} />
+            <Text style={[styles.sectionTitle, { color: themeColors.text.primary }]}>WEIGHT PROGRESS</Text>
+            <View style={[styles.countBadge, { backgroundColor: themeColors.surface.card }]}>
+              <Text style={[styles.countText, { color: themeColors.text.tertiary }]}>{unlockedWeight}/{weightBadges.length}</Text>
             </View>
           </View>
           <View style={styles.specialBadgesContainer}>
@@ -624,10 +635,10 @@ export default function TrophyScreen() {
         {/* Planning */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <ListChecks size={18} color={COLORS.secondary.primary} strokeWidth={2.5} />
-            <Text style={styles.sectionTitle}>PLANNING</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>{unlockedPlanning}/{planningBadges.length}</Text>
+            <ListChecks size={18} color={themeColors.secondary.primary} strokeWidth={2.5} />
+            <Text style={[styles.sectionTitle, { color: themeColors.text.primary }]}>PLANNING</Text>
+            <View style={[styles.countBadge, { backgroundColor: themeColors.surface.card }]}>
+              <Text style={[styles.countText, { color: themeColors.text.tertiary }]}>{unlockedPlanning}/{planningBadges.length}</Text>
             </View>
           </View>
           <View style={styles.specialBadgesContainer}>
@@ -639,9 +650,9 @@ export default function TrophyScreen() {
       {/* Badge Detail Modal */}
       {selectedBadge && (
         <View style={styles.modal}>
-          <Pressable style={styles.modalOverlay} onPress={() => setSelectedBadge(null)} />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHandle} />
+          <Pressable style={[styles.modalOverlay, { backgroundColor: themeColors.overlay.heavy }]} onPress={() => setSelectedBadge(null)} />
+          <View style={[styles.modalContent, { backgroundColor: themeColors.background.secondary }]}>
+            <View style={[styles.modalHandle, { backgroundColor: themeColors.surface.border }]} />
 
             {(() => {
               const tierColor = TIER_COLORS[selectedBadge.tier];
@@ -650,44 +661,46 @@ export default function TrophyScreen() {
                 <>
                   <View style={[
                     styles.modalIconContainer,
-                    { backgroundColor: selectedBadge.earned ? tierColor.dim : COLORS.surface.card }
+                    { backgroundColor: selectedBadge.earned ? tierColor.dim : themeColors.surface.card }
                   ]}>
                     {selectedBadge.earned ? (
                       <Icon size={56} color={tierColor.primary} strokeWidth={2} />
                     ) : (
-                      <Lock size={48} color={COLORS.text.tertiary} strokeWidth={2} />
+                      <Lock size={48} color={themeColors.text.tertiary} strokeWidth={2} />
                     )}
                   </View>
 
-                  <Text style={styles.modalTitle}>{selectedBadge.title}</Text>
+                  <Text style={[styles.modalTitle, { color: themeColors.text.primary }]}>{selectedBadge.title}</Text>
 
                   <View style={[
                     styles.modalTierPill,
-                    { backgroundColor: selectedBadge.earned ? tierColor.dim : COLORS.surface.card }
+                    { backgroundColor: selectedBadge.earned ? tierColor.dim : themeColors.surface.card }
                   ]}>
                     <Text style={[
                       styles.modalTierText,
-                      { color: selectedBadge.earned ? tierColor.primary : COLORS.text.tertiary }
+                      { color: selectedBadge.earned ? tierColor.primary : themeColors.text.tertiary }
                     ]}>
                       {selectedBadge.tier.toUpperCase()}
                     </Text>
                   </View>
 
-                  <Text style={styles.modalDescription}>{selectedBadge.description}</Text>
+                  <Text style={[styles.modalDescription, { color: themeColors.text.secondary }]}>{selectedBadge.description}</Text>
 
                   <View style={[
                     styles.statusPill,
-                    selectedBadge.earned ? styles.statusPillUnlocked : styles.statusPillLocked
+                    selectedBadge.earned
+                      ? { backgroundColor: themeColors.successDim }
+                      : { backgroundColor: themeColors.surface.card }
                   ]}>
                     {selectedBadge.earned ? (
                       <>
-                        <CheckCircle size={18} color={COLORS.success} strokeWidth={2.5} />
-                        <Text style={styles.statusTextUnlocked}>UNLOCKED</Text>
+                        <CheckCircle size={18} color={themeColors.success} strokeWidth={2.5} />
+                        <Text style={[styles.statusTextUnlocked, { color: themeColors.success }]}>UNLOCKED</Text>
                       </>
                     ) : (
                       <>
-                        <Lock size={18} color={COLORS.text.tertiary} strokeWidth={2.5} />
-                        <Text style={styles.statusTextLocked}>
+                        <Lock size={18} color={themeColors.text.tertiary} strokeWidth={2.5} />
+                        <Text style={[styles.statusTextLocked, { color: themeColors.text.tertiary }]}>
                           {selectedBadge.progress !== null
                             ? `${selectedBadge.progress}/${selectedBadge.threshold}`
                             : 'LOCKED'}
@@ -708,7 +721,6 @@ export default function TrophyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background.primary,
   },
   content: {
     padding: SPACING.lg,
@@ -717,10 +729,8 @@ const styles = StyleSheet.create({
 
   // Hero Card
   heroCard: {
-    backgroundColor: COLORS.accent.primaryDim,
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.surface.borderAccent,
     padding: SPACING.xl,
     marginBottom: SPACING.xl,
   },
@@ -733,7 +743,6 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: COLORS.background.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.lg,
@@ -743,11 +752,9 @@ const styles = StyleSheet.create({
   },
   heroNumber: {
     ...TYPOGRAPHY.stat,
-    color: COLORS.text.primary,
   },
   heroLabel: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary,
     marginTop: SPACING.xs,
   },
   progressContainer: {
@@ -755,18 +762,15 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 8,
-    backgroundColor: COLORS.background.primary,
     borderRadius: 4,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: COLORS.accent.primary,
     borderRadius: 4,
   },
   progressText: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.secondary,
     textAlign: 'right',
   },
 
@@ -782,11 +786,9 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.primary,
     flex: 1,
   },
   countBadge: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.full,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
@@ -794,7 +796,6 @@ const styles = StyleSheet.create({
   countText: {
     ...TYPOGRAPHY.caption,
     fontWeight: '700',
-    color: COLORS.text.tertiary,
   },
 
   // Badge Grid
@@ -805,15 +806,10 @@ const styles = StyleSheet.create({
   },
   badgeCard: {
     width: '31.5%',
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.md,
     alignItems: 'center',
-  },
-  badgeCardEarned: {
-    borderColor: COLORS.surface.borderAccent,
   },
   badgeIconContainer: {
     width: 52,
@@ -826,16 +822,11 @@ const styles = StyleSheet.create({
   badgeTitle: {
     ...TYPOGRAPHY.caption,
     fontWeight: '600',
-    color: COLORS.text.tertiary,
     textAlign: 'center',
     marginBottom: SPACING.xs,
   },
-  badgeTitleEarned: {
-    color: COLORS.text.primary,
-  },
   badgeProgress: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
     fontSize: 10,
   },
   tierPill: {
@@ -855,14 +846,9 @@ const styles = StyleSheet.create({
   },
   specialBadgeCard: {
     flexDirection: 'row',
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     overflow: 'hidden',
-  },
-  specialBadgeCardEarned: {
-    borderColor: COLORS.surface.borderAccent,
   },
   specialAccent: {
     width: 4,
@@ -886,15 +872,10 @@ const styles = StyleSheet.create({
   },
   specialTitle: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.tertiary,
     marginBottom: 2,
-  },
-  specialTitleEarned: {
-    color: COLORS.text.primary,
   },
   specialDescription: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
   },
   specialTierPill: {
     width: 32,
@@ -906,7 +887,6 @@ const styles = StyleSheet.create({
   specialProgress: {
     ...TYPOGRAPHY.caption,
     fontWeight: '700',
-    color: COLORS.text.tertiary,
   },
 
   // Modal
@@ -925,10 +905,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
   },
   modalContent: {
-    backgroundColor: COLORS.background.secondary,
     borderRadius: RADIUS.xl,
     padding: SPACING.xl,
     margin: SPACING.xl,
@@ -939,7 +917,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: COLORS.surface.border,
     marginBottom: SPACING.lg,
   },
   modalIconContainer: {
@@ -952,7 +929,6 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text.primary,
     textAlign: 'center',
     marginBottom: SPACING.sm,
   },
@@ -968,7 +944,6 @@ const styles = StyleSheet.create({
   },
   modalDescription: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.secondary,
     textAlign: 'center',
     marginBottom: SPACING.xl,
   },
@@ -980,18 +955,10 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.full,
   },
-  statusPillUnlocked: {
-    backgroundColor: 'rgba(0, 255, 136, 0.15)',
-  },
-  statusPillLocked: {
-    backgroundColor: COLORS.surface.card,
-  },
   statusTextUnlocked: {
     ...TYPOGRAPHY.label,
-    color: COLORS.success,
   },
   statusTextLocked: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.tertiary,
   },
 });

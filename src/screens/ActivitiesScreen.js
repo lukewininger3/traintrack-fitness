@@ -1,6 +1,6 @@
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Activity, Bike, Bookmark, Dumbbell, Edit2, FileText, MessageSquare, Plus, RotateCcw, Trash2 } from 'lucide-react-native';
+import { Activity, Bike, Bookmark, Dumbbell, Edit2, FileText, LayoutGrid, List, MessageSquare, Plus, RotateCcw, Trash2 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
@@ -17,13 +17,18 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { loadWorkouts, saveWorkouts } from '../utils/storage';
+import { deleteSharedWorkoutByWorkoutId } from '../utils/socialStorage';
 import { formatDateShort } from '../utils/dateFormatter';
 import { saveAsTemplate } from '../utils/workoutTemplates';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS, SHADOWS } from '../theme/design';
+import { useTheme } from '../contexts/ThemeContext';
 import BottomSheet from '../components/ui/BottomSheet';
 
 export default function ActivitiesScreen() {
+  const insets = useSafeAreaInsets();
+  const { colors: themeColors } = useTheme();
   const params = useLocalSearchParams();
   const isFocused = useIsFocused();
   const [sections, setSections] = useState([]);
@@ -31,6 +36,7 @@ export default function ActivitiesScreen() {
   const [showNewWorkoutSheet, setShowNewWorkoutSheet] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templateName, setTemplateName] = useState('');
+  const [viewMode, setViewMode] = useState('compact'); // 'compact' | 'expanded'
 
   // Load data on mount
   useEffect(() => {
@@ -98,7 +104,7 @@ export default function ActivitiesScreen() {
   };
 
   const getWorkoutColor = (type) => {
-    return COLORS.workoutTypes[type] || COLORS.text.tertiary;
+    return themeColors.workoutTypes[type] || themeColors.text.tertiary;
   };
 
   const deleteWorkout = async (workoutId) => {
@@ -128,6 +134,11 @@ export default function ActivitiesScreen() {
 
             // Persist to storage (runs in background)
             saveWorkouts(updated);
+
+            // Also delete the shared workout from social feed (non-blocking)
+            deleteSharedWorkoutByWorkoutId(workoutId).catch(err => {
+              console.warn('Failed to delete shared workout:', err);
+            });
           }
         }
       ]
@@ -183,65 +194,153 @@ export default function ActivitiesScreen() {
   };
 
   const renderSectionHeader = ({ section: { title, data } }) => (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionHeaderText}>{title}</Text>
-      <View style={styles.sectionBadge}>
-        <Text style={styles.sectionBadgeText}>{data.length}</Text>
+    <View style={[styles.sectionHeader, { backgroundColor: themeColors.background.primary }]}>
+      <Text style={[styles.sectionHeaderText, { color: themeColors.text.secondary }]}>{title}</Text>
+      <View style={[styles.sectionBadge, { backgroundColor: themeColors.surface.card }]}>
+        <Text style={[styles.sectionBadgeText, { color: themeColors.text.tertiary }]}>{data.length}</Text>
       </View>
+      <View style={styles.sectionHeaderSpacer} />
+      <Pressable
+        style={[styles.viewToggle, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
+        onPress={() => setViewMode(viewMode === 'compact' ? 'expanded' : 'compact')}
+        hitSlop={8}
+      >
+        {viewMode === 'compact' ? (
+          <LayoutGrid size={18} color={themeColors.text.secondary} strokeWidth={2} />
+        ) : (
+          <List size={18} color={themeColors.text.secondary} strokeWidth={2} />
+        )}
+      </Pressable>
     </View>
   );
 
   const renderWorkout = ({ item: workout }) => {
     const Icon = getWorkoutIcon(workout.type);
     const color = getWorkoutColor(workout.type);
+    const isExpanded = viewMode === 'expanded';
+
+    // Calculate workout summary stats
+    const exerciseCount = workout.exercises?.length || 0;
+    const totalSets = workout.exercises?.reduce((acc, ex) => acc + (ex.sets?.length || 0), 0) || 0;
+    const totalVolume = workout.exercises?.reduce((acc, ex) => {
+      return acc + (ex.sets || []).reduce((setAcc, set) => {
+        if (set.weight && set.reps) {
+          return setAcc + (set.weight * set.reps);
+        }
+        return setAcc;
+      }, 0);
+    }, 0) || 0;
 
     return (
       <>
         {workout.isNewWeek && (
           <View style={styles.weekSeparator}>
-            <View style={styles.weekSeparatorLine} />
+            <View style={[styles.weekSeparatorLine, { backgroundColor: themeColors.surface.border }]} />
           </View>
         )}
         <Pressable
           onPress={() => setSelectedWorkout(workout)}
-          style={styles.workoutCard}
-          accessibilityLabel={`${workout.name}, ${workout.type}, ${workout.exercises?.length || 0} exercises`}
+          style={[styles.workoutCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }, isExpanded && styles.workoutCardExpanded]}
+          accessibilityLabel={`${workout.name}, ${workout.type}, ${exerciseCount} exercises`}
           accessibilityRole="button"
           accessibilityHint="Opens workout details"
         >
           <View style={[styles.workoutAccent, { backgroundColor: color }]} />
-          <View style={styles.workoutContent}>
-            <View style={[styles.workoutIconContainer, { backgroundColor: color + '15' }]}>
-              <Icon size={22} color={color} strokeWidth={2.5} />
-            </View>
-            <View style={styles.workoutInfo}>
-              <Text style={styles.workoutName}>{workout.name}</Text>
-              <View style={styles.workoutMetaRow}>
-                <Text style={styles.workoutDate}>{formatDateShort(workout.date)}</Text>
-                <View style={styles.metaDot} />
-                <Text style={styles.workoutExercises}>
-                  {workout.exercises?.length || 0} exercises
-                </Text>
+          <View style={[styles.workoutContent, isExpanded && styles.workoutContentExpanded]}>
+            <View style={styles.workoutMainRow}>
+              <View style={[styles.workoutIconContainer, { backgroundColor: color + '15' }]}>
+                <Icon size={22} color={color} strokeWidth={2.5} />
               </View>
+              <View style={styles.workoutInfo}>
+                <Text style={[styles.workoutName, { color: themeColors.text.primary }]}>{workout.name}</Text>
+                <View style={styles.workoutMetaRow}>
+                  <Text style={[styles.workoutDate, { color: themeColors.text.secondary }]}>{formatDateShort(workout.date)}</Text>
+                  <View style={[styles.metaDot, { backgroundColor: themeColors.text.tertiary }]} />
+                  <Text style={[styles.workoutExercises, { color: themeColors.text.tertiary }]}>
+                    {exerciseCount} exercises
+                  </Text>
+                </View>
+              </View>
+              <Pressable
+                onPress={() => deleteWorkout(workout.id)}
+                style={styles.deleteButton}
+                hitSlop={12}
+                accessibilityLabel={`Delete ${workout.name}`}
+                accessibilityRole="button"
+                accessibilityHint="Permanently removes this workout"
+              >
+                <Trash2 size={18} color={themeColors.error} strokeWidth={2} />
+              </Pressable>
             </View>
-            <Pressable
-              onPress={() => deleteWorkout(workout.id)}
-              style={styles.deleteButton}
-              hitSlop={12}
-              accessibilityLabel={`Delete ${workout.name}`}
-              accessibilityRole="button"
-              accessibilityHint="Permanently removes this workout"
-            >
-              <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
-            </Pressable>
-        </View>
-      </Pressable>
+
+            {/* Expanded View - Exercise Summary */}
+            {isExpanded && exerciseCount > 0 && (
+              <View style={[styles.expandedContent, { borderTopColor: themeColors.surface.border }]}>
+                {/* Stats Row */}
+                {totalVolume > 0 && (
+                  <View style={styles.expandedStatsRow}>
+                    <View style={styles.expandedStat}>
+                      <Text style={[styles.expandedStatValue, { color: themeColors.accent.primary }]}>{totalSets}</Text>
+                      <Text style={[styles.expandedStatLabel, { color: themeColors.text.tertiary }]}>sets</Text>
+                    </View>
+                    <View style={[styles.expandedStatDivider, { backgroundColor: themeColors.surface.border }]} />
+                    <View style={styles.expandedStat}>
+                      <Text style={[styles.expandedStatValue, { color: themeColors.accent.primary }]}>
+                        {totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}k` : totalVolume}
+                      </Text>
+                      <Text style={[styles.expandedStatLabel, { color: themeColors.text.tertiary }]}>lbs</Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Exercise List Preview */}
+                <View style={styles.exercisePreviewList}>
+                  {workout.exercises.slice(0, 4).map((exercise, idx) => {
+                    const sets = exercise.sets || [];
+                    const bestSet = sets.reduce((best, set) => {
+                      if (set.weight && set.reps) {
+                        const volume = set.weight * set.reps;
+                        if (!best || volume > best.volume) {
+                          return { ...set, volume };
+                        }
+                      }
+                      if (set.distance) {
+                        return { distance: set.distance, time: set.time };
+                      }
+                      return best;
+                    }, null);
+
+                    return (
+                      <View key={idx} style={[styles.exercisePreviewItem, { backgroundColor: themeColors.background.elevated }]}>
+                        <Text style={[styles.exercisePreviewName, { color: themeColors.text.primary }]} numberOfLines={1}>
+                          {exercise.name}
+                        </Text>
+                        {bestSet && (
+                          <Text style={[styles.exercisePreviewStats, { color: themeColors.text.secondary }]}>
+                            {bestSet.weight
+                              ? `${bestSet.weight} × ${bestSet.reps}`
+                              : bestSet.distance
+                              ? `${bestSet.distance} mi`
+                              : `${sets.length} sets`}
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                  {exerciseCount > 4 && (
+                    <Text style={[styles.moreExercises, { color: themeColors.text.tertiary }]}>+{exerciseCount - 4} more</Text>
+                  )}
+                </View>
+              </View>
+            )}
+          </View>
+        </Pressable>
       </>
     );
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: themeColors.background.primary }]}>
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id.toString()}
@@ -252,11 +351,11 @@ export default function ActivitiesScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <View style={styles.emptyIconContainer}>
-              <Activity size={48} color={COLORS.text.tertiary} strokeWidth={1.5} />
+            <View style={[styles.emptyIconContainer, { backgroundColor: themeColors.surface.card }]}>
+              <Activity size={48} color={themeColors.text.tertiary} strokeWidth={1.5} />
             </View>
-            <Text style={styles.emptyTitle}>NO WORKOUTS YET</Text>
-            <Text style={styles.emptySubtext}>
+            <Text style={[styles.emptyTitle, { color: themeColors.text.secondary }]}>NO WORKOUTS YET</Text>
+            <Text style={[styles.emptySubtext, { color: themeColors.text.tertiary }]}>
               Tap the button below to log your first workout
             </Text>
           </View>
@@ -267,13 +366,13 @@ export default function ActivitiesScreen() {
       <BottomSheet
         isVisible={!!selectedWorkout}
         onClose={() => setSelectedWorkout(null)}
-        height="85%"
+        height="80%"
         scrollable={false}
       >
         {selectedWorkout && (
           <View style={styles.sheetInner}>
             {/* Header */}
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, { borderBottomColor: themeColors.surface.border }]}>
               <View style={[
                 styles.modalIconContainer,
                 { backgroundColor: getWorkoutColor(selectedWorkout.type) + '15' }
@@ -285,8 +384,8 @@ export default function ActivitiesScreen() {
                 })}
               </View>
               <View style={styles.modalHeaderText}>
-                <Text style={styles.modalTitle}>{selectedWorkout.name}</Text>
-                <Text style={styles.modalSubtitle}>
+                <Text style={[styles.modalTitle, { color: themeColors.text.primary }]}>{selectedWorkout.name}</Text>
+                <Text style={[styles.modalSubtitle, { color: themeColors.text.secondary }]}>
                   {selectedWorkout.date} • {selectedWorkout.type} • {selectedWorkout.exercises?.length || 0} exercises
                 </Text>
               </View>
@@ -294,7 +393,7 @@ export default function ActivitiesScreen() {
                 onPress={() => setSelectedWorkout(null)}
                 style={styles.closeModalButton}
               >
-                <Text style={styles.closeModalText}>Done</Text>
+                <Text style={[styles.closeModalText, { color: themeColors.accent.primary }]}>Done</Text>
               </Pressable>
             </View>
 
@@ -305,21 +404,21 @@ export default function ActivitiesScreen() {
               showsVerticalScrollIndicator={true}
             >
               {selectedWorkout.exercises?.map((exercise, idx) => (
-                <View key={idx} style={styles.exerciseCard}>
-                  <Text style={styles.exerciseName}>{exercise.name}</Text>
+                <View key={idx} style={[styles.exerciseCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+                  <Text style={[styles.exerciseName, { color: themeColors.text.primary }]}>{exercise.name}</Text>
                   {exercise.notes && (
-                    <View style={styles.exerciseNotesRow}>
-                      <MessageSquare size={14} color={COLORS.text.tertiary} strokeWidth={2} />
-                      <Text style={styles.exerciseNotesText}>{exercise.notes}</Text>
+                    <View style={[styles.exerciseNotesRow, { backgroundColor: themeColors.background.elevated }]}>
+                      <MessageSquare size={14} color={themeColors.text.tertiary} strokeWidth={2} />
+                      <Text style={[styles.exerciseNotesText, { color: themeColors.text.secondary }]}>{exercise.notes}</Text>
                     </View>
                   )}
                   {exercise.sets?.map((set, setIdx) => (
-                    <View key={setIdx} style={styles.setRow}>
-                      <Text style={styles.setLabel}>SET {setIdx + 1}</Text>
-                      <Text style={styles.setValue}>
+                    <View key={setIdx} style={[styles.setRow, { backgroundColor: themeColors.background.elevated }]}>
+                      <Text style={[styles.setLabel, { color: themeColors.text.tertiary }]}>SET {setIdx + 1}</Text>
+                      <Text style={[styles.setValue, { color: themeColors.text.primary }]}>
                         {set.distance > 0 && set.time > 0
                           ? `${set.distance} mi • ${set.time} min${set.pace > 0 ? ` • ${set.pace} min/mi` : ''}`
-                          : `${set.weight} lbs × ${set.reps} reps`}
+                          : `${set.weight || 0} lbs × ${set.reps || 0} reps`}
                       </Text>
                     </View>
                   ))}
@@ -328,26 +427,26 @@ export default function ActivitiesScreen() {
             </ScrollView>
 
             {/* Action Buttons - Bottom */}
-            <View style={styles.modalActionBar}>
+            <View style={[styles.modalActionBar, { paddingBottom: insets.bottom || SPACING.sm, borderTopColor: themeColors.surface.border, backgroundColor: themeColors.background.elevated }]}>
               <Pressable
                 onPress={handleSaveAsTemplate}
-                style={styles.actionButtonTertiary}
+                style={[styles.actionButtonTertiary, { backgroundColor: themeColors.tertiary.dim, borderColor: themeColors.tertiary.primary + '40' }]}
                 accessibilityLabel="Save as template"
                 accessibilityRole="button"
                 accessibilityHint="Saves this workout as a reusable template"
               >
-                <Bookmark size={20} color={COLORS.tertiary.primary} strokeWidth={2.5} />
-                <Text style={styles.actionButtonTertiaryText}>Save</Text>
+                <Bookmark size={20} color={themeColors.tertiary.primary} strokeWidth={2.5} />
+                <Text style={[styles.actionButtonTertiaryText, { color: themeColors.tertiary.primary }]}>Save</Text>
               </Pressable>
               <Pressable
                 onPress={() => repeatWorkout(selectedWorkout)}
-                style={styles.actionButtonPrimary}
+                style={[styles.actionButtonPrimary, { backgroundColor: themeColors.accent.primary }]}
                 accessibilityLabel="Repeat workout"
                 accessibilityRole="button"
                 accessibilityHint="Creates a new workout with the same exercises"
               >
-                <RotateCcw size={20} color={COLORS.text.inverse} strokeWidth={2.5} />
-                <Text style={styles.actionButtonPrimaryText}>Repeat</Text>
+                <RotateCcw size={20} color={themeColors.text.inverse} strokeWidth={2.5} />
+                <Text style={[styles.actionButtonPrimaryText, { color: themeColors.text.inverse }]}>Repeat</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -360,13 +459,13 @@ export default function ActivitiesScreen() {
                     }
                   });
                 }}
-                style={styles.actionButtonSecondary}
+                style={[styles.actionButtonSecondary, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
                 accessibilityLabel="Edit workout"
                 accessibilityRole="button"
                 accessibilityHint="Opens workout for editing"
               >
-                <Edit2 size={18} color={COLORS.accent.primary} strokeWidth={2} />
-                <Text style={styles.actionButtonSecondaryText}>Edit</Text>
+                <Edit2 size={18} color={themeColors.accent.primary} strokeWidth={2} />
+                <Text style={[styles.actionButtonSecondaryText, { color: themeColors.accent.primary }]}>Edit</Text>
               </Pressable>
             </View>
           </View>
@@ -376,13 +475,13 @@ export default function ActivitiesScreen() {
       {/* Floating Action Button */}
       {!selectedWorkout && (
         <Pressable
-          style={styles.fab}
+          style={[styles.fab, { backgroundColor: themeColors.accent.primary }]}
           onPress={() => setShowNewWorkoutSheet(true)}
           accessibilityLabel="Add new workout"
           accessibilityRole="button"
           accessibilityHint="Opens options to start a new workout or use a template"
         >
-          <Plus size={28} color={COLORS.text.inverse} strokeWidth={2.5} />
+          <Plus size={28} color={themeColors.text.inverse} strokeWidth={2.5} />
         </Pressable>
       )}
 
@@ -392,10 +491,10 @@ export default function ActivitiesScreen() {
         onClose={() => setShowNewWorkoutSheet(false)}
         height="35%"
       >
-        <Text style={styles.sheetTitle}>START WORKOUT</Text>
+        <Text style={[styles.sheetTitle, { color: themeColors.text.secondary }]}>START WORKOUT</Text>
 
         <Pressable
-          style={styles.sheetOption}
+          style={[styles.sheetOption, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
           onPress={() => {
             setShowNewWorkoutSheet(false);
             router.push('/workout-details');
@@ -404,17 +503,17 @@ export default function ActivitiesScreen() {
           accessibilityRole="button"
           accessibilityHint="Start a fresh workout from scratch"
         >
-          <View style={[styles.sheetOptionIcon, { backgroundColor: COLORS.accent.primaryDim }]}>
-            <Plus size={24} color={COLORS.accent.primary} strokeWidth={2.5} />
+          <View style={[styles.sheetOptionIcon, { backgroundColor: themeColors.accent.primaryDim }]}>
+            <Plus size={24} color={themeColors.accent.primary} strokeWidth={2.5} />
           </View>
           <View style={styles.sheetOptionText}>
-            <Text style={styles.sheetOptionTitle}>New Workout</Text>
-            <Text style={styles.sheetOptionDescription}>Start fresh with a blank workout</Text>
+            <Text style={[styles.sheetOptionTitle, { color: themeColors.text.primary }]}>New Workout</Text>
+            <Text style={[styles.sheetOptionDescription, { color: themeColors.text.tertiary }]}>Start fresh with a blank workout</Text>
           </View>
         </Pressable>
 
         <Pressable
-          style={styles.sheetOption}
+          style={[styles.sheetOption, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
           onPress={() => {
             setShowNewWorkoutSheet(false);
             router.push('/templates');
@@ -423,12 +522,12 @@ export default function ActivitiesScreen() {
           accessibilityRole="button"
           accessibilityHint="Choose from your saved workout templates"
         >
-          <View style={[styles.sheetOptionIcon, { backgroundColor: COLORS.tertiary.dim }]}>
-            <FileText size={24} color={COLORS.tertiary.primary} strokeWidth={2.5} />
+          <View style={[styles.sheetOptionIcon, { backgroundColor: themeColors.tertiary.dim }]}>
+            <FileText size={24} color={themeColors.tertiary.primary} strokeWidth={2.5} />
           </View>
           <View style={styles.sheetOptionText}>
-            <Text style={styles.sheetOptionTitle}>From Template</Text>
-            <Text style={styles.sheetOptionDescription}>Use a saved workout template</Text>
+            <Text style={[styles.sheetOptionTitle, { color: themeColors.text.primary }]}>From Template</Text>
+            <Text style={[styles.sheetOptionDescription, { color: themeColors.text.tertiary }]}>Use a saved workout template</Text>
           </View>
         </Pressable>
       </BottomSheet>
@@ -446,35 +545,35 @@ export default function ActivitiesScreen() {
             style={styles.templateModalOverlay}
           >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <View style={styles.templateModalContent}>
-                <Text style={styles.templateModalTitle}>Save as Template</Text>
-                <Text style={styles.templateModalSubtitle}>Enter a name for this template</Text>
+              <View style={[styles.templateModalContent, { backgroundColor: themeColors.background.secondary }]}>
+                <Text style={[styles.templateModalTitle, { color: themeColors.text.primary }]}>Save as Template</Text>
+                <Text style={[styles.templateModalSubtitle, { color: themeColors.text.secondary }]}>Enter a name for this template</Text>
                 <TextInput
-                  style={styles.templateModalInput}
+                  style={[styles.templateModalInput, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border, color: themeColors.text.primary }]}
                   value={templateName}
                   onChangeText={setTemplateName}
                   placeholder="Template name"
-                  placeholderTextColor={COLORS.text.tertiary}
+                  placeholderTextColor={themeColors.text.tertiary}
                   autoFocus
                   returnKeyType="done"
                   onSubmitEditing={confirmSaveAsTemplate}
                 />
                 <View style={styles.templateModalButtons}>
                   <Pressable
-                    style={styles.templateModalCancel}
+                    style={[styles.templateModalCancel, { backgroundColor: themeColors.surface.card }]}
                     onPress={() => {
                       setShowTemplateModal(false);
                       setTemplateName('');
                     }}
                   >
-                    <Text style={styles.templateModalCancelText}>Cancel</Text>
+                    <Text style={[styles.templateModalCancelText, { color: themeColors.text.secondary }]}>Cancel</Text>
                   </Pressable>
                   <Pressable
-                    style={styles.templateModalSave}
+                    style={[styles.templateModalSave, { backgroundColor: themeColors.tertiary.primary }]}
                     onPress={confirmSaveAsTemplate}
                   >
-                    <Bookmark size={18} color={COLORS.text.inverse} strokeWidth={2.5} />
-                    <Text style={styles.templateModalSaveText}>Save</Text>
+                    <Bookmark size={18} color={themeColors.text.inverse} strokeWidth={2.5} />
+                    <Text style={[styles.templateModalSaveText, { color: themeColors.text.inverse }]}>Save</Text>
                   </Pressable>
                 </View>
               </View>
@@ -520,6 +619,19 @@ const styles = StyleSheet.create({
     color: COLORS.text.tertiary,
     fontWeight: '700',
   },
+  sectionHeaderSpacer: {
+    flex: 1,
+  },
+  viewToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surface.card,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // Week Separator
   weekSeparator: {
@@ -542,6 +654,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.surface.border,
   },
+  workoutCardExpanded: {
+    marginBottom: SPACING.md,
+  },
   workoutAccent: {
     width: 4,
   },
@@ -551,6 +666,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: SPACING.md,
     paddingLeft: SPACING.md,
+    gap: SPACING.md,
+  },
+  workoutContentExpanded: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: SPACING.sm,
+  },
+  workoutMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: SPACING.md,
   },
   workoutIconContainer: {
@@ -591,6 +716,72 @@ const styles = StyleSheet.create({
     padding: SPACING.sm,
   },
 
+  // Expanded View
+  expandedContent: {
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surface.border,
+    marginTop: SPACING.xs,
+  },
+  expandedStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  expandedStat: {
+    alignItems: 'center',
+  },
+  expandedStatValue: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.accent.primary,
+    fontSize: 18,
+  },
+  expandedStatLabel: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    textTransform: 'uppercase',
+    fontSize: 10,
+  },
+  expandedStatDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: COLORS.surface.border,
+  },
+  exercisePreviewList: {
+    gap: SPACING.xs,
+  },
+  exercisePreviewItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.sm,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+  },
+  exercisePreviewName: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.primary,
+    flex: 1,
+    fontSize: 14,
+  },
+  exercisePreviewStats: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
+    fontWeight: '600',
+    marginLeft: SPACING.sm,
+  },
+  moreExercises: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+    fontStyle: 'italic',
+  },
+
   // Empty State
   emptyState: {
     flex: 1,
@@ -621,11 +812,13 @@ const styles = StyleSheet.create({
   // Bottom Sheet Inner
   sheetInner: {
     flex: 1,
+    paddingTop: SPACING.sm,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.surface.border,
   },
@@ -666,12 +859,12 @@ const styles = StyleSheet.create({
   },
   modalActionBar: {
     flexDirection: 'row',
-    padding: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.md,
     gap: SPACING.sm,
     borderTopWidth: 1,
     borderTopColor: COLORS.surface.border,
-    backgroundColor: COLORS.background.secondary,
+    backgroundColor: COLORS.background.elevated,
   },
   actionButtonPrimary: {
     flex: 2,

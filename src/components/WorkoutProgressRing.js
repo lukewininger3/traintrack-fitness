@@ -7,7 +7,8 @@ import Animated, {
   withSpring,
   withDelay,
 } from 'react-native-reanimated';
-import { COLORS, TYPOGRAPHY, SPACING } from '../theme/design';
+import { TYPOGRAPHY, SPACING } from '../theme/design';
+import { useTheme } from '../contexts/ThemeContext';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -17,11 +18,13 @@ const RING_GAP = 10; // Gap between concentric rings
 const CENTER = RING_SIZE / 2;
 
 export default function WorkoutProgressRing({ plannedWorkouts = [] }) {
+  const { colors: themeColors } = useTheme();
+
   // Group workouts by type and calculate completion
   const workoutsByType = plannedWorkouts.reduce((acc, workout) => {
     const type = workout.workoutType || 'Other';
     if (!acc[type]) {
-      acc[type] = { total: 0, completed: 0, color: COLORS.workoutTypes[type] || COLORS.workoutTypes.Other };
+      acc[type] = { total: 0, completed: 0, color: themeColors.workoutTypes[type] || themeColors.workoutTypes.Other };
     }
     acc[type].total++;
     if (workout.completed) acc[type].completed++;
@@ -45,14 +48,14 @@ export default function WorkoutProgressRing({ plannedWorkouts = [] }) {
               cx={CENTER}
               cy={CENTER}
               r={baseRadius}
-              stroke={COLORS.surface.border}
+              stroke={themeColors.surface.border}
               strokeWidth={STROKE_WIDTH}
               fill="none"
             />
           </Svg>
           <View style={styles.centerContent}>
-            <Text style={styles.emptyText}>No workouts</Text>
-            <Text style={styles.emptySubtext}>planned</Text>
+            <Text style={[styles.emptyText, { color: themeColors.text.tertiary }]}>No workouts</Text>
+            <Text style={[styles.emptySubtext, { color: themeColors.text.tertiary }]}>planned</Text>
           </View>
         </View>
       </View>
@@ -106,8 +109,8 @@ export default function WorkoutProgressRing({ plannedWorkouts = [] }) {
 
         {/* Center content */}
         <View style={styles.centerContent}>
-          <Text style={styles.completedCount}>{completedWorkouts}</Text>
-          <Text style={styles.totalCount}>/ {totalWorkouts}</Text>
+          <Text style={[styles.completedCount, { color: themeColors.text.primary }]}>{completedWorkouts}</Text>
+          <Text style={[styles.totalCount, { color: themeColors.text.tertiary }]}>/ {totalWorkouts}</Text>
         </View>
       </View>
 
@@ -116,7 +119,7 @@ export default function WorkoutProgressRing({ plannedWorkouts = [] }) {
         {rings.map((ring) => (
           <View key={ring.type} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: ring.color }]} />
-            <Text style={styles.legendText}>{ring.type}</Text>
+            <Text style={[styles.legendText, { color: themeColors.text.secondary }]}>{ring.type}</Text>
             <Text style={[styles.legendCount, { color: ring.color }]}>
               {ring.completed}/{ring.total}
             </Text>
@@ -180,23 +183,19 @@ const styles = StyleSheet.create({
   },
   completedCount: {
     ...TYPOGRAPHY.stat,
-    color: COLORS.text.primary,
     fontSize: 32,
     lineHeight: 36,
   },
   totalCount: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text.tertiary,
     fontSize: 14,
     marginTop: -2,
   },
   emptyText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.tertiary,
   },
   emptySubtext: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
   },
 
   // Legend
@@ -220,7 +219,6 @@ const styles = StyleSheet.create({
   },
   legendText: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.secondary,
   },
   legendCount: {
     ...TYPOGRAPHY.caption,

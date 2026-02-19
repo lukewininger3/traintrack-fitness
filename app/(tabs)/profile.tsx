@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Calendar, Camera, ChevronRight, Database, Dumbbell, Eye, EyeOff, LogOut, Mail, Settings, Trash2, Trophy, User as UserIcon, Users } from 'lucide-react-native';
+import { Calendar, Camera, ChevronRight, Database, Dumbbell, Eye, EyeOff, LogOut, Mail, Moon, Settings, Sun, Trash2, Trophy, User as UserIcon, Users } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { clearAllPersonalRecords, getPRStats } from '../../src/utils/personalRecords';
 import {
@@ -16,14 +16,16 @@ import {
 } from 'react-native';
 import { supabase } from '../../src/config/supabase';
 import { useAuth } from '../../src/contexts/AuthContext';
+import { useTheme } from '../../src/contexts/ThemeContext';
 import { initializeSampleData } from '../../src/utils/initSampleData';
 import { clearLocalWorkouts } from '../../src/utils/storage';
 import { uploadProfilePicture } from '../../src/utils/socialStorage';
 import { formatDateLong } from '../../src/utils/dateFormatter';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../src/theme/design';
+import { TYPOGRAPHY, SPACING, RADIUS, DARK_COLORS } from '../../src/theme/design';
 
 export default function ProfileScreen() {
   const { user, profile, refreshProfile, signOut } = useAuth();
+  const { isDark, colors: COLORS, toggleTheme } = useTheme();
   const [loadingSample, setLoadingSample] = useState(false);
   const [prStats, setPRStats] = useState<{ totalPRs: number; recentPRs: number } | null>(null);
   const [shareWorkouts, setShareWorkouts] = useState(true);
@@ -137,7 +139,8 @@ export default function ProfileScreen() {
         .eq('id', (user as any)?.id);
 
       if (error) throw error;
-      await refreshProfile();
+      // Don't call refreshProfile() - it causes navigation issues
+      // Local state is already updated
     } catch (error) {
       console.error('Error updating share preference:', error);
       setShareWorkouts(!value); // Revert on error
@@ -234,7 +237,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView style={[styles.container, { backgroundColor: COLORS.background.primary }]} showsVerticalScrollIndicator={false}>
       <View style={styles.content}>
         {/* Profile Header */}
         <View style={styles.header}>
@@ -243,7 +246,7 @@ export default function ProfileScreen() {
             onPress={handlePickImage}
             disabled={isUploadingPhoto}
           >
-            <View style={styles.avatarContainer}>
+            <View style={[styles.avatarContainer, { backgroundColor: COLORS.accent.primaryDim, borderColor: COLORS.accent.primary }]}>
               {avatarUrl ? (
                 <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
               ) : (
@@ -255,18 +258,18 @@ export default function ProfileScreen() {
                 </View>
               )}
             </View>
-            <View style={styles.cameraButton}>
-              <Camera size={14} color={COLORS.text.primary} strokeWidth={2.5} />
+            <View style={[styles.cameraButton, { backgroundColor: COLORS.accent.primary, borderColor: COLORS.background.primary }]}>
+              <Camera size={14} color={COLORS.text.inverse} strokeWidth={2.5} />
             </View>
           </Pressable>
-          <Text style={styles.title}>PROFILE</Text>
-          <Text style={styles.subtitle}>Manage your account</Text>
+          <Text style={[styles.title, { color: COLORS.text.primary }]}>PROFILE</Text>
+          <Text style={[styles.subtitle, { color: COLORS.text.secondary }]}>Manage your account</Text>
         </View>
 
         {/* Account Info Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>ACCOUNT INFO</Text>
+        <View style={[styles.card, { backgroundColor: COLORS.surface.card, borderColor: COLORS.surface.border }]}>
+          <View style={[styles.cardHeader, { borderBottomColor: COLORS.surface.border }]}>
+            <Text style={[styles.cardTitle, { color: COLORS.text.secondary }]}>ACCOUNT INFO</Text>
           </View>
 
           <View style={styles.infoRow}>
@@ -274,8 +277,8 @@ export default function ProfileScreen() {
               <Mail size={18} color={COLORS.tertiary.primary} strokeWidth={2} />
             </View>
             <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>EMAIL</Text>
-              <Text style={styles.infoValue}>{(user as any)?.email || 'Not available'}</Text>
+              <Text style={[styles.infoLabel, { color: COLORS.text.tertiary }]}>EMAIL</Text>
+              <Text style={[styles.infoValue, { color: COLORS.text.primary }]}>{(user as any)?.email || 'Not available'}</Text>
             </View>
           </View>
 
@@ -284,8 +287,8 @@ export default function ProfileScreen() {
               <Calendar size={18} color={COLORS.accent.primary} strokeWidth={2} />
             </View>
             <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>MEMBER SINCE</Text>
-              <Text style={styles.infoValue}>
+              <Text style={[styles.infoLabel, { color: COLORS.text.tertiary }]}>MEMBER SINCE</Text>
+              <Text style={[styles.infoValue, { color: COLORS.text.primary }]}>
                 {(user as any)?.created_at ? formatDateLong((user as any).created_at) : 'Unknown'}
               </Text>
             </View>
@@ -296,8 +299,8 @@ export default function ProfileScreen() {
               <UserIcon size={18} color={COLORS.secondary.primary} strokeWidth={2} />
             </View>
             <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>USER ID</Text>
-              <Text style={styles.infoValueSmall}>
+              <Text style={[styles.infoLabel, { color: COLORS.text.tertiary }]}>USER ID</Text>
+              <Text style={[styles.infoValueSmall, { color: COLORS.text.secondary }]}>
                 {(user as any)?.id?.substring(0, 12) || 'Unknown'}...
               </Text>
             </View>
@@ -306,24 +309,24 @@ export default function ProfileScreen() {
 
         {/* Personal Records Card */}
         <Pressable
-          style={styles.card}
+          style={[styles.card, { backgroundColor: COLORS.surface.card, borderColor: COLORS.surface.border }]}
           onPress={() => router.push('/personal-records' as any)}
         >
           <View style={styles.prCardContent}>
-            <View style={styles.prIconContainer}>
+            <View style={[styles.prIconContainer, { backgroundColor: COLORS.warningDim }]}>
               <Trophy size={28} color={COLORS.warning} strokeWidth={2} />
             </View>
             <View style={styles.prTextContent}>
-              <Text style={styles.prTitle}>PERSONAL RECORDS</Text>
-              <Text style={styles.prSubtitle}>
+              <Text style={[styles.prTitle, { color: COLORS.text.primary }]}>PERSONAL RECORDS</Text>
+              <Text style={[styles.prSubtitle, { color: COLORS.text.secondary }]}>
                 {prStats?.totalPRs ? `${prStats.totalPRs} PRs tracked` : 'Track your best lifts'}
               </Text>
             </View>
             <View style={styles.prStatsContainer}>
               {prStats?.recentPRs ? (
-                <View style={styles.prBadge}>
-                  <Text style={styles.prBadgeText}>+{prStats.recentPRs}</Text>
-                  <Text style={styles.prBadgeLabel}>THIS MONTH</Text>
+                <View style={[styles.prBadge, { backgroundColor: COLORS.accent.primaryDim }]}>
+                  <Text style={[styles.prBadgeText, { color: COLORS.accent.primary }]}>+{prStats.recentPRs}</Text>
+                  <Text style={[styles.prBadgeLabel, { color: COLORS.accent.primary }]}>THIS MONTH</Text>
                 </View>
               ) : null}
               <ChevronRight size={20} color={COLORS.text.tertiary} strokeWidth={2} />
@@ -333,7 +336,7 @@ export default function ProfileScreen() {
 
         {/* Trophies & Achievements Card */}
         <Pressable
-          style={styles.card}
+          style={[styles.card, { backgroundColor: COLORS.surface.card, borderColor: COLORS.surface.border }]}
           onPress={() => router.push('/trophy' as any)}
         >
           <View style={styles.prCardContent}>
@@ -341,8 +344,8 @@ export default function ProfileScreen() {
               <Trophy size={28} color="#9333EA" strokeWidth={2} />
             </View>
             <View style={styles.prTextContent}>
-              <Text style={styles.prTitle}>TROPHIES</Text>
-              <Text style={styles.prSubtitle}>View your achievements</Text>
+              <Text style={[styles.prTitle, { color: COLORS.text.primary }]}>TROPHIES</Text>
+              <Text style={[styles.prSubtitle, { color: COLORS.text.secondary }]}>View your achievements</Text>
             </View>
             <ChevronRight size={20} color={COLORS.text.tertiary} strokeWidth={2} />
           </View>
@@ -350,7 +353,7 @@ export default function ProfileScreen() {
 
         {/* Custom Exercises Card */}
         <Pressable
-          style={styles.card}
+          style={[styles.card, { backgroundColor: COLORS.surface.card, borderColor: COLORS.surface.border }]}
           onPress={() => router.push('/custom-exercises' as any)}
         >
           <View style={styles.prCardContent}>
@@ -358,17 +361,17 @@ export default function ProfileScreen() {
               <Dumbbell size={28} color={COLORS.tertiary.primary} strokeWidth={2} />
             </View>
             <View style={styles.prTextContent}>
-              <Text style={styles.prTitle}>CUSTOM EXERCISES</Text>
-              <Text style={styles.prSubtitle}>Create and manage your exercises</Text>
+              <Text style={[styles.prTitle, { color: COLORS.text.primary }]}>CUSTOM EXERCISES</Text>
+              <Text style={[styles.prSubtitle, { color: COLORS.text.secondary }]}>Create and manage your exercises</Text>
             </View>
             <ChevronRight size={20} color={COLORS.text.tertiary} strokeWidth={2} />
           </View>
         </Pressable>
 
         {/* Social Settings Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>SOCIAL</Text>
+        <View style={[styles.card, { backgroundColor: COLORS.surface.card, borderColor: COLORS.surface.border }]}>
+          <View style={[styles.cardHeader, { borderBottomColor: COLORS.surface.border }]}>
+            <Text style={[styles.cardTitle, { color: COLORS.text.secondary }]}>SOCIAL</Text>
           </View>
 
           <View style={styles.settingRowWithToggle}>
@@ -380,8 +383,8 @@ export default function ProfileScreen() {
               )}
             </View>
             <View style={styles.settingTextContainer}>
-              <Text style={styles.settingText}>Share Workouts</Text>
-              <Text style={styles.settingDescription}>
+              <Text style={[styles.settingText, { color: COLORS.text.primary }]}>Share Workouts</Text>
+              <Text style={[styles.settingDescription, { color: COLORS.text.tertiary }]}>
                 {shareWorkouts ? 'Friends can see your workouts' : 'Your workouts are private'}
               </Text>
             </View>
@@ -399,24 +402,53 @@ export default function ProfileScreen() {
 
           {profile?.username && (
             <>
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: COLORS.surface.border }]} />
               <View style={styles.infoRow}>
                 <View style={[styles.infoIcon, { backgroundColor: COLORS.tertiary.dim }]}>
                   <Users size={18} color={COLORS.tertiary.primary} strokeWidth={2} />
                 </View>
                 <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>USERNAME</Text>
-                  <Text style={styles.infoValue}>@{profile.username}</Text>
+                  <Text style={[styles.infoLabel, { color: COLORS.text.tertiary }]}>USERNAME</Text>
+                  <Text style={[styles.infoValue, { color: COLORS.text.primary }]}>@{profile.username}</Text>
                 </View>
               </View>
             </>
           )}
         </View>
 
+        {/* Appearance Card */}
+        <View style={[styles.card, { backgroundColor: COLORS.surface.card, borderColor: COLORS.surface.border }]}>
+          <View style={[styles.cardHeader, { borderBottomColor: COLORS.surface.border }]}>
+            <Text style={[styles.cardTitle, { color: COLORS.text.secondary }]}>APPEARANCE</Text>
+          </View>
+
+          <View style={styles.settingRowWithToggle}>
+            <View style={[styles.settingIcon, { backgroundColor: isDark ? COLORS.accent.primaryDim : COLORS.warning + '20' }]}>
+              {isDark ? (
+                <Moon size={18} color={COLORS.accent.primary} strokeWidth={2} />
+              ) : (
+                <Sun size={18} color={COLORS.warning} strokeWidth={2} />
+              )}
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={[styles.settingText, { color: COLORS.text.primary }]}>Dark Mode</Text>
+              <Text style={[styles.settingDescription, { color: COLORS.text.tertiary }]}>
+                {isDark ? 'Dark theme enabled' : 'Light theme enabled'}
+              </Text>
+            </View>
+            <Switch
+              value={isDark}
+              onValueChange={toggleTheme}
+              trackColor={{ false: COLORS.surface.border, true: COLORS.accent.primaryDim }}
+              thumbColor={isDark ? COLORS.accent.primary : COLORS.warning}
+            />
+          </View>
+        </View>
+
         {/* Developer Settings */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>DEVELOPER</Text>
+        <View style={[styles.card, { backgroundColor: COLORS.surface.card, borderColor: COLORS.surface.border }]}>
+          <View style={[styles.cardHeader, { borderBottomColor: COLORS.surface.border }]}>
+            <Text style={[styles.cardTitle, { color: COLORS.text.secondary }]}>DEVELOPER</Text>
           </View>
 
           <Pressable
@@ -424,10 +456,10 @@ export default function ProfileScreen() {
             onPress={handleLoadSampleData}
             disabled={loadingSample}
           >
-            <View style={[styles.settingIcon, { backgroundColor: COLORS.warning + '20' }]}>
+            <View style={[styles.settingIcon, { backgroundColor: COLORS.warningDim }]}>
               <Database size={18} color={COLORS.warning} strokeWidth={2} />
             </View>
-            <Text style={styles.settingText}>Load Sample Data</Text>
+            <Text style={[styles.settingText, { color: COLORS.text.primary }]}>Load Sample Data</Text>
             {loadingSample ? (
               <ActivityIndicator size="small" color={COLORS.warning} />
             ) : (
@@ -435,14 +467,14 @@ export default function ProfileScreen() {
             )}
           </Pressable>
 
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: COLORS.surface.border }]} />
 
           <Pressable
             style={styles.settingRow}
             onPress={handleClearAllData}
             disabled={loadingSample}
           >
-            <View style={[styles.settingIcon, { backgroundColor: 'rgba(255, 59, 59, 0.15)' }]}>
+            <View style={[styles.settingIcon, { backgroundColor: COLORS.errorDim }]}>
               <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
             </View>
             <Text style={[styles.settingText, { color: COLORS.error }]}>Clear All Data</Text>
@@ -453,39 +485,39 @@ export default function ProfileScreen() {
             )}
           </Pressable>
 
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: COLORS.surface.border }]} />
 
           <Pressable style={[styles.settingRow, { opacity: 0.5 }]} disabled>
-            <View style={[styles.settingIcon, { backgroundColor: COLORS.surface.card }]}>
+            <View style={[styles.settingIcon, { backgroundColor: COLORS.surface.cardHover }]}>
               <Settings size={18} color={COLORS.text.tertiary} strokeWidth={2} />
             </View>
-            <Text style={styles.settingText}>App Preferences</Text>
-            <View style={styles.comingSoonBadge}>
-              <Text style={styles.comingSoonText}>SOON</Text>
+            <Text style={[styles.settingText, { color: COLORS.text.primary }]}>App Preferences</Text>
+            <View style={[styles.comingSoonBadge, { backgroundColor: COLORS.surface.cardHover }]}>
+              <Text style={[styles.comingSoonText, { color: COLORS.text.tertiary }]}>SOON</Text>
             </View>
           </Pressable>
         </View>
 
         {/* Sign Out Button */}
-        <Pressable style={styles.signOutButton} onPress={handleSignOut}>
+        <Pressable style={[styles.signOutButton, { backgroundColor: COLORS.error }]} onPress={handleSignOut}>
           <LogOut size={20} color={COLORS.text.inverse} strokeWidth={2.5} />
-          <Text style={styles.signOutText}>SIGN OUT</Text>
+          <Text style={[styles.signOutText, { color: COLORS.text.inverse }]}>SIGN OUT</Text>
         </Pressable>
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerVersion}>TrainTrack v1.0.0</Text>
-          <Text style={styles.footerText}>Built for athletes</Text>
+          <Text style={[styles.footerVersion, { color: COLORS.text.tertiary }]}>TrainTrack v1.0.0</Text>
+          <Text style={[styles.footerText, { color: COLORS.text.tertiary }]}>Built for athletes</Text>
         </View>
       </View>
     </ScrollView>
   );
 }
 
+// Use DARK_COLORS as fallback for static styles - dynamic colors applied inline
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background.primary,
   },
   content: {
     padding: SPACING.lg,
@@ -506,9 +538,7 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: COLORS.accent.primaryDim,
     borderWidth: 2,
-    borderColor: COLORS.accent.primary,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -536,29 +566,23 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: COLORS.accent.primary,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: COLORS.background.primary,
   },
   title: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text.primary,
     letterSpacing: 2,
     marginBottom: SPACING.xs,
   },
   subtitle: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.secondary,
   },
 
   // Card
   card: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
   },
@@ -566,11 +590,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface.border,
   },
   cardTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary,
   },
 
   // Info Row
@@ -589,7 +611,6 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: RADIUS.lg,
-    backgroundColor: 'rgba(255, 214, 0, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.md,
@@ -599,12 +620,10 @@ const styles = StyleSheet.create({
   },
   prTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.primary,
     marginBottom: 2,
   },
   prSubtitle: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.secondary,
   },
   prStatsContainer: {
     flexDirection: 'row',
@@ -612,7 +631,6 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   prBadge: {
-    backgroundColor: COLORS.accent.primaryDim,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     borderRadius: RADIUS.sm,
@@ -621,12 +639,10 @@ const styles = StyleSheet.create({
   prBadgeText: {
     ...TYPOGRAPHY.statSmall,
     fontSize: 14,
-    color: COLORS.accent.primary,
   },
   prBadgeLabel: {
     ...TYPOGRAPHY.label,
     fontSize: 8,
-    color: COLORS.accent.primary,
   },
   infoIcon: {
     width: 40,
@@ -641,17 +657,14 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.tertiary,
     fontSize: 10,
     marginBottom: 2,
   },
   infoValue: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.primary,
   },
   infoValueSmall: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.secondary,
     fontSize: 13,
   },
 
@@ -679,20 +692,16 @@ const styles = StyleSheet.create({
   },
   settingText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.primary,
     flex: 1,
   },
   settingDescription: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
     marginTop: 2,
   },
   divider: {
     height: 1,
-    backgroundColor: COLORS.surface.border,
   },
   comingSoonBadge: {
-    backgroundColor: COLORS.surface.card,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
     borderRadius: RADIUS.sm,
@@ -700,7 +709,6 @@ const styles = StyleSheet.create({
   comingSoonText: {
     ...TYPOGRAPHY.label,
     fontSize: 9,
-    color: COLORS.text.tertiary,
   },
 
   // Sign Out
@@ -708,7 +716,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.error,
     borderRadius: RADIUS.md,
     padding: SPACING.md,
     gap: SPACING.sm,
@@ -716,7 +723,6 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     ...TYPOGRAPHY.h4,
-    color: COLORS.text.primary,
     letterSpacing: 1,
   },
 
@@ -727,12 +733,10 @@ const styles = StyleSheet.create({
   },
   footerVersion: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
     marginBottom: SPACING.xs,
   },
   footerText: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
     fontSize: 11,
   },
 });

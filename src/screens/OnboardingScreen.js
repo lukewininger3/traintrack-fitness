@@ -226,9 +226,9 @@ export default function OnboardingScreen() {
           {/* Gradient overlay for text readability */}
           <LinearGradient
             colors={isTopOverlay
-              ? ['rgba(0,0,0,0.95)', 'rgba(0,0,0,0.85)', 'rgba(0,0,0,0.3)', 'transparent']
+              ? ['rgba(0,0,0,0.9)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.1)', 'transparent']
               : ['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.85)', 'rgba(0,0,0,0.95)']}
-            locations={isTopOverlay ? [0, 0.4, 0.7, 1] : [0, 0.3, 0.6, 1]}
+            locations={isTopOverlay ? [0, 0.15, 0.25, 0.35] : [0, 0.3, 0.6, 1]}
             style={[
               styles.screenshotOverlay,
               isTopOverlay && styles.screenshotOverlayTop,

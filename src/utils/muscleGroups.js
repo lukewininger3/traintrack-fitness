@@ -32,18 +32,18 @@ export const MUSCLE_GROUP_LABELS = {
   core: 'Core',
 };
 
-// Colors for each muscle group (using design system compatible colors)
+// Colors for each muscle group (earth tones)
 export const MUSCLE_GROUP_COLORS = {
-  chest: '#FF6B35', // Coral
-  back: '#00D4FF', // Cyan
-  shoulders: '#BFFF00', // Lime
-  biceps: '#FF3B8B', // Pink
-  triceps: '#9B59B6', // Purple
-  quads: '#00FF88', // Green
-  hamstrings: '#FFD600', // Yellow
-  glutes: '#FF8C00', // Orange
-  calves: '#00CED1', // Dark Cyan
-  core: '#FF6B6B', // Light Red
+  chest: '#C4956A',     // Clay/terracotta
+  back: '#8B9A7B',      // Sage
+  shoulders: '#7D7269', // Warm taupe
+  biceps: '#A8A29E',    // Stone
+  triceps: '#6B8E9A',   // Muted slate blue
+  quads: '#C4956A',     // Clay
+  hamstrings: '#8B9A7B', // Sage
+  glutes: '#7D7269',    // Warm taupe
+  calves: '#A8A29E',    // Stone
+  core: '#6B6560',      // Muted stone
 };
 
 // Map exercises to primary and secondary muscles

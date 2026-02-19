@@ -134,13 +134,17 @@ export const searchUsers = async (query) => {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, username, display_name, avatar_initials')
+      .select('id, username, display_name, avatar_initials, avatar_url')
       .ilike('username', `%${query}%`)
       .neq('id', user.id)
       .limit(10);
 
     if (error) throw error;
-    return data || [];
+    // Map to include profilePicture
+    return (data || []).map(user => ({
+      ...user,
+      profilePicture: user.avatar_url || null,
+    }));
   } catch (error) {
     console.error('Error searching users:', error);
     return [];
@@ -226,20 +230,27 @@ export const getPendingRequests = async () => {
     if (error) throw error;
     if (!requests || requests.length === 0) return [];
 
-    // Get profiles for the senders
+    // Get profiles for the senders (including avatar_url for profile pictures)
     const senderIds = requests.map(r => r.from_user_id);
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, username, display_name, avatar_initials')
+      .select('id, username, display_name, avatar_initials, avatar_url')
       .in('id', senderIds);
 
     const profileMap = new Map((profiles || []).map(p => [p.id, p]));
 
-    // Combine the data
-    return requests.map(request => ({
-      ...request,
-      from_profile: profileMap.get(request.from_user_id) || null,
-    }));
+    // Combine the data with profile picture support
+    return requests.map(request => {
+      const profile = profileMap.get(request.from_user_id);
+      return {
+        ...request,
+        from_profile: profile || null,
+        // Flatten for easier access
+        displayName: profile?.display_name,
+        username: profile?.username,
+        profilePicture: profile?.avatar_url || null,
+      };
+    });
   } catch (error) {
     console.error('Error getting pending requests:', error);
     return [];
@@ -395,7 +406,9 @@ export const getFriends = async () => {
         return {
           id: profile.id,
           name: profile.display_name || profile.username,
+          displayName: profile.display_name,
           avatar: profile.avatar_initials || profile.username?.substring(0, 2).toUpperCase(),
+          profilePicture: profile.avatar_url || null,
           username: profile.username,
           workoutsThisWeek: count || 0,
           weekStreak: profile.week_streak || 0,
@@ -438,26 +451,74 @@ export const removeFriend = async (friendId) => {
 
 /**
  * Share a workout to the activity feed
+ * If the workout was already shared, update it with the latest data
  */
 export const shareWorkout = async (workout) => {
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, error: 'Not logged in' };
 
-    const { error } = await supabase
+    // Check if this workout was already shared
+    const { data: existing, error: fetchError } = await supabase
       .from('shared_workouts')
-      .insert({
-        user_id: user.id,
-        workout_id: workout.id,
-        workout_name: workout.name,
-        workout_type: workout.type,
-        duration: workout.duration || 0,
-        exercises: workout.exercises || [],
-        shared_at: new Date().toISOString(),
-      });
+      .select('id, shared_at')
+      .eq('user_id', user.id)
+      .eq('workout_id', String(workout.id))
+      .single();
 
-    if (error) throw error;
-    return { success: true };
+    // Handle network errors gracefully
+    if (fetchError && fetchError.message?.includes('Network request failed')) {
+      console.warn('Network unavailable for share check, skipping');
+      return { success: false, error: 'Network unavailable', offline: true };
+    }
+
+    if (existing) {
+      // Update existing shared workout with latest data
+      const { error } = await supabase
+        .from('shared_workouts')
+        .update({
+          workout_name: workout.name,
+          workout_type: workout.type,
+          duration: workout.duration || 0,
+          exercises: workout.exercises || [],
+          // Keep original shared_at so it stays in chronological order
+        })
+        .eq('id', existing.id);
+
+      if (error) {
+        if (error.message?.includes('Network request failed')) {
+          return { success: false, error: 'Network unavailable', offline: true };
+        }
+        throw error;
+      }
+      return { success: true, updated: true };
+    } else {
+      // Insert new shared workout (only if PGRST116 "no rows" or no error)
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        // Some other error occurred
+        throw fetchError;
+      }
+
+      const { error } = await supabase
+        .from('shared_workouts')
+        .insert({
+          user_id: user.id,
+          workout_id: String(workout.id),
+          workout_name: workout.name,
+          workout_type: workout.type,
+          duration: workout.duration || 0,
+          exercises: workout.exercises || [],
+          shared_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        if (error.message?.includes('Network request failed')) {
+          return { success: false, error: 'Network unavailable', offline: true };
+        }
+        throw error;
+      }
+      return { success: true, updated: false };
+    }
   } catch (error) {
     console.error('Error sharing workout:', error);
     return { success: false, error: error.message };
@@ -499,11 +560,11 @@ export const getActivityFeed = async (limit = 20) => {
     if (error) throw error;
     if (!workouts || workouts.length === 0) return [];
 
-    // Get profiles for workout owners
+    // Get profiles for workout owners (include avatar_url for profile pictures)
     const ownerIds = [...new Set(workouts.map(w => w.user_id))];
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, username, display_name, avatar_initials')
+      .select('id, username, display_name, avatar_initials, avatar_url')
       .in('id', ownerIds);
 
     const profileMap = new Map((profiles || []).map(p => [p.id, p]));
@@ -516,6 +577,19 @@ export const getActivityFeed = async (limit = 20) => {
 
     const likedIds = new Set((userLikes || []).map(l => l.shared_workout_id));
 
+    // Get comment counts for all workouts
+    const workoutIds = workouts.map(w => w.id);
+    const { data: commentCounts } = await supabase
+      .from('workout_comments')
+      .select('shared_workout_id')
+      .in('shared_workout_id', workoutIds);
+
+    const commentCountMap = new Map();
+    (commentCounts || []).forEach(c => {
+      const count = commentCountMap.get(c.shared_workout_id) || 0;
+      commentCountMap.set(c.shared_workout_id, count + 1);
+    });
+
     // Format the data
     return workouts.map(item => {
       const profile = profileMap.get(item.user_id);
@@ -525,6 +599,7 @@ export const getActivityFeed = async (limit = 20) => {
           id: profile?.id,
           name: profile?.display_name || profile?.username,
           avatar: profile?.avatar_initials || 'U',
+          profilePicture: profile?.avatar_url || null,
         },
         workoutType: item.workout_type,
         workoutName: item.workout_name,
@@ -533,6 +608,7 @@ export const getActivityFeed = async (limit = 20) => {
         timeAgo: getTimeAgo(item.shared_at),
         likes: item.likes || 0,
         isLiked: likedIds.has(item.id),
+        commentCount: commentCountMap.get(item.id) || 0,
       };
     });
   } catch (error) {
@@ -585,6 +661,88 @@ export const likeWorkout = async (sharedWorkoutId) => {
   } catch (error) {
     console.error('Error liking workout:', error);
     return { success: false };
+  }
+};
+
+/**
+ * Delete a shared workout (only owner can delete)
+ */
+export const deleteSharedWorkout = async (sharedWorkoutId) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: 'Not logged in' };
+
+    // Delete associated likes and comments first
+    await supabase
+      .from('workout_likes')
+      .delete()
+      .eq('shared_workout_id', sharedWorkoutId);
+
+    await supabase
+      .from('workout_comments')
+      .delete()
+      .eq('shared_workout_id', sharedWorkoutId);
+
+    // Delete the shared workout
+    const { error } = await supabase
+      .from('shared_workouts')
+      .delete()
+      .eq('id', sharedWorkoutId)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting shared workout:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Delete a shared workout by original workout_id
+ * Called when the original workout is deleted
+ */
+export const deleteSharedWorkoutByWorkoutId = async (workoutId) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: 'Not logged in' };
+
+    // Find the shared workout first to get its id for cleaning up likes/comments
+    const { data: sharedWorkout } = await supabase
+      .from('shared_workouts')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('workout_id', String(workoutId))
+      .single();
+
+    if (sharedWorkout) {
+      // Delete associated likes and comments first
+      await supabase
+        .from('workout_likes')
+        .delete()
+        .eq('shared_workout_id', sharedWorkout.id);
+
+      await supabase
+        .from('workout_comments')
+        .delete()
+        .eq('shared_workout_id', sharedWorkout.id);
+
+      // Delete the shared workout
+      const { error } = await supabase
+        .from('shared_workouts')
+        .delete()
+        .eq('id', sharedWorkout.id);
+
+      if (error) throw error;
+    }
+
+    return { success: true };
+  } catch (error) {
+    // Don't log network errors loudly - workout deletion still succeeded locally
+    if (!error.message?.includes('Network request failed')) {
+      console.error('Error deleting shared workout:', error);
+    }
+    return { success: false, error: error.message };
   }
 };
 
@@ -736,6 +894,244 @@ export const uploadProfilePicture = async (imageUri) => {
   } catch (error) {
     console.error('Error uploading profile picture:', error);
     return { success: false, error: error.message || 'Failed to upload image' };
+  }
+};
+
+// ============================================
+// PROFILE STATS UPDATE
+// ============================================
+
+/**
+ * Calculate and update user's week streak
+ * A "week streak" counts consecutive weeks where at least one workout was completed
+ */
+export const updateProfileStats = async () => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false };
+
+    // Get all workouts for this user, sorted by date
+    const { data: workouts, error } = await supabase
+      .from('workouts')
+      .select('date')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false });
+
+    if (error) throw error;
+
+    // Get total workout count
+    const totalWorkouts = workouts?.length || 0;
+
+    // Calculate week streak
+    let weekStreak = 0;
+
+    if (workouts && workouts.length > 0) {
+      // Get unique weeks with workouts (using Monday as start of week)
+      const weeksWithWorkouts = new Set();
+      workouts.forEach(w => {
+        const date = new Date(w.date);
+        const weekStart = getWeekStart(date);
+        weeksWithWorkouts.add(weekStart);
+      });
+
+      // Sort weeks in descending order
+      const sortedWeeks = Array.from(weeksWithWorkouts).sort((a, b) => new Date(b) - new Date(a));
+
+      // Check if current or previous week has a workout
+      const currentWeekStart = getWeekStart(new Date());
+      const previousWeekStart = getWeekStart(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+
+      // Start counting from the most recent active week
+      if (sortedWeeks.length > 0) {
+        const mostRecentWeek = sortedWeeks[0];
+
+        // Only count streak if the most recent workout week is current week or last week
+        if (mostRecentWeek === currentWeekStart || mostRecentWeek === previousWeekStart) {
+          weekStreak = 1;
+
+          // Count consecutive weeks backward
+          for (let i = 1; i < sortedWeeks.length; i++) {
+            const expectedPrevWeek = getWeekStart(new Date(new Date(sortedWeeks[i - 1]).getTime() - 7 * 24 * 60 * 60 * 1000));
+            if (sortedWeeks[i] === expectedPrevWeek) {
+              weekStreak++;
+            } else {
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Update profile with basic stats (week_streak should exist)
+    // Use only columns that are guaranteed to exist
+    const updateData = {
+      week_streak: weekStreak,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update(updateData)
+      .eq('id', user.id);
+
+    // If update fails due to missing column, try without week_streak
+    if (updateError) {
+      if (updateError.code === 'PGRST204') {
+        // Column doesn't exist - just log and continue
+        console.warn('Some profile columns missing, skipping stats update');
+        return { success: true, weekStreak, totalWorkouts };
+      }
+      throw updateError;
+    }
+
+    return { success: true, weekStreak, totalWorkouts };
+  } catch (error) {
+    // Don't log network errors loudly
+    if (!error.message?.includes('Network request failed')) {
+      console.error('Error updating profile stats:', error);
+    }
+    return { success: false, error: error.message };
+  }
+};
+
+// Helper to get Monday of the week for a given date
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().split('T')[0];
+}
+
+// ============================================
+// COMMENTS
+// ============================================
+
+/**
+ * Add a comment to a shared workout
+ */
+export const addComment = async (sharedWorkoutId, text) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: 'Not logged in' };
+
+    const { data, error } = await supabase
+      .from('workout_comments')
+      .insert({
+        user_id: user.id,
+        shared_workout_id: sharedWorkoutId,
+        text: text.trim(),
+      })
+      .select('id, text, created_at')
+      .single();
+
+    if (error) throw error;
+
+    // Get user profile for the comment (including avatar_url)
+    const profile = await getProfile(user.id);
+
+    return {
+      success: true,
+      comment: {
+        id: data.id,
+        text: data.text,
+        createdAt: data.created_at,
+        user: {
+          id: user.id,
+          name: profile?.display_name || profile?.username || 'You',
+          avatar: profile?.avatar_initials || 'U',
+          profilePicture: profile?.avatar_url || null,
+        },
+      },
+    };
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Get comments for a shared workout
+ */
+export const getComments = async (sharedWorkoutId) => {
+  try {
+    const { data: comments, error } = await supabase
+      .from('workout_comments')
+      .select('id, text, created_at, user_id')
+      .eq('shared_workout_id', sharedWorkoutId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    if (!comments || comments.length === 0) return [];
+
+    // Get profiles for commenters (including avatar_url for profile pictures)
+    const userIds = [...new Set(comments.map(c => c.user_id))];
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, username, display_name, avatar_initials, avatar_url')
+      .in('id', userIds);
+
+    const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+
+    return comments.map(comment => {
+      const profile = profileMap.get(comment.user_id);
+      return {
+        id: comment.id,
+        text: comment.text,
+        createdAt: comment.created_at,
+        timeAgo: getTimeAgo(comment.created_at),
+        user: {
+          id: comment.user_id,
+          name: profile?.display_name || profile?.username || 'Unknown',
+          avatar: profile?.avatar_initials || 'U',
+          profilePicture: profile?.avatar_url || null,
+        },
+      };
+    });
+  } catch (error) {
+    console.error('Error getting comments:', error);
+    return [];
+  }
+};
+
+/**
+ * Delete a comment (only owner can delete)
+ */
+export const deleteComment = async (commentId) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: 'Not logged in' };
+
+    const { error } = await supabase
+      .from('workout_comments')
+      .delete()
+      .eq('id', commentId)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting comment:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Get comment count for a shared workout
+ */
+export const getCommentCount = async (sharedWorkoutId) => {
+  try {
+    const { count, error } = await supabase
+      .from('workout_comments')
+      .select('*', { count: 'exact', head: true })
+      .eq('shared_workout_id', sharedWorkoutId);
+
+    if (error) throw error;
+    return count || 0;
+  } catch (error) {
+    console.error('Error getting comment count:', error);
+    return 0;
   }
 };
 

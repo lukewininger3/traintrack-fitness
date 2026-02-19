@@ -9,6 +9,7 @@ import {
   Text,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { calculateWeekStreak } from '../utils/calculations';
 import { getTodayString, loadWorkouts } from '../utils/storage';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS, SHADOWS } from '../theme/design';
@@ -169,7 +170,7 @@ export default function CalendarScreen({ navigation }) {
         <View style={styles.heroSection}>
           <View style={styles.heroStatLarge}>
             <View style={styles.streakContainer}>
-              <Flame size={28} color={COLORS.accent.primary} strokeWidth={2.5} />
+              <Flame size={28} color={COLORS.streak} strokeWidth={2.5} />
               <Text style={styles.heroNumber}>{weekStreak}</Text>
             </View>
             <Text style={styles.heroLabel}>WEEK STREAK</Text>
@@ -269,7 +270,7 @@ export default function CalendarScreen({ navigation }) {
                 <View style={styles.weekIndicator}>
                   {isCurrentWeek && weekStreak > 0 ? (
                     <View style={styles.currentWeekIndicator}>
-                      <Flame size={20} color={COLORS.accent.primary} fill={COLORS.accent.primary} strokeWidth={2} />
+                      <Flame size={20} color={COLORS.streak} fill={COLORS.streak} strokeWidth={2} />
                     </View>
                   ) : hasWorkoutThisWeek ? (
                     <View style={styles.weekCircleFilled} />
@@ -304,7 +305,7 @@ export default function CalendarScreen({ navigation }) {
           presentationStyle="pageSheet"
           onRequestClose={() => setSelectedWorkout(null)}
         >
-          <View style={styles.modalContainer}>
+          <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom']}>
             <View style={styles.modalHeader}>
               <View style={[styles.modalIconContainer, { backgroundColor: getWorkoutColor(selectedWorkout.type) + '20' }]}>
                 {React.createElement(getWorkoutIcon(selectedWorkout.type), {
@@ -344,7 +345,7 @@ export default function CalendarScreen({ navigation }) {
                 </View>
               ))}
             </ScrollView>
-          </View>
+          </SafeAreaView>
         </Modal>
       )}
     </ScrollView>
@@ -573,7 +574,7 @@ const styles = StyleSheet.create({
   // Modal
   modalContainer: {
     flex: 1,
-    backgroundColor: COLORS.background.primary,
+    backgroundColor: COLORS.background.elevated,
   },
   modalHeader: {
     flexDirection: 'row',

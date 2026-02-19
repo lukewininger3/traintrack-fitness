@@ -2,13 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { supabase } from '../config/supabase';
 import { updateGoalProgress } from './goalsStorage';
-import { shareWorkout } from './socialStorage';
+import { shareWorkout, updateProfileStats } from './socialStorage';
 
 const STORAGE_KEYS = {
   WORKOUTS: '@traintrack_workouts',
   STATS: '@traintrack_stats',
   LAST_SYNC: '@traintrack_last_sync',
-  SYNC_STATUS: '@traintrack_sync_status'
+  SYNC_STATUS: '@traintrack_sync_status',
+  IN_PROGRESS_WORKOUT: '@traintrack_in_progress_workout'
 };
 
 // Sync status types
@@ -41,23 +42,14 @@ const getUserSharePreference = async (userId) => {
   }
 };
 
-// Helper to auto-share a workout to social feed
+// Helper to auto-share/sync a workout to social feed
+// This will create a new shared workout or update an existing one
 const autoShareWorkout = async (workout, userId) => {
   try {
     const shouldShare = await getUserSharePreference(userId);
     if (!shouldShare) return;
 
-    // Check if this workout is already shared
-    const { data: existing } = await supabase
-      .from('shared_workouts')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('workout_id', String(workout.id))
-      .single();
-
-    if (existing) return; // Already shared
-
-    // Share the workout
+    // Share/update the workout (shareWorkout handles upsert logic)
     await shareWorkout({
       id: String(workout.id),
       name: workout.name,
@@ -212,7 +204,7 @@ const syncToCloud = async (workouts) => {
 
 // Save workouts - LOCAL FIRST, then background cloud sync
 export const saveWorkouts = async (workouts, options = {}) => {
-  const { silent = false, newWorkoutId = null } = options;
+  const { silent = false, newWorkoutId = null, updatedWorkoutId = null } = options;
 
   try {
     // STEP 1: Save locally FIRST (instant)
@@ -223,19 +215,26 @@ export const saveWorkouts = async (workouts, options = {}) => {
       console.error('Goal progress update failed:', err);
     });
 
+    // STEP 2.5: Update profile stats (week streak, total workouts) - non-blocking
+    updateProfileStats().catch(err => {
+      console.error('Profile stats update failed:', err);
+    });
+
     // STEP 3: Trigger cloud sync in background (non-blocking)
     // Don't await - let it run in background
     syncToCloud(workouts).catch(err => {
       console.error('Background sync failed:', err);
     });
 
-    // STEP 4: Auto-share new workout to social feed (non-blocking)
-    if (newWorkoutId) {
-      const newWorkout = workouts.find(w => w.id === newWorkoutId);
-      if (newWorkout) {
+    // STEP 4: Auto-share/sync workout to social feed (non-blocking)
+    // This handles both new workouts and updates to existing shared workouts
+    const workoutIdToSync = newWorkoutId || updatedWorkoutId;
+    if (workoutIdToSync) {
+      const workoutToSync = workouts.find(w => w.id === workoutIdToSync);
+      if (workoutToSync) {
         getCurrentUser().then(user => {
           if (user) {
-            autoShareWorkout(newWorkout, user.id).catch(err => {
+            autoShareWorkout(workoutToSync, user.id).catch(err => {
               console.error('Auto-share failed:', err);
             });
           }
@@ -395,5 +394,72 @@ export const clearLocalWorkouts = async () => {
     await AsyncStorage.removeItem(STORAGE_KEYS.WORKOUTS);
   } catch (error) {
     // Error clearing local workouts
+  }
+};
+
+// ============================================
+// IN-PROGRESS WORKOUT PERSISTENCE
+// ============================================
+
+/**
+ * Save workout-in-progress state
+ * Called periodically while building a workout to prevent data loss
+ */
+export const saveInProgressWorkout = async (workoutData) => {
+  try {
+    const dataToSave = {
+      ...workoutData,
+      savedAt: new Date().toISOString(),
+    };
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.IN_PROGRESS_WORKOUT,
+      JSON.stringify(dataToSave)
+    );
+    return { success: true };
+  } catch (error) {
+    console.warn('Failed to save in-progress workout:', error);
+    return { success: false };
+  }
+};
+
+/**
+ * Load workout-in-progress state
+ * Returns null if no in-progress workout exists
+ */
+export const loadInProgressWorkout = async () => {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.IN_PROGRESS_WORKOUT);
+    if (!data) return null;
+
+    const parsed = JSON.parse(data);
+    // Check if the saved workout is less than 24 hours old
+    const savedAt = new Date(parsed.savedAt);
+    const now = new Date();
+    const hoursSinceSave = (now - savedAt) / (1000 * 60 * 60);
+
+    if (hoursSinceSave > 24) {
+      // Workout is too old, clear it
+      await clearInProgressWorkout();
+      return null;
+    }
+
+    return parsed;
+  } catch (error) {
+    console.warn('Failed to load in-progress workout:', error);
+    return null;
+  }
+};
+
+/**
+ * Clear workout-in-progress state
+ * Called when workout is saved or discarded
+ */
+export const clearInProgressWorkout = async () => {
+  try {
+    await AsyncStorage.removeItem(STORAGE_KEYS.IN_PROGRESS_WORKOUT);
+    return { success: true };
+  } catch (error) {
+    console.warn('Failed to clear in-progress workout:', error);
+    return { success: false };
   }
 };

@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Flame } from 'lucide-react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../theme/design';
+import { TYPOGRAPHY, SPACING, RADIUS } from '../../theme/design';
+import { useTheme } from '../../contexts/ThemeContext';
 import MiniWeekStrip from './MiniWeekStrip';
 
 /**
@@ -16,6 +17,8 @@ export default function WeekStreakHero({
   lastWorkoutDate,
   currentWeekWorkouts = [],
 }) {
+  const { colors: themeColors } = useTheme();
+
   const getLastWorkoutText = () => {
     if (!lastWorkoutDate) return 'No workouts yet';
 
@@ -31,29 +34,32 @@ export default function WeekStreakHero({
     return `Last workout: ${diffDays} days ago`;
   };
 
+  // Use streak color (rose/pink) for the flame - distinct from running amber
+  const flameColor = weekStreak > 0 ? themeColors.streak : themeColors.text.tertiary;
+
   return (
     <Animated.View
       entering={FadeIn.duration(300)}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
     >
       <View style={styles.topRow}>
-        <View style={styles.iconContainer}>
+        <View style={[styles.iconContainer, { backgroundColor: themeColors.streakDim }]}>
           <Flame
             size={32}
-            color={weekStreak > 0 ? COLORS.secondary.primary : COLORS.text.tertiary}
-            fill={weekStreak > 0 ? COLORS.secondary.primary : 'transparent'}
+            color={flameColor}
+            fill={weekStreak > 0 ? flameColor : 'transparent'}
             strokeWidth={2}
           />
         </View>
         <View style={styles.textContainer}>
-          <Text style={styles.streakNumber}>
-            {weekStreak} <Text style={styles.streakLabel}>WEEK STREAK</Text>
+          <Text style={[styles.streakNumber, { color: themeColors.text.primary }]}>
+            {weekStreak} <Text style={[styles.streakLabel, { color: themeColors.text.secondary }]}>WEEK STREAK</Text>
           </Text>
-          <Text style={styles.lastWorkout}>{getLastWorkoutText()}</Text>
+          <Text style={[styles.lastWorkout, { color: themeColors.text.tertiary }]}>{getLastWorkoutText()}</Text>
         </View>
       </View>
 
-      <View style={styles.weekStripContainer}>
+      <View style={[styles.weekStripContainer, { borderTopColor: themeColors.surface.border }]}>
         <MiniWeekStrip workouts={currentWeekWorkouts} />
       </View>
     </Animated.View>
@@ -62,10 +68,8 @@ export default function WeekStreakHero({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.lg,
   },
   topRow: {
@@ -77,7 +81,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: COLORS.secondary.dim,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.md,
@@ -87,22 +90,18 @@ const styles = StyleSheet.create({
   },
   streakNumber: {
     ...TYPOGRAPHY.statMedium,
-    color: COLORS.text.primary,
   },
   streakLabel: {
     ...TYPOGRAPHY.label,
     fontSize: 14,
-    color: COLORS.text.secondary,
     fontWeight: '600',
   },
   lastWorkout: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
     marginTop: 2,
   },
   weekStripContainer: {
     paddingTop: SPACING.sm,
     borderTopWidth: 1,
-    borderTopColor: COLORS.surface.border,
   },
 });

@@ -9,18 +9,20 @@ import Animated, {
   Easing,
   runOnJS,
 } from 'react-native-reanimated';
+import { ACTIVITY_COLORS } from '../theme/design';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const NUM_PARTICLES = 30;
 
+// Celebration colors using activity palette accents
 const CONFETTI_COLORS = [
-  '#BFFF00', // lime accent
-  '#FF6B35', // coral secondary
-  '#00D4FF', // blue tertiary
-  '#FFD600', // gold
-  '#FF3B3B', // red
-  '#00FF88', // green
-  '#FF69B4', // pink
+  ACTIVITY_COLORS.Strength.accent,  // Red-orange
+  ACTIVITY_COLORS.Running.accent,   // Amber
+  ACTIVITY_COLORS.Cycling.accent,   // Purple-blue
+  ACTIVITY_COLORS.Swimming.accent,  // Teal
+  ACTIVITY_COLORS.Other.accent,     // Violet
+  '#10B981',                        // Success green
+  '#F9FAFB',                        // White/light
 ];
 
 function ConfettiParticle({ index, trigger }) {

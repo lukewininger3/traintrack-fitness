@@ -6,7 +6,8 @@ import Animated, {
   withSpring,
   withSequence,
 } from 'react-native-reanimated';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../theme/design';
+import { TYPOGRAPHY, SPACING, RADIUS } from '../../theme/design';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * Badge Component
@@ -39,6 +40,7 @@ export function Badge({
   pulse = false,
   style,
 }) {
+  const { colors: themeColors } = useTheme();
   const scale = useSharedValue(1);
 
   // Pulse animation effect
@@ -55,7 +57,7 @@ export function Badge({
     transform: [{ scale: scale.value }],
   }));
 
-  const typeStyles = getTypeStyles(type, variant, color, textColor);
+  const typeStyles = getTypeStyles(type, variant, color, textColor, themeColors);
   const sizeStyles = getSizeStyles(type, size);
 
   return (
@@ -85,7 +87,7 @@ export function Badge({
   );
 }
 
-function getTypeStyles(type, variant, customColor, customTextColor) {
+function getTypeStyles(type, variant, customColor, customTextColor, themeColors) {
   const baseStyles = {
     container: {},
     text: {},
@@ -95,17 +97,17 @@ function getTypeStyles(type, variant, customColor, customTextColor) {
     case 'count':
       return {
         container: {
-          backgroundColor: customColor || COLORS.accent.primary,
+          backgroundColor: customColor || themeColors.accent.primary,
           ...styles.countContainer,
         },
         text: {
-          color: customTextColor || COLORS.text.inverse,
+          color: customTextColor || themeColors.text.inverse,
           fontWeight: '700',
         },
       };
 
     case 'status':
-      const statusColors = getStatusColors(variant);
+      const statusColors = getStatusColors(variant, themeColors);
       return {
         container: {
           backgroundColor: customColor || statusColors.bg,
@@ -118,7 +120,7 @@ function getTypeStyles(type, variant, customColor, customTextColor) {
       };
 
     case 'tier':
-      const tierColors = getTierColors(variant);
+      const tierColors = getTierColors(variant, themeColors);
       return {
         container: {
           backgroundColor: tierColors.bg,
@@ -137,46 +139,47 @@ function getTypeStyles(type, variant, customColor, customTextColor) {
     default:
       return {
         container: {
-          backgroundColor: customColor || COLORS.accent.primaryDim,
+          backgroundColor: customColor || themeColors.accent.primaryDim,
         },
         text: {
-          color: customTextColor || COLORS.accent.primary,
+          color: customTextColor || themeColors.accent.primary,
         },
       };
   }
 }
 
-function getStatusColors(variant) {
+function getStatusColors(variant, themeColors) {
   switch (variant) {
     case 'positive':
       return {
-        bg: 'rgba(0, 255, 136, 0.15)',
-        border: 'rgba(0, 255, 136, 0.3)',
-        text: COLORS.success,
+        bg: themeColors.successDim,
+        border: themeColors.success + '40',
+        text: themeColors.success,
       };
     case 'negative':
       return {
-        bg: 'rgba(255, 59, 59, 0.15)',
-        border: 'rgba(255, 59, 59, 0.3)',
-        text: COLORS.error,
+        bg: themeColors.errorDim,
+        border: themeColors.error + '40',
+        text: themeColors.error,
       };
     case 'warning':
       return {
-        bg: 'rgba(255, 214, 0, 0.15)',
-        border: 'rgba(255, 214, 0, 0.3)',
-        text: COLORS.warning,
+        bg: themeColors.warningDim,
+        border: themeColors.warning + '40',
+        text: themeColors.warning,
       };
     case 'neutral':
     default:
       return {
-        bg: COLORS.surface.card,
-        border: COLORS.surface.border,
-        text: COLORS.text.secondary,
+        bg: themeColors.surface.card,
+        border: themeColors.surface.border,
+        text: themeColors.text.secondary,
       };
   }
 }
 
-function getTierColors(variant) {
+function getTierColors(variant, themeColors) {
+  // Modern metallic tier system that works in both themes
   switch (variant) {
     case 'bronze':
       return {
@@ -186,33 +189,33 @@ function getTierColors(variant) {
       };
     case 'silver':
       return {
-        bg: 'rgba(192, 192, 192, 0.15)',
-        border: 'rgba(192, 192, 192, 0.4)',
-        text: '#C0C0C0',
+        bg: 'rgba(168, 162, 158, 0.15)',
+        border: 'rgba(168, 162, 158, 0.4)',
+        text: '#A8A29E',
       };
     case 'gold':
       return {
-        bg: 'rgba(255, 215, 0, 0.15)',
-        border: 'rgba(255, 215, 0, 0.4)',
-        text: '#FFD700',
+        bg: 'rgba(212, 175, 55, 0.15)',
+        border: 'rgba(212, 175, 55, 0.4)',
+        text: '#D4AF37',
       };
     case 'platinum':
       return {
-        bg: 'rgba(229, 228, 226, 0.15)',
-        border: 'rgba(229, 228, 226, 0.4)',
-        text: '#E5E4E2',
+        bg: 'rgba(139, 154, 123, 0.15)',
+        border: 'rgba(139, 154, 123, 0.4)',
+        text: '#8B9A7B',
       };
     case 'diamond':
       return {
         bg: 'rgba(185, 242, 255, 0.15)',
-        border: 'rgba(185, 242, 255, 0.4)',
+        border: 'rgba(185, 242, 255, 0.3)',
         text: '#B9F2FF',
       };
     default:
       return {
-        bg: COLORS.surface.card,
-        border: COLORS.surface.border,
-        text: COLORS.text.secondary,
+        bg: themeColors.surface.card,
+        border: themeColors.surface.border,
+        text: themeColors.text.secondary,
       };
   }
 }

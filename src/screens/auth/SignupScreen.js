@@ -14,8 +14,11 @@ import {
     View
 } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { COLORS } from '../../theme/design';
 
 export default function SignupScreen() {
+  const { colors: themeColors } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -78,7 +81,7 @@ export default function SignupScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <UserPlus size={48} color="#10B981" strokeWidth={2} />
+          <UserPlus size={48} color={COLORS.accent.primary} strokeWidth={2} />
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Start your fitness journey</Text>
         </View>
@@ -86,12 +89,12 @@ export default function SignupScreen() {
         <View style={styles.form}>
           <View style={styles.inputGroup}>
             <View style={styles.inputIcon}>
-              <Mail size={20} color="#9CA3AF" strokeWidth={2} />
+              <Mail size={20} color={COLORS.text.secondary} strokeWidth={2} />
             </View>
             <TextInput
               style={styles.input}
               placeholder="Email"
-              placeholderTextColor="#6B7280"
+              placeholderTextColor={COLORS.text.tertiary}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -103,12 +106,12 @@ export default function SignupScreen() {
 
           <View style={styles.inputGroup}>
             <View style={styles.inputIcon}>
-              <Lock size={20} color="#9CA3AF" strokeWidth={2} />
+              <Lock size={20} color={COLORS.text.secondary} strokeWidth={2} />
             </View>
             <TextInput
               style={styles.input}
               placeholder="Password (min 6 characters)"
-              placeholderTextColor="#6B7280"
+              placeholderTextColor={COLORS.text.tertiary}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -120,12 +123,12 @@ export default function SignupScreen() {
 
           <View style={styles.inputGroup}>
             <View style={styles.inputIcon}>
-              <Lock size={20} color="#9CA3AF" strokeWidth={2} />
+              <Lock size={20} color={COLORS.text.secondary} strokeWidth={2} />
             </View>
             <TextInput
               style={styles.input}
               placeholder="Confirm Password"
-              placeholderTextColor="#6B7280"
+              placeholderTextColor={COLORS.text.tertiary}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
@@ -168,7 +171,7 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.background.primary,
   },
   scrollContent: {
     flexGrow: 1,
@@ -182,13 +185,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#fff',
+    color: COLORS.text.primary,
     marginTop: 16,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#9CA3AF',
+    color: COLORS.text.secondary,
   },
   form: {
     width: '100%',
@@ -196,7 +199,7 @@ const styles = StyleSheet.create({
   inputGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#374151',
+    backgroundColor: COLORS.background.tertiary,
     borderRadius: 12,
     marginBottom: 16,
     paddingHorizontal: 16,
@@ -206,12 +209,12 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: '#fff',
+    color: COLORS.text.primary,
     fontSize: 16,
     paddingVertical: 16,
   },
   signupButton: {
-    backgroundColor: '#10B981',
+    backgroundColor: COLORS.accent.primary,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -222,7 +225,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   signupButtonText: {
-    color: '#fff',
+    color: COLORS.text.inverse,
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -234,10 +237,10 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#4B5563',
+    backgroundColor: COLORS.surface.border,
   },
   dividerText: {
-    color: '#9CA3AF',
+    color: COLORS.text.secondary,
     paddingHorizontal: 16,
     fontSize: 14,
   },
@@ -247,11 +250,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loginPromptText: {
-    color: '#9CA3AF',
+    color: COLORS.text.secondary,
     fontSize: 14,
   },
   loginLink: {
-    color: '#3B82F6',
+    color: COLORS.accent.primary,
     fontSize: 14,
     fontWeight: '600',
   },

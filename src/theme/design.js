@@ -1,70 +1,259 @@
 /**
- * TrainTracks Design System
- * Aesthetic: Brutalist Athletic
+ * TrainTrack Design System
  *
- * High-contrast, energetic design with electric accents
- * against deep charcoal backgrounds. Bold typography
- * and dramatic spatial composition.
+ * Brutalist Athletic aesthetic with electric lime accents.
+ * Supports dark and light modes with distinct activity colors.
  */
 
-export const COLORS = {
-  // Backgrounds - Deep charcoal gradient
+// Helper to create rgba from hex
+const hexToRgba = (hex, alpha) => {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+/**
+ * ACTIVITY COLORS - Distinct colors for each workout type
+ * Each activity has: primary, muted (dark bg), mutedLight (light bg), accent
+ */
+export const ACTIVITY_COLORS = {
+  Strength: {
+    primary: '#BFFF00',      // Electric Lime - power, energy
+    muted: '#2A3D00',
+    mutedLight: '#F0FFC2',
+    accent: '#D4FF4D',
+  },
+  Running: {
+    primary: '#FF6B35',      // Hot Coral - warm, cardio intensity
+    muted: '#3D1F12',
+    mutedLight: '#FFE4DB',
+    accent: '#FF8A5C',
+  },
+  Cycling: {
+    primary: '#00D4FF',      // Electric Blue - speed, cool
+    muted: '#003844',
+    mutedLight: '#D6F7FF',
+    accent: '#4DE1FF',
+  },
+  Swimming: {
+    primary: '#14B8A6',      // Teal - aquatic, distinct from cycling
+    muted: '#123735',
+    mutedLight: '#CCFBF1',
+    accent: '#2DD4BF',
+  },
+  Other: {
+    primary: '#A78BFA',      // Purple/Violet - neutral category
+    muted: '#2D2154',
+    mutedLight: '#EDE9FE',
+    accent: '#C4B5FD',
+  },
+};
+
+/**
+ * DARK THEME COLORS
+ * Deep charcoal backgrounds with electric lime accent
+ */
+export const DARK_COLORS = {
+  // Backgrounds - Deep charcoal
   background: {
-    primary: '#0A0A0A',
-    secondary: '#121212',
-    tertiary: '#1A1A1A',
-    elevated: '#1F1F1F',
+    primary: '#0A0A0A',      // Main app background
+    secondary: '#121212',    // Cards, elevated surfaces
+    tertiary: '#1A1A1A',     // Inputs, nested elements
+    elevated: '#1F1F1F',     // Modals, sheets
   },
 
   // Accent - Electric Lime (energetic, athletic)
   accent: {
     primary: '#BFFF00',
-    primaryDim: 'rgba(191, 255, 0, 0.15)',
-    primaryGlow: 'rgba(191, 255, 0, 0.4)',
+    secondary: '#A3E600',
+    primaryDim: hexToRgba('#BFFF00', 0.15),
+    primaryGlow: hexToRgba('#BFFF00', 0.40),
+    muted: hexToRgba('#BFFF00', 0.08),
   },
 
-  // Secondary Accent - Hot Coral (for alerts, achievements)
+  // Secondary - Hot Coral (for highlights, achievements)
   secondary: {
     primary: '#FF6B35',
-    dim: 'rgba(255, 107, 53, 0.15)',
+    dim: hexToRgba('#FF6B35', 0.15),
+    muted: hexToRgba('#FF6B35', 0.10),
   },
 
   // Tertiary - Electric Blue (for progress, charts)
   tertiary: {
     primary: '#00D4FF',
-    dim: 'rgba(0, 212, 255, 0.15)',
+    dim: hexToRgba('#00D4FF', 0.15),
   },
 
-  // Text
+  // Text - High contrast for readability
   text: {
-    primary: '#FFFFFF',
-    secondary: '#A3A3A3',
-    tertiary: '#666666',
-    inverse: '#0A0A0A',
+    primary: '#FFFFFF',      // Main text - pure white
+    secondary: '#A3A3A3',    // Secondary text - medium gray
+    tertiary: '#666666',     // Muted text - darker gray
+    disabled: '#4B5563',     // Disabled text
+    inverse: '#0A0A0A',      // For light/accent backgrounds
   },
 
-  // States
+  // State colors - Vibrant
   success: '#00FF88',
+  successDim: hexToRgba('#00FF88', 0.15),
   warning: '#FFD600',
+  warningDim: hexToRgba('#FFD600', 0.15),
   error: '#FF3B3B',
+  errorDim: hexToRgba('#FF3B3B', 0.15),
+
+  // Streak color - distinct from all workout types
+  streak: '#F43F5E',
+  streakDim: hexToRgba('#F43F5E', 0.15),
 
   // Surfaces
   surface: {
     card: 'rgba(255, 255, 255, 0.03)',
     cardHover: 'rgba(255, 255, 255, 0.06)',
+    cardActive: 'rgba(255, 255, 255, 0.10)',
     border: 'rgba(255, 255, 255, 0.08)',
-    borderAccent: 'rgba(191, 255, 0, 0.3)',
+    borderLight: 'rgba(255, 255, 255, 0.05)',
+    borderAccent: hexToRgba('#BFFF00', 0.30),
+    divider: 'rgba(255, 255, 255, 0.06)',
+    elevated: '#1F1F1F',
   },
 
-  // Workout type colors
+  // Overlays
+  overlay: {
+    light: 'rgba(10, 10, 10, 0.5)',
+    medium: 'rgba(10, 10, 10, 0.7)',
+    heavy: 'rgba(10, 10, 10, 0.85)',
+  },
+
+  // Workout types - mapped to activity colors
   workoutTypes: {
-    Strength: '#BFFF00',
-    Running: '#00FF88',
-    Cycling: '#00D4FF',
-    Swimming: '#00D4FF',
-    Other: '#A3A3A3',
+    Strength: ACTIVITY_COLORS.Strength.primary,
+    Running: ACTIVITY_COLORS.Running.primary,
+    Cycling: ACTIVITY_COLORS.Cycling.primary,
+    Swimming: ACTIVITY_COLORS.Swimming.primary,
+    Other: ACTIVITY_COLORS.Other.primary,
+  },
+
+  // Activity colors with full palette access
+  activity: ACTIVITY_COLORS,
+};
+
+/**
+ * LIGHT THEME COLORS
+ * Clean whites with dark accents for readability
+ */
+export const LIGHT_COLORS = {
+  // Backgrounds - Clean whites
+  background: {
+    primary: '#F5F5F5',      // Main app background
+    secondary: '#FFFFFF',    // Cards, elevated surfaces
+    tertiary: '#EBEBEB',     // Inputs, nested elements
+    elevated: '#FFFFFF',     // Modals, sheets
+  },
+
+  // Accent - Dark charcoal (readable on light backgrounds)
+  accent: {
+    primary: '#1A1A1A',
+    secondary: '#333333',
+    primaryDim: hexToRgba('#1A1A1A', 0.10),
+    primaryGlow: hexToRgba('#1A1A1A', 0.15),
+    muted: hexToRgba('#1A1A1A', 0.06),
+  },
+
+  // Secondary - Hot Coral (slightly muted for light mode)
+  secondary: {
+    primary: '#E85A2A',
+    dim: hexToRgba('#E85A2A', 0.12),
+    muted: hexToRgba('#E85A2A', 0.08),
+  },
+
+  // Tertiary - Electric Blue (slightly muted)
+  tertiary: {
+    primary: '#00B8DB',
+    dim: hexToRgba('#00B8DB', 0.12),
+  },
+
+  // Text - Dark for readability
+  text: {
+    primary: '#0A0A0A',      // Main text - near black
+    secondary: '#525252',    // Secondary text
+    tertiary: '#A3A3A3',     // Muted text
+    disabled: '#D4D4D4',     // Disabled text
+    inverse: '#FFFFFF',      // For dark backgrounds
+  },
+
+  // State colors - Slightly deeper for light mode contrast
+  success: '#059669',
+  successDim: hexToRgba('#059669', 0.12),
+  warning: '#D97706',
+  warningDim: hexToRgba('#D97706', 0.12),
+  error: '#DC2626',
+  errorDim: hexToRgba('#DC2626', 0.12),
+
+  // Streak color
+  streak: '#E11D48',
+  streakDim: hexToRgba('#E11D48', 0.12),
+
+  // Surfaces
+  surface: {
+    card: '#FFFFFF',
+    cardHover: '#FAFAFA',
+    cardActive: '#F5F5F5',
+    border: '#E5E5E5',
+    borderLight: '#F0F0F0',
+    borderAccent: hexToRgba('#1A1A1A', 0.20),
+    divider: '#E5E5E5',
+    elevated: '#FFFFFF',
+  },
+
+  // Overlays
+  overlay: {
+    light: 'rgba(10, 10, 10, 0.3)',
+    medium: 'rgba(10, 10, 10, 0.5)',
+    heavy: 'rgba(10, 10, 10, 0.7)',
+  },
+
+  // Workout types - same vibrant colors work on light backgrounds
+  workoutTypes: {
+    Strength: '#84CC16',     // Lime-500 - readable on white
+    Running: '#EA580C',      // Orange-600 - readable on white
+    Cycling: '#0891B2',      // Cyan-600 - readable on white
+    Swimming: '#0D9488',     // Teal-600 - readable on white
+    Other: '#7C3AED',        // Violet-600 - readable on white
+  },
+
+  // Activity colors with muted backgrounds for light mode
+  activity: {
+    Strength: {
+      ...ACTIVITY_COLORS.Strength,
+      primary: '#84CC16',
+      muted: ACTIVITY_COLORS.Strength.mutedLight,
+    },
+    Running: {
+      ...ACTIVITY_COLORS.Running,
+      primary: '#EA580C',
+      muted: ACTIVITY_COLORS.Running.mutedLight,
+    },
+    Cycling: {
+      ...ACTIVITY_COLORS.Cycling,
+      primary: '#0891B2',
+      muted: ACTIVITY_COLORS.Cycling.mutedLight,
+    },
+    Swimming: {
+      ...ACTIVITY_COLORS.Swimming,
+      primary: '#0D9488',
+      muted: ACTIVITY_COLORS.Swimming.mutedLight,
+    },
+    Other: {
+      ...ACTIVITY_COLORS.Other,
+      primary: '#7C3AED',
+      muted: ACTIVITY_COLORS.Other.mutedLight,
+    },
   },
 };
+
+// Default to dark theme - this will be overridden by ThemeContext
+export let COLORS = DARK_COLORS;
 
 export const TYPOGRAPHY = {
   // Display - Bold, condensed (athletic feel)
@@ -170,28 +359,28 @@ export const RADIUS = {
 
 export const SHADOWS = {
   sm: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowRadius: 2,
     elevation: 2,
   },
   md: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
-    shadowRadius: 8,
+    shadowRadius: 4,
     elevation: 4,
   },
   lg: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
-    shadowRadius: 16,
+    shadowRadius: 8,
     elevation: 8,
   },
   glow: {
-    shadowColor: COLORS.accent.primary,
+    shadowColor: '#BFFF00',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 20,
@@ -229,7 +418,7 @@ export const COMPONENTS = {
 
   // Input
   input: {
-    backgroundColor: COLORS.background.elevated,
+    backgroundColor: COLORS.background.tertiary,
     borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.surface.border,

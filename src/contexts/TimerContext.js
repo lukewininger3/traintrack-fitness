@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { loadTimerSettings, saveTimerSettings, TIMER_MODES } from '../utils/timerStorage';
 
 const TimerContext = createContext(null);
@@ -36,6 +37,24 @@ export function TimerProvider({ children }) {
       }
     };
   }, []);
+
+  // Keep screen awake while timer is running
+  useEffect(() => {
+    if (isRunning) {
+      // Prevent screen from sleeping during rest timer
+      activateKeepAwakeAsync('rest-timer').catch((err) => {
+        console.warn('Failed to activate keep awake:', err);
+      });
+    } else {
+      // Allow screen to sleep when timer is not running
+      deactivateKeepAwake('rest-timer');
+    }
+
+    return () => {
+      // Cleanup: deactivate on unmount
+      deactivateKeepAwake('rest-timer');
+    };
+  }, [isRunning]);
 
   // Timer countdown logic
   useEffect(() => {

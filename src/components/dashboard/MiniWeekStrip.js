@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../theme/design';
+import { TYPOGRAPHY, SPACING } from '../../theme/design';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -10,6 +11,8 @@ const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
  * @param {Date} today - Current date
  */
 export default function MiniWeekStrip({ workouts = [], today = new Date() }) {
+  const { colors: themeColors } = useTheme();
+
   // Get start of week (Sunday)
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay());
@@ -44,17 +47,18 @@ export default function MiniWeekStrip({ workouts = [], today = new Date() }) {
         <View key={index} style={styles.dayContainer}>
           <Text style={[
             styles.dayLabel,
-            day.isToday && styles.dayLabelToday,
-            day.isFuture && styles.dayLabelFuture,
+            { color: themeColors.text.tertiary },
+            day.isToday && { color: themeColors.text.primary },
+            day.isFuture && { opacity: 0.5 },
           ]}>
             {day.label}
           </Text>
           <View style={[
             styles.dot,
-            day.hasWorkout && styles.dotActive,
-            day.hasWorkout && { backgroundColor: COLORS.workoutTypes[day.workoutType] || COLORS.accent.primary },
-            day.isToday && !day.hasWorkout && styles.dotToday,
-            day.isFuture && styles.dotFuture,
+            { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border },
+            day.hasWorkout && { backgroundColor: themeColors.workoutTypes[day.workoutType] || themeColors.accent.primary, borderWidth: 0 },
+            day.isToday && !day.hasWorkout && { borderColor: themeColors.accent.primary, borderWidth: 2 },
+            day.isFuture && { opacity: 0.3 },
           ]} />
         </View>
       ))}
@@ -75,32 +79,12 @@ const styles = StyleSheet.create({
   dayLabel: {
     ...TYPOGRAPHY.caption,
     fontSize: 10,
-    color: COLORS.text.tertiary,
     fontWeight: '600',
-  },
-  dayLabelToday: {
-    color: COLORS.text.primary,
-  },
-  dayLabelFuture: {
-    color: COLORS.text.tertiary,
-    opacity: 0.5,
   },
   dot: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: COLORS.surface.card,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
-  },
-  dotActive: {
-    borderWidth: 0,
-  },
-  dotToday: {
-    borderColor: COLORS.accent.primary,
-    borderWidth: 2,
-  },
-  dotFuture: {
-    opacity: 0.3,
   },
 });

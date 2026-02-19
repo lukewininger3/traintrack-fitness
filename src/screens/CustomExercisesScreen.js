@@ -20,9 +20,11 @@ import {
   saveCustomExercise,
 } from '../utils/customExercises';
 import CustomExerciseForm from './WorkoutBuilder/components/CustomExerciseForm';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function CustomExercisesScreen() {
+  const { colors: themeColors } = useTheme();
   const [customExercises, setCustomExercises] = useState([]);
   const [editingExercise, setEditingExercise] = useState(null);
   const isMountedRef = useRef(true);
@@ -97,16 +99,16 @@ export default function CustomExercisesScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: themeColors.background.primary }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: themeColors.background.secondary, borderBottomColor: themeColors.surface.border }]}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <ChevronLeft size={24} color={COLORS.text.primary} strokeWidth={2} />
+          <ChevronLeft size={24} color={themeColors.text.primary} strokeWidth={2} />
         </Pressable>
-        <Text style={styles.headerTitle}>CUSTOM EXERCISES</Text>
+        <Text style={[styles.headerTitle, { color: themeColors.text.primary }]}>CUSTOM EXERCISES</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -117,8 +119,8 @@ export default function CustomExercisesScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Create / Edit Form */}
-        <View style={styles.formCard}>
-          <Text style={styles.formTitle}>
+        <View style={[styles.formCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+          <Text style={[styles.formTitle, { color: themeColors.text.primary }]}>
             {editingExercise ? 'Edit Exercise' : 'Create New Exercise'}
           </Text>
           <CustomExerciseForm
@@ -131,7 +133,7 @@ export default function CustomExercisesScreen() {
         {/* Exercise List */}
         {customExercises.length > 0 ? (
           <>
-            <Text style={styles.sectionTitle}>YOUR CUSTOM EXERCISES</Text>
+            <Text style={[styles.sectionTitle, { color: themeColors.text.secondary }]}>YOUR CUSTOM EXERCISES</Text>
             {getAllCategories().map((category) => {
               const exercisesInCategory = customExercises.filter(
                 (ex) => ex.category === category
@@ -140,10 +142,10 @@ export default function CustomExercisesScreen() {
 
               return (
                 <View key={category} style={styles.categorySection}>
-                  <Text style={styles.categoryTitle}>{category}</Text>
+                  <Text style={[styles.categoryTitle, { color: themeColors.text.primary }]}>{category}</Text>
                   {exercisesInCategory.map((exercise) => (
-                    <View key={exercise.id} style={styles.exerciseRow}>
-                      <Text style={styles.exerciseName} numberOfLines={1}>
+                    <View key={exercise.id} style={[styles.exerciseRow, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+                      <Text style={[styles.exerciseName, { color: themeColors.text.primary }]} numberOfLines={1}>
                         {exercise.name}
                       </Text>
                       <View style={styles.exerciseActions}>
@@ -151,13 +153,13 @@ export default function CustomExercisesScreen() {
                           onPress={() => setEditingExercise(exercise)}
                           style={styles.editButton}
                         >
-                          <Text style={styles.editButtonText}>Edit</Text>
+                          <Text style={[styles.editButtonText, { color: themeColors.accent.primary }]}>Edit</Text>
                         </Pressable>
                         <Pressable
                           onPress={() => handleDelete(exercise.id, exercise.name)}
                           style={styles.deleteButton}
                         >
-                          <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
+                          <Trash2 size={18} color={themeColors.error} strokeWidth={2} />
                         </Pressable>
                       </View>
                     </View>
@@ -167,9 +169,9 @@ export default function CustomExercisesScreen() {
             })}
           </>
         ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No custom exercises yet</Text>
-            <Text style={styles.emptySubtext}>
+          <View style={[styles.emptyState, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+            <Text style={[styles.emptyText, { color: themeColors.text.secondary }]}>No custom exercises yet</Text>
+            <Text style={[styles.emptySubtext, { color: themeColors.text.tertiary }]}>
               Use the form above to create your first custom exercise
             </Text>
           </View>
@@ -182,7 +184,6 @@ export default function CustomExercisesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',
@@ -191,9 +192,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: 60,
     paddingBottom: SPACING.md,
-    backgroundColor: COLORS.background.secondary,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface.border,
   },
   backButton: {
     width: 40,
@@ -204,7 +203,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.primary,
   },
   scrollView: {
     flex: 1,
@@ -215,21 +213,17 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xxxl,
   },
   formCard: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.lg,
     marginBottom: SPACING.xl,
   },
   formTitle: {
     ...TYPOGRAPHY.h4,
-    color: COLORS.text.primary,
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary,
     marginBottom: SPACING.lg,
   },
   categorySection: {
@@ -237,23 +231,19 @@ const styles = StyleSheet.create({
   },
   categoryTitle: {
     ...TYPOGRAPHY.h4,
-    color: COLORS.text.primary,
     marginBottom: SPACING.md,
   },
   exerciseRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.surface.card,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.md,
     borderRadius: RADIUS.lg,
     marginBottom: SPACING.sm,
   },
   exerciseName: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.primary,
     flex: 1,
     marginRight: SPACING.md,
   },
@@ -268,27 +258,22 @@ const styles = StyleSheet.create({
   editButtonText: {
     ...TYPOGRAPHY.caption,
     fontWeight: '600',
-    color: COLORS.accent.primary,
   },
   deleteButton: {
     padding: SPACING.xs,
   },
   emptyState: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.xxxl,
     alignItems: 'center',
   },
   emptyText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.secondary,
     marginBottom: SPACING.xs,
   },
   emptySubtext: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
     textAlign: 'center',
   },
 });

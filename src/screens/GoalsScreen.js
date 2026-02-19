@@ -15,9 +15,11 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { useTheme } from '../contexts/ThemeContext';
 import {
   loadWeeklyGoals,
   saveWeeklyGoals,
@@ -47,6 +49,7 @@ import { EXERCISE_DATABASE, getAllCategories } from '../constants/workoutTypes';
 import { loadCustomExercises } from '../utils/customExercises';
 
 export default function GoalsScreen() {
+  const { colors: themeColors } = useTheme();
   const [weekStart, setWeekStart] = useState(getWeekStart());
   const [goals, setGoals] = useState(null);
   const [workouts, setWorkouts] = useState([]);
@@ -441,18 +444,18 @@ export default function GoalsScreen() {
   const today = new Date().getDay();
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: themeColors.background.primary }]}>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Workout Progress Ring */}
-        <View style={styles.progressRingCard}>
+        <View style={[styles.progressRingCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
           {/* Week Selector */}
           <View style={styles.weekSelector}>
             <Pressable onPress={() => navigateWeek(-1)} style={styles.weekArrow} accessibilityLabel="Previous week" accessibilityRole="button">
-              <ChevronLeft size={20} color={COLORS.text.tertiary} />
+              <ChevronLeft size={20} color={themeColors.text.tertiary} />
             </Pressable>
-            <Text style={styles.weekText}>{formatWeekRange(weekStart)}</Text>
+            <Text style={[styles.weekText, { color: themeColors.text.primary }]}>{formatWeekRange(weekStart)}</Text>
             <Pressable onPress={() => navigateWeek(1)} style={styles.weekArrow} accessibilityLabel="Next week" accessibilityRole="button">
-              <ChevronRight size={20} color={COLORS.text.tertiary} />
+              <ChevronRight size={20} color={themeColors.text.tertiary} />
             </Pressable>
           </View>
           <WorkoutProgressRing plannedWorkouts={goals?.plannedWorkouts || []} />
@@ -475,60 +478,62 @@ export default function GoalsScreen() {
         {/* Workout Goals */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>WORKOUT GOALS</Text>
-            <Pressable onPress={() => setShowAddGoal(true)} style={styles.addButton} accessibilityLabel="Add workout goal" accessibilityRole="button">
-              <Plus size={16} color={COLORS.accent.primary} strokeWidth={2.5} />
+            <Text style={[styles.sectionTitle, { color: themeColors.text.secondary }]}>WORKOUT GOALS</Text>
+            <Pressable onPress={() => setShowAddGoal(true)} style={[styles.addButton, { backgroundColor: themeColors.accent.primaryDim }]} accessibilityLabel="Add workout goal" accessibilityRole="button">
+              <Plus size={16} color={themeColors.accent.primary} strokeWidth={2.5} />
             </Pressable>
           </View>
 
           {goals?.goals?.length > 0 ? (
-            <View style={styles.goalsCard}>
+            <View style={[styles.goalsCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
               {goals.goals.map((goal) => (
-                <View key={goal.id} style={styles.goalItem}>
+                <View key={goal.id} style={[styles.goalItem, { borderBottomColor: themeColors.surface.border }]}>
                   <View style={styles.goalInfo}>
                     <View style={[
                       styles.goalCheckbox,
-                      goal.completed && styles.goalCheckboxComplete,
+                      { borderColor: themeColors.text.tertiary },
+                      goal.completed && { backgroundColor: themeColors.success, borderColor: themeColors.success },
                     ]}>
                       {goal.completed && (
-                        <Check size={12} color={COLORS.text.inverse} strokeWidth={3} />
+                        <Check size={12} color={themeColors.text.inverse} strokeWidth={3} />
                       )}
                     </View>
                     <Text style={[
                       styles.goalLabel,
-                      goal.completed && styles.goalLabelComplete,
+                      { color: themeColors.text.primary },
+                      goal.completed && { color: themeColors.success },
                     ]}>
                       {goal.label}
                     </Text>
                   </View>
                   <View style={styles.goalProgress}>
-                    <View style={styles.goalProgressBar}>
+                    <View style={[styles.goalProgressBar, { backgroundColor: themeColors.surface.border }]}>
                       <View
                         style={[
                           styles.goalProgressFill,
-                          { width: `${Math.min(100, (goal.current / goal.target) * 100)}%` },
-                          goal.completed && styles.goalProgressComplete,
+                          { width: `${Math.min(100, (goal.current / goal.target) * 100)}%`, backgroundColor: themeColors.accent.primary },
+                          goal.completed && { backgroundColor: themeColors.success },
                         ]}
                       />
                     </View>
-                    <Text style={styles.goalCount}>
+                    <Text style={[styles.goalCount, { color: themeColors.text.tertiary }]}>
                       {goal.current}/{goal.target}
                     </Text>
                     <Pressable
                       onPress={() => handleRemoveGoal(goal.id)}
                       style={styles.goalRemove}
                     >
-                      <Trash2 size={14} color={COLORS.text.tertiary} />
+                      <Trash2 size={14} color={themeColors.text.tertiary} />
                     </Pressable>
                   </View>
                 </View>
               ))}
             </View>
           ) : (
-            <Pressable style={styles.emptyCard} onPress={() => setShowAddGoal(true)}>
-              <Target size={24} color={COLORS.text.tertiary} />
-              <Text style={styles.emptyText}>No goals set</Text>
-              <Text style={styles.emptySubtext}>Tap to add a workout goal</Text>
+            <Pressable style={[styles.emptyCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]} onPress={() => setShowAddGoal(true)}>
+              <Target size={24} color={themeColors.text.tertiary} />
+              <Text style={[styles.emptyText, { color: themeColors.text.secondary }]}>No goals set</Text>
+              <Text style={[styles.emptySubtext, { color: themeColors.text.tertiary }]}>Tap to add a workout goal</Text>
             </Pressable>
           )}
         </View>
@@ -536,10 +541,10 @@ export default function GoalsScreen() {
         {/* Weight Goal */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>WEIGHT GOAL</Text>
+            <Text style={[styles.sectionTitle, { color: themeColors.text.secondary }]}>WEIGHT GOAL</Text>
             {weightData?.goal && (
-              <Pressable onPress={() => setShowWeightEntry(true)} style={styles.addButton} accessibilityLabel="Log weight" accessibilityRole="button">
-                <Plus size={16} color={COLORS.accent.primary} strokeWidth={2.5} />
+              <Pressable onPress={() => setShowWeightEntry(true)} style={[styles.addButton, { backgroundColor: themeColors.accent.primaryDim }]} accessibilityLabel="Log weight" accessibilityRole="button">
+                <Plus size={16} color={themeColors.accent.primary} strokeWidth={2.5} />
               </Pressable>
             )}
           </View>
@@ -584,59 +589,59 @@ export default function GoalsScreen() {
               </View>
 
               <View style={styles.weightCardActions}>
-                <Pressable onPress={() => setShowWeightEntry(true)} style={styles.logWeightButton}>
-                  <Scale size={16} color={COLORS.accent.primary} />
-                  <Text style={styles.logWeightText}>Log Weight</Text>
+                <Pressable onPress={() => setShowWeightEntry(true)} style={[styles.logWeightButton, { backgroundColor: themeColors.accent.primaryDim }]}>
+                  <Scale size={16} color={themeColors.accent.primary} />
+                  <Text style={[styles.logWeightText, { color: themeColors.accent.primary }]}>Log Weight</Text>
                 </Pressable>
-                <Pressable onPress={() => setShowWeightHistory(true)} style={styles.viewHistoryButton}>
-                  <Clock size={16} color={COLORS.text.secondary} />
-                  <Text style={styles.viewHistoryText}>History</Text>
+                <Pressable onPress={() => setShowWeightHistory(true)} style={[styles.viewHistoryButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+                  <Clock size={16} color={themeColors.text.secondary} />
+                  <Text style={[styles.viewHistoryText, { color: themeColors.text.tertiary }]}>History</Text>
                 </Pressable>
               </View>
             </Pressable>
           ) : weightData?.entries?.length > 0 ? (
-            <Pressable style={styles.weightCardNoGoal} onPress={() => setShowWeightHistory(true)}>
-              <Text style={styles.currentWeightLabel}>Current Weight</Text>
-              <Text style={styles.currentWeightValue}>
+            <Pressable style={[styles.weightCardNoGoal, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]} onPress={() => setShowWeightHistory(true)}>
+              <Text style={[styles.currentWeightLabel, { color: themeColors.text.tertiary }]}>Current Weight</Text>
+              <Text style={[styles.currentWeightValue, { color: themeColors.text.primary }]}>
                 {formatWeight(weightData.entries[0]?.weight, weightData?.settings?.unit || 'lbs')}
               </Text>
               <View style={styles.weightActions}>
-                <Pressable onPress={() => setShowWeightEntry(true)} style={styles.weightActionButton}>
-                  <Plus size={14} color={COLORS.accent.primary} />
-                  <Text style={styles.weightActionText}>Log</Text>
+                <Pressable onPress={() => setShowWeightEntry(true)} style={[styles.weightActionButton, { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }]}>
+                  <Plus size={14} color={themeColors.accent.primary} />
+                  <Text style={[styles.weightActionText, { color: themeColors.accent.primary }]}>Log</Text>
                 </Pressable>
-                <Pressable onPress={() => setShowWeightGoal(true)} style={styles.weightActionButton}>
-                  <Target size={14} color={COLORS.accent.primary} />
-                  <Text style={styles.weightActionText}>Set Goal</Text>
+                <Pressable onPress={() => setShowWeightGoal(true)} style={[styles.weightActionButton, { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }]}>
+                  <Target size={14} color={themeColors.accent.primary} />
+                  <Text style={[styles.weightActionText, { color: themeColors.accent.primary }]}>Set Goal</Text>
                 </Pressable>
-                <Pressable onPress={() => setShowWeightHistory(true)} style={styles.weightActionButton}>
-                  <Clock size={14} color={COLORS.accent.primary} />
-                  <Text style={styles.weightActionText}>History</Text>
+                <Pressable onPress={() => setShowWeightHistory(true)} style={[styles.weightActionButton, { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }]}>
+                  <Clock size={14} color={themeColors.accent.primary} />
+                  <Text style={[styles.weightActionText, { color: themeColors.accent.primary }]}>History</Text>
                 </Pressable>
               </View>
             </Pressable>
           ) : (
-            <Pressable style={styles.emptyCard} onPress={() => setShowWeightEntry(true)}>
-              <Scale size={24} color={COLORS.text.tertiary} />
-              <Text style={styles.emptyText}>No weight logged</Text>
-              <Text style={styles.emptySubtext}>Tap to log your weight</Text>
+            <Pressable style={[styles.emptyCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]} onPress={() => setShowWeightEntry(true)}>
+              <Scale size={24} color={themeColors.text.tertiary} />
+              <Text style={[styles.emptyText, { color: themeColors.text.secondary }]}>No weight logged</Text>
+              <Text style={[styles.emptySubtext, { color: themeColors.text.tertiary }]}>Tap to log your weight</Text>
             </Pressable>
           )}
         </View>
 
         {/* Planned Workouts */}
         <Pressable
-          style={styles.programsCard}
+          style={[styles.programsCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
           onPress={() => router.push('/planned-workouts')}
         >
-          <View style={styles.programsCardIcon}>
-            <Calendar size={20} color={COLORS.accent.primary} strokeWidth={2} />
+          <View style={[styles.programsCardIcon, { backgroundColor: themeColors.accent.primaryDim }]}>
+            <Calendar size={20} color={themeColors.accent.primary} strokeWidth={2} />
           </View>
           <View style={styles.programsCardInfo}>
-            <Text style={styles.programsCardTitle}>Planned Workouts</Text>
-            <Text style={styles.programsCardSubtitle}>View your weekly workout schedule</Text>
+            <Text style={[styles.programsCardTitle, { color: themeColors.text.primary }]}>Planned Workouts</Text>
+            <Text style={[styles.programsCardSubtitle, { color: themeColors.text.tertiary }]}>View your weekly workout schedule</Text>
           </View>
-          <ChevronRight size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+          <ChevronRight size={18} color={themeColors.text.tertiary} strokeWidth={2} />
         </Pressable>
 
         <View style={{ height: 100 }} />
@@ -659,7 +664,7 @@ export default function GoalsScreen() {
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>ADD GOAL</Text>
                   <Pressable onPress={() => setShowAddGoal(false)}>
-                    <X size={24} color={COLORS.text.primary} />
+                    <X size={24} color={themeColors.text.primary} />
                   </Pressable>
                 </View>
 
@@ -720,7 +725,7 @@ export default function GoalsScreen() {
                   onChangeText={setNewGoalTarget}
                   keyboardType="number-pad"
                   placeholder="4"
-                  placeholderTextColor={COLORS.text.tertiary}
+                  placeholderTextColor={themeColors.text.tertiary}
                   returnKeyType="done"
                   onSubmitEditing={Keyboard.dismiss}
                 />
@@ -758,7 +763,7 @@ export default function GoalsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={closePlanModal}
       >
-        <View style={styles.planModal}>
+        <SafeAreaView style={styles.planModal} edges={['top', 'bottom']}>
           {/* Conditionally show Exercise Picker or Plan Form */}
           {showExercisePicker ? (
             /* Exercise Picker View - shown inside the same modal */
@@ -775,17 +780,17 @@ export default function GoalsScreen() {
                     }}
                     style={styles.planModalClose}
                   >
-                    <X size={24} color={COLORS.text.primary} />
+                    <X size={24} color={themeColors.text.primary} />
                   </Pressable>
                 </View>
 
                 {/* Search Input */}
                 <View style={styles.exerciseSearchContainer}>
-                  <Search size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+                  <Search size={18} color={themeColors.text.tertiary} strokeWidth={2} />
                   <TextInput
                     style={styles.exerciseSearchInput}
                     placeholder="Search exercises..."
-                    placeholderTextColor={COLORS.text.tertiary}
+                    placeholderTextColor={themeColors.text.tertiary}
                     value={exerciseSearchQuery}
                     onChangeText={setExerciseSearchQuery}
                     autoCapitalize="none"
@@ -793,7 +798,7 @@ export default function GoalsScreen() {
                   />
                   {exerciseSearchQuery.length > 0 && (
                     <Pressable onPress={() => setExerciseSearchQuery('')} style={styles.clearSearchButton}>
-                      <X size={16} color={COLORS.text.tertiary} />
+                      <X size={16} color={themeColors.text.tertiary} />
                     </Pressable>
                   )}
                 </View>
@@ -813,7 +818,7 @@ export default function GoalsScreen() {
                           onPress={() => addExerciseToPlanned(exercise)}
                         >
                           <Text style={styles.exercisePickerItemText}>{exercise}</Text>
-                          <Plus size={18} color={COLORS.accent.primary} />
+                          <Plus size={18} color={themeColors.accent.primary} />
                         </Pressable>
                       ))
                     ) : (
@@ -854,7 +859,7 @@ export default function GoalsScreen() {
                         onPress={() => addExerciseToPlanned(exercise)}
                       >
                         <Text style={styles.exercisePickerItemText}>{exercise}</Text>
-                        <Plus size={18} color={COLORS.accent.primary} />
+                        <Plus size={18} color={themeColors.accent.primary} />
                       </Pressable>
                     ))}
                   </>
@@ -876,7 +881,7 @@ export default function GoalsScreen() {
                     {editingWorkout ? 'EDIT WORKOUT' : `PLAN ${showPlanDay !== null ? DAY_NAMES[showPlanDay].toUpperCase() : ''}`}
                   </Text>
                   <Pressable onPress={closePlanModal} style={styles.planModalClose}>
-                    <X size={24} color={COLORS.text.primary} />
+                    <X size={24} color={themeColors.text.primary} />
                   </Pressable>
                 </View>
               </View>
@@ -896,7 +901,7 @@ export default function GoalsScreen() {
                   value={plannedWorkoutName}
                   onChangeText={setPlannedWorkoutName}
                   placeholder="e.g., Chest Day"
-                  placeholderTextColor={COLORS.text.tertiary}
+                  placeholderTextColor={themeColors.text.tertiary}
                   returnKeyType="done"
                   onSubmitEditing={Keyboard.dismiss}
                 />
@@ -940,9 +945,9 @@ export default function GoalsScreen() {
                           <View style={styles.plannedExerciseHeader}>
                             <View style={styles.plannedExerciseInfo}>
                               {isCardioType(plannedWorkoutType) ? (
-                                <Activity size={16} color={COLORS.accent.primary} strokeWidth={2} />
+                                <Activity size={16} color={themeColors.accent.primary} strokeWidth={2} />
                               ) : (
-                                <Dumbbell size={16} color={COLORS.accent.primary} strokeWidth={2} />
+                                <Dumbbell size={16} color={themeColors.accent.primary} strokeWidth={2} />
                               )}
                               <Text style={styles.plannedExerciseName}>{exercise.name}</Text>
                             </View>
@@ -953,7 +958,7 @@ export default function GoalsScreen() {
                               accessibilityLabel={`Remove ${exercise.name}`}
                               accessibilityRole="button"
                             >
-                              <Trash2 size={16} color={COLORS.error} />
+                              <Trash2 size={16} color={themeColors.error} />
                             </Pressable>
                           </View>
                           {isCardioType(plannedWorkoutType) ? (
@@ -964,7 +969,7 @@ export default function GoalsScreen() {
                                 onChangeText={(val) => updateExerciseDistance(index, val)}
                                 keyboardType="decimal-pad"
                                 placeholder="0"
-                                placeholderTextColor={COLORS.text.tertiary}
+                                placeholderTextColor={themeColors.text.tertiary}
                               />
                               <Text style={styles.distanceUnit}>mi</Text>
                             </View>
@@ -983,7 +988,7 @@ export default function GoalsScreen() {
                                           onChangeText={(val) => updatePlannedSetWeight(index, setIndex, val)}
                                           keyboardType="decimal-pad"
                                           placeholder="0"
-                                          placeholderTextColor={COLORS.text.tertiary}
+                                          placeholderTextColor={themeColors.text.tertiary}
                                         />
                                         <Text style={styles.plannedSetUnit}>lb</Text>
                                       </View>
@@ -992,7 +997,7 @@ export default function GoalsScreen() {
                                         style={styles.removeSetButton}
                                         hitSlop={12}
                                       >
-                                        <X size={14} color={COLORS.text.tertiary} />
+                                        <X size={14} color={themeColors.text.tertiary} />
                                       </Pressable>
                                     </View>
                                   ))}
@@ -1002,7 +1007,7 @@ export default function GoalsScreen() {
                                 onPress={() => addSetToPlannedExercise(index)}
                                 style={styles.addSetButton}
                               >
-                                <Plus size={14} color={COLORS.accent.primary} strokeWidth={2.5} />
+                                <Plus size={14} color={themeColors.accent.primary} strokeWidth={2.5} />
                                 <Text style={styles.addSetText}>
                                   {(exercise.sets || []).length === 0 ? 'Add Sets (optional)' : 'Add Set'}
                                 </Text>
@@ -1015,9 +1020,9 @@ export default function GoalsScreen() {
                   ) : (
                     <View style={styles.noExercisesPlanned}>
                       {isCardioType(plannedWorkoutType) ? (
-                        <Activity size={24} color={COLORS.text.tertiary} />
+                        <Activity size={24} color={themeColors.text.tertiary} />
                       ) : (
-                        <Dumbbell size={24} color={COLORS.text.tertiary} />
+                        <Dumbbell size={24} color={themeColors.text.tertiary} />
                       )}
                       <Text style={styles.noExercisesText}>
                         {isCardioType(plannedWorkoutType) ? 'No sessions added yet' : 'No exercises added yet'}
@@ -1037,7 +1042,7 @@ export default function GoalsScreen() {
                     style={styles.addExerciseButton}
                     activeOpacity={0.7}
                   >
-                    <Plus size={18} color={COLORS.accent.primary} strokeWidth={2.5} />
+                    <Plus size={18} color={themeColors.accent.primary} strokeWidth={2.5} />
                     <Text style={styles.addExerciseButtonText}>
                       {isCardioType(plannedWorkoutType) ? 'Add Session' : 'Add Exercise'}
                     </Text>
@@ -1055,7 +1060,7 @@ export default function GoalsScreen() {
               </View>
             </KeyboardAvoidingView>
           )}
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Workout Detail Modal */}
@@ -1074,7 +1079,7 @@ export default function GoalsScreen() {
                     {showWorkoutDetail?.name?.toUpperCase() || 'WORKOUT'}
                   </Text>
                   <Pressable onPress={() => setShowWorkoutDetail(null)}>
-                    <X size={24} color={COLORS.text.primary} />
+                    <X size={24} color={themeColors.text.primary} />
                   </Pressable>
                 </View>
 
@@ -1085,9 +1090,9 @@ export default function GoalsScreen() {
                     showWorkoutDetail?.completed && styles.statusIndicatorComplete,
                   ]}>
                     {showWorkoutDetail?.completed ? (
-                      <Check size={16} color={COLORS.text.inverse} strokeWidth={3} />
+                      <Check size={16} color={themeColors.text.inverse} strokeWidth={3} />
                     ) : (
-                      <Clock size={16} color={COLORS.text.tertiary} />
+                      <Clock size={16} color={themeColors.text.tertiary} />
                     )}
                   </View>
                   <View style={styles.statusTextContainer}>
@@ -1109,7 +1114,7 @@ export default function GoalsScreen() {
                     <Text style={styles.detailExercisesTitle}>PLANNED EXERCISES</Text>
                     {showWorkoutDetail.exercises.map((exercise, idx) => (
                       <View key={idx} style={styles.detailExerciseItem}>
-                        <Dumbbell size={14} color={COLORS.accent.primary} />
+                        <Dumbbell size={14} color={themeColors.accent.primary} />
                         <Text style={styles.detailExerciseName}>{exercise.name}</Text>
                         {exercise.distance > 0 && (
                           <Text style={styles.detailExerciseDistance}>{exercise.distance} mi</Text>
@@ -1125,7 +1130,7 @@ export default function GoalsScreen() {
                     onPress={() => openEditWorkout(showWorkoutDetail)}
                     style={styles.editWorkoutButton}
                   >
-                    <Edit3 size={18} color={COLORS.accent.primary} strokeWidth={2} />
+                    <Edit3 size={18} color={themeColors.accent.primary} strokeWidth={2} />
                     <Text style={styles.editWorkoutText}>Edit Workout</Text>
                   </Pressable>
 
@@ -1149,7 +1154,7 @@ export default function GoalsScreen() {
                     }}
                     style={styles.deleteWorkoutButton}
                   >
-                    <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
+                    <Trash2 size={18} color={themeColors.error} strokeWidth={2} />
                     <Text style={styles.deleteWorkoutText}>Delete</Text>
                   </Pressable>
                 </View>
@@ -1176,7 +1181,7 @@ export default function GoalsScreen() {
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>LOG WEIGHT</Text>
                   <Pressable onPress={() => setShowWeightEntry(false)}>
-                    <X size={24} color={COLORS.text.primary} />
+                    <X size={24} color={themeColors.text.primary} />
                   </Pressable>
                 </View>
 
@@ -1190,10 +1195,10 @@ export default function GoalsScreen() {
                       setWeightEntryDate(newDate);
                     }}
                   >
-                    <ChevronLeft size={20} color={COLORS.text.secondary} />
+                    <ChevronLeft size={20} color={themeColors.text.secondary} />
                   </Pressable>
                   <View style={styles.dateSelectorCenter}>
-                    <Calendar size={16} color={COLORS.accent.primary} strokeWidth={2} />
+                    <Calendar size={16} color={themeColors.accent.primary} strokeWidth={2} />
                     <Text style={styles.dateSelectorText}>{formatDateDisplay(weightEntryDate)}</Text>
                   </View>
                   <Pressable
@@ -1221,7 +1226,7 @@ export default function GoalsScreen() {
                   onChangeText={setWeightEntry}
                   keyboardType="decimal-pad"
                   placeholder="185.0"
-                  placeholderTextColor={COLORS.text.tertiary}
+                  placeholderTextColor={themeColors.text.tertiary}
                   returnKeyType="done"
                   onSubmitEditing={Keyboard.dismiss}
                 />
@@ -1264,7 +1269,7 @@ export default function GoalsScreen() {
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>SET WEIGHT GOAL</Text>
                   <Pressable onPress={() => setShowWeightGoal(false)}>
-                    <X size={24} color={COLORS.text.primary} />
+                    <X size={24} color={themeColors.text.primary} />
                   </Pressable>
                 </View>
 
@@ -1300,7 +1305,7 @@ export default function GoalsScreen() {
                   onChangeText={setTargetWeight}
                   keyboardType="decimal-pad"
                   placeholder="175.0"
-                  placeholderTextColor={COLORS.text.tertiary}
+                  placeholderTextColor={themeColors.text.tertiary}
                   returnKeyType="done"
                   onSubmitEditing={Keyboard.dismiss}
                 />
@@ -1321,13 +1326,13 @@ export default function GoalsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowWeightHistory(false)}
       >
-        <View style={styles.historyModal}>
+        <SafeAreaView style={styles.historyModal} edges={['top', 'bottom']}>
           <View style={styles.historyHeader}>
             <View style={styles.modalHandle} />
             <View style={styles.historyTitleRow}>
               <Text style={styles.historyTitle}>WEIGHT HISTORY</Text>
               <Pressable onPress={() => setShowWeightHistory(false)} style={styles.historyClose}>
-                <X size={24} color={COLORS.text.primary} />
+                <X size={24} color={themeColors.text.primary} />
               </Pressable>
             </View>
           </View>
@@ -1388,14 +1393,14 @@ export default function GoalsScreen() {
                       style={styles.historyDelete}
                       hitSlop={12}
                     >
-                      <Trash2 size={16} color={COLORS.text.tertiary} />
+                      <Trash2 size={16} color={themeColors.text.tertiary} />
                     </Pressable>
                   </View>
                 );
               })
             ) : (
               <View style={styles.historyEmpty}>
-                <Scale size={32} color={COLORS.text.tertiary} />
+                <Scale size={32} color={themeColors.text.tertiary} />
                 <Text style={styles.historyEmptyText}>No weight entries yet</Text>
               </View>
             )}
@@ -1410,11 +1415,11 @@ export default function GoalsScreen() {
               }}
               style={styles.historyAddButton}
             >
-              <Plus size={18} color={COLORS.text.inverse} />
+              <Plus size={18} color={themeColors.text.inverse} />
               <Text style={styles.historyAddButtonText}>Log Weight</Text>
             </Pressable>
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
     </View>
   );

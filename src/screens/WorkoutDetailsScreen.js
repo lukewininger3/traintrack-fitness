@@ -17,9 +17,11 @@ import {
 import { WORKOUT_TYPES } from '../constants/workoutTypes';
 import { getTodayString, loadWorkouts, saveWorkouts } from '../utils/storage';
 import { checkAndUpdatePRs } from '../utils/personalRecords';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function WorkoutDetailsScreen() {
+  const { colors: themeColors } = useTheme();
   const params = useLocalSearchParams();
   const editingWorkoutId = params?.workoutId;
   const templateId = params?.templateId;
@@ -283,11 +285,12 @@ export default function WorkoutDetailsScreen() {
       let savedWorkout;
 
       if (isEditing) {
-        savedWorkout = { ...workoutToSave, id: parseInt(editingWorkoutId) };
+        const workoutId = parseInt(editingWorkoutId);
+        savedWorkout = { ...workoutToSave, id: workoutId };
         const updated = workouts.map(w =>
-          w.id === parseInt(editingWorkoutId) ? { ...w, ...workoutToSave } : w
+          w.id === workoutId ? { ...w, ...workoutToSave } : w
         );
-        await saveWorkouts(updated);
+        await saveWorkouts(updated, { updatedWorkoutId: workoutId });
       } else {
         const newId = Date.now();
         savedWorkout = { ...workoutToSave, id: newId };
@@ -310,25 +313,25 @@ export default function WorkoutDetailsScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: themeColors.background.primary }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: themeColors.background.primary, borderBottomColor: themeColors.surface.border }]}>
         <Pressable onPress={navigateBack} style={styles.closeButton} hitSlop={12}>
-          <X size={22} color={COLORS.text.secondary} strokeWidth={2} />
+          <X size={22} color={themeColors.text.secondary} strokeWidth={2} />
         </Pressable>
-        <Text style={styles.headerTitle}>
+        <Text style={[styles.headerTitle, { color: themeColors.text.primary }]}>
           {isEditing ? 'EDIT WORKOUT' : 'NEW WORKOUT'}
         </Text>
         {hasExercises ? (
           <Pressable
             onPress={handleSave}
-            style={styles.saveButton}
+            style={[styles.saveButton, { backgroundColor: themeColors.accent.primary }]}
             disabled={isSaving}
           >
-            <Text style={[styles.saveButtonText, isSaving && { opacity: 0.5 }]}>
+            <Text style={[styles.saveButtonText, { color: themeColors.text.inverse }, isSaving && { opacity: 0.5 }]}>
               {isSaving ? 'Saving...' : 'Save'}
             </Text>
           </Pressable>
@@ -345,63 +348,63 @@ export default function WorkoutDetailsScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* Workout Name */}
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>WORKOUT NAME</Text>
+            <Text style={[styles.label, { color: themeColors.text.tertiary }]}>WORKOUT NAME</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: themeColors.background.elevated, color: themeColors.text.primary, borderColor: themeColors.surface.border }]}
               value={workout.name}
               onChangeText={(text) => setWorkout({ ...workout, name: text })}
               placeholder="e.g., Upper Body, Leg Day"
-              placeholderTextColor={COLORS.text.tertiary}
+              placeholderTextColor={themeColors.text.tertiary}
               autoFocus={!isEditing && !templateId && !repeatData}
               onFocus={() => scrollToInput(0)}
             />
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>TYPE</Text>
-            <Pressable style={styles.dropdownButton} onPress={() => setShowTypePicker(true)}>
-              <Text style={styles.dropdownText}>{displayType}</Text>
-              <View style={styles.dropdownIconContainer}>
-                <ChevronDown size={18} color={COLORS.accent.primary} strokeWidth={2.5} />
+            <Text style={[styles.label, { color: themeColors.text.tertiary }]}>TYPE</Text>
+            <Pressable style={[styles.dropdownButton, { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border }]} onPress={() => setShowTypePicker(true)}>
+              <Text style={[styles.dropdownText, { color: themeColors.text.primary }]}>{displayType}</Text>
+              <View style={[styles.dropdownIconContainer, { backgroundColor: themeColors.accent.primaryDim }]}>
+                <ChevronDown size={18} color={themeColors.accent.primary} strokeWidth={2.5} />
               </View>
             </Pressable>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>DATE & TIME</Text>
+            <Text style={[styles.label, { color: themeColors.text.tertiary }]}>DATE & TIME</Text>
             <View style={styles.dateTimeRow}>
               <Pressable
-                style={[styles.dateTimeButton, { flex: 1.5 }]}
+                style={[styles.dateTimeButton, { flex: 1.5, backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border }]}
                 onPress={() => {
                   setTempDate(new Date(workout.date + 'T12:00:00'));
                   setShowDatePicker(true);
                 }}
               >
-                <View style={styles.dateIconContainer}>
-                  <CalendarIcon size={16} color={COLORS.accent.primary} strokeWidth={2.5} />
+                <View style={[styles.dateIconContainer, { backgroundColor: themeColors.accent.primaryDim }]}>
+                  <CalendarIcon size={16} color={themeColors.accent.primary} strokeWidth={2.5} />
                 </View>
-                <Text style={styles.dateTimeText}>{workout.date}</Text>
+                <Text style={[styles.dateTimeText, { color: themeColors.text.primary }]}>{workout.date}</Text>
               </Pressable>
 
               <Pressable
-                style={[styles.dateTimeButton, { flex: 1 }]}
+                style={[styles.dateTimeButton, { flex: 1, backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border }]}
                 onPress={() => setShowTimePicker(true)}
               >
-                <Text style={styles.dateTimeText}>{workout.time}</Text>
+                <Text style={[styles.dateTimeText, { color: themeColors.text.primary }]}>{workout.time}</Text>
               </Pressable>
             </View>
           </View>
 
           <View style={[styles.inputGroup, { marginBottom: 0 }]}>
-            <Text style={styles.label}>NOTES (OPTIONAL)</Text>
+            <Text style={[styles.label, { color: themeColors.text.tertiary }]}>NOTES (OPTIONAL)</Text>
             <TextInput
-              style={[styles.input, styles.notesInput]}
+              style={[styles.input, styles.notesInput, { backgroundColor: themeColors.background.elevated, color: themeColors.text.primary, borderColor: themeColors.surface.border }]}
               value={workout.notes}
               onChangeText={(text) => setWorkout({ ...workout, notes: text })}
               placeholder="Add workout notes..."
-              placeholderTextColor={COLORS.text.tertiary}
+              placeholderTextColor={themeColors.text.tertiary}
               multiline
               numberOfLines={3}
               onFocus={() => scrollToInput(200)}
@@ -411,32 +414,32 @@ export default function WorkoutDetailsScreen() {
       </ScrollView>
 
       {/* Continue Button */}
-      <View style={styles.footer}>
-        <Pressable style={styles.continueButton} onPress={handleContinue}>
-          <Text style={styles.continueButtonText}>Continue to Exercises</Text>
-          <ChevronRight size={20} color={COLORS.text.inverse} strokeWidth={2.5} />
+      <View style={[styles.footer, { backgroundColor: themeColors.background.primary, borderTopColor: themeColors.surface.border }]}>
+        <Pressable style={[styles.continueButton, { backgroundColor: themeColors.accent.primary }]} onPress={handleContinue}>
+          <Text style={[styles.continueButtonText, { color: themeColors.text.inverse }]}>Continue to Exercises</Text>
+          <ChevronRight size={20} color={themeColors.text.inverse} strokeWidth={2.5} />
         </Pressable>
       </View>
 
       {/* Type Picker Modal */}
       <Modal visible={showTypePicker} transparent animationType="fade" onRequestClose={() => setShowTypePicker(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowTypePicker(false)}>
-          <View style={styles.pickerModal}>
-            <View style={styles.pickerHandle} />
-            <Text style={styles.pickerTitle}>SELECT TYPE</Text>
+          <View style={[styles.pickerModal, { backgroundColor: themeColors.surface.card }]}>
+            <View style={[styles.pickerHandle, { backgroundColor: themeColors.surface.border }]} />
+            <Text style={[styles.pickerTitle, { color: themeColors.text.tertiary }]}>SELECT TYPE</Text>
             {WORKOUT_TYPES.map(type => (
               <Pressable
                 key={type}
-                style={[styles.pickerOption, workout.type === type && styles.pickerOptionSelected]}
+                style={[styles.pickerOption, { borderBottomColor: themeColors.surface.border }, workout.type === type && { backgroundColor: themeColors.accent.primaryDim }]}
                 onPress={() => {
                   setWorkout({ ...workout, type });
                   setShowTypePicker(false);
                 }}
               >
-                <Text style={[styles.pickerOptionText, workout.type === type && styles.pickerOptionTextSelected]}>
+                <Text style={[styles.pickerOptionText, { color: themeColors.text.primary }, workout.type === type && { color: themeColors.accent.primary }]}>
                   {type}
                 </Text>
-                {workout.type === type && <View style={styles.selectedDot} />}
+                {workout.type === type && <View style={[styles.selectedDot, { backgroundColor: themeColors.accent.primary }]} />}
               </Pressable>
             ))}
           </View>
@@ -447,20 +450,20 @@ export default function WorkoutDetailsScreen() {
       {showDatePicker && (
         <Modal transparent animationType="fade" visible={showDatePicker}>
           <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
-            <View style={styles.datePickerModal}>
-              <View style={styles.pickerHandle} />
-              <Text style={styles.pickerTitle}>SELECT DATE</Text>
+            <View style={[styles.datePickerModal, { backgroundColor: themeColors.surface.card }]}>
+              <View style={[styles.pickerHandle, { backgroundColor: themeColors.surface.border }]} />
+              <Text style={[styles.pickerTitle, { color: themeColors.text.tertiary }]}>SELECT DATE</Text>
               <DateTimePicker
                 value={tempDate}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={handleDateChange}
-                textColor={COLORS.text.primary}
+                textColor={themeColors.text.primary}
                 themeVariant="dark"
               />
               {Platform.OS === 'ios' && (
-                <Pressable style={styles.confirmButton} onPress={confirmDate}>
-                  <Text style={styles.confirmButtonText}>Confirm</Text>
+                <Pressable style={[styles.confirmButton, { backgroundColor: themeColors.accent.primary }]} onPress={confirmDate}>
+                  <Text style={[styles.confirmButtonText, { color: themeColors.text.inverse }]}>Confirm</Text>
                 </Pressable>
               )}
             </View>
@@ -472,20 +475,20 @@ export default function WorkoutDetailsScreen() {
       {showTimePicker && (
         <Modal transparent animationType="fade" visible={showTimePicker}>
           <Pressable style={styles.modalOverlay} onPress={() => setShowTimePicker(false)}>
-            <View style={styles.datePickerModal}>
-              <View style={styles.pickerHandle} />
-              <Text style={styles.pickerTitle}>SELECT TIME</Text>
+            <View style={[styles.datePickerModal, { backgroundColor: themeColors.surface.card }]}>
+              <View style={[styles.pickerHandle, { backgroundColor: themeColors.surface.border }]} />
+              <Text style={[styles.pickerTitle, { color: themeColors.text.tertiary }]}>SELECT TIME</Text>
               <DateTimePicker
                 value={tempTime}
                 mode="time"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={handleTimeChange}
-                textColor={COLORS.text.primary}
+                textColor={themeColors.text.primary}
                 themeVariant="dark"
               />
               {Platform.OS === 'ios' && (
-                <Pressable style={styles.confirmButton} onPress={confirmTime}>
-                  <Text style={styles.confirmButtonText}>Confirm</Text>
+                <Pressable style={[styles.confirmButton, { backgroundColor: themeColors.accent.primary }]} onPress={confirmTime}>
+                  <Text style={[styles.confirmButtonText, { color: themeColors.text.inverse }]}>Confirm</Text>
                 </Pressable>
               )}
             </View>
@@ -499,7 +502,6 @@ export default function WorkoutDetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',
@@ -508,16 +510,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xxxl,
     paddingBottom: SPACING.md,
-    backgroundColor: COLORS.background.secondary,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface.border,
   },
   closeButton: {
     padding: SPACING.sm,
   },
   headerTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.primary,
     fontSize: 14,
   },
   headerSpacer: {
@@ -526,10 +525,10 @@ const styles = StyleSheet.create({
   saveButton: {
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.md,
   },
   saveButtonText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.accent.primary,
   },
   scrollView: {
     flex: 1,
@@ -539,10 +538,8 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
   card: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.lg,
   },
   inputGroup: {
@@ -550,17 +547,13 @@ const styles = StyleSheet.create({
   },
   label: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary,
     marginBottom: SPACING.sm,
   },
   input: {
-    backgroundColor: COLORS.background.elevated,
     borderRadius: RADIUS.md,
     padding: SPACING.md,
     fontSize: TYPOGRAPHY.body.fontSize,
-    color: COLORS.text.primary,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
   },
   notesInput: {
     minHeight: 80,
@@ -570,14 +563,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.background.elevated,
     padding: SPACING.md,
     borderRadius: RADIUS.md,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
   },
   dropdownText: {
-    color: COLORS.text.primary,
     fontSize: TYPOGRAPHY.body.fontSize,
     fontWeight: '500',
   },
@@ -585,7 +575,6 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.accent.primaryDim,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -597,22 +586,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
-    backgroundColor: COLORS.background.elevated,
     padding: SPACING.md,
     borderRadius: RADIUS.md,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
   },
   dateIconContainer: {
     width: 28,
     height: 28,
     borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.accent.primaryDim,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dateTimeText: {
-    color: COLORS.text.primary,
     fontSize: TYPOGRAPHY.body.fontSize,
   },
   footer: {
@@ -622,22 +607,18 @@ const styles = StyleSheet.create({
     right: 0,
     padding: SPACING.lg,
     paddingBottom: SPACING.xxxl,
-    backgroundColor: COLORS.background.primary,
     borderTopWidth: 1,
-    borderTopColor: COLORS.surface.border,
   },
   continueButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.accent.primary,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.md,
     gap: SPACING.sm,
   },
   continueButtonText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.inverse,
   },
   modalOverlay: {
     flex: 1,
@@ -645,7 +626,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   pickerModal: {
-    backgroundColor: COLORS.background.secondary,
     borderTopLeftRadius: RADIUS.xl,
     borderTopRightRadius: RADIUS.xl,
     padding: SPACING.lg,
@@ -655,13 +635,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: COLORS.surface.border,
     alignSelf: 'center',
     marginBottom: SPACING.lg,
   },
   pickerTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary,
     marginBottom: SPACING.md,
   },
   pickerOption: {
@@ -673,32 +651,21 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     marginBottom: SPACING.xs,
   },
-  pickerOptionSelected: {
-    backgroundColor: COLORS.accent.primaryDim,
-  },
   pickerOptionText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.primary,
-  },
-  pickerOptionTextSelected: {
-    color: COLORS.accent.primary,
-    fontWeight: '600',
   },
   selectedDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.accent.primary,
   },
   datePickerModal: {
-    backgroundColor: COLORS.background.secondary,
     borderTopLeftRadius: RADIUS.xl,
     borderTopRightRadius: RADIUS.xl,
     padding: SPACING.lg,
     paddingBottom: SPACING.xxxl,
   },
   confirmButton: {
-    backgroundColor: COLORS.accent.primary,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.md,
     alignItems: 'center',
@@ -706,6 +673,5 @@ const styles = StyleSheet.create({
   },
   confirmButtonText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.inverse,
   },
 });

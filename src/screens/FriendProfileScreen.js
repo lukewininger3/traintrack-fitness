@@ -336,7 +336,7 @@ export default function FriendProfileScreen() {
               <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarInitials}>{profile.avatarInitials || '?'}</Text>
+                <User size={48} color={COLORS.accent.primary} strokeWidth={1.5} />
               </View>
             )}
             {isUploadingPhoto && (
@@ -378,16 +378,16 @@ export default function FriendProfileScreen() {
           </View>
 
           <View style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: COLORS.secondary.dim }]}>
-              <Flame size={20} color={COLORS.secondary.primary} strokeWidth={2} />
+            <View style={[styles.statIcon, { backgroundColor: COLORS.streakDim }]}>
+              <Flame size={20} color={COLORS.streak} strokeWidth={2} />
             </View>
             <Text style={styles.statValue}>{profile.weekStreak}</Text>
             <Text style={styles.statLabel}>WEEK STREAK</Text>
           </View>
 
           <View style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: 'rgba(147, 51, 234, 0.15)' }]}>
-              <Trophy size={20} color="#9333EA" strokeWidth={2} />
+            <View style={[styles.statIcon, { backgroundColor: COLORS.accent.primaryDim }]}>
+              <Trophy size={20} color={COLORS.accent.primary} strokeWidth={2} />
             </View>
             <Text style={styles.statValue}>{profile.stats.highestWeekStreak}</Text>
             <Text style={styles.statLabel}>BEST STREAK</Text>

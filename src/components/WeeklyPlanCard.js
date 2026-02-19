@@ -11,6 +11,7 @@ import Animated, {
   withSequence,
 } from 'react-native-reanimated';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { useTheme } from '../contexts/ThemeContext';
 
 // Reorder days to start with Monday
 const WEEK_DAYS = [
@@ -24,11 +25,12 @@ const WEEK_DAYS = [
 ];
 
 const WorkoutPill = ({ workout, onPress, isCompleted }) => {
+  const { colors: themeColors } = useTheme();
   const workoutType = workout.workoutType || 'Other';
-  const typeColor = COLORS.workoutTypes[workoutType] || COLORS.workoutTypes.Other;
+  const typeColor = themeColors.workoutTypes[workoutType] || themeColors.workoutTypes.Other;
 
   // Use green for completed, type color for pending
-  const displayColor = isCompleted ? COLORS.success : typeColor;
+  const displayColor = isCompleted ? themeColors.success : typeColor;
 
   return (
     <Pressable
@@ -43,17 +45,17 @@ const WorkoutPill = ({ workout, onPress, isCompleted }) => {
           styles.workoutPill,
           {
             backgroundColor: isCompleted
-              ? 'rgba(0, 255, 136, 0.08)'
+              ? `${themeColors.success}15`
               : `${typeColor}10`,
             borderColor: isCompleted
-              ? 'rgba(0, 255, 136, 0.25)'
+              ? `${themeColors.success}40`
               : `${typeColor}30`,
           },
         ]}
       >
         {isCompleted ? (
-          <View style={styles.pillCheckmark}>
-            <Check size={10} color={COLORS.success} strokeWidth={3} />
+          <View style={[styles.pillCheckmark, { backgroundColor: `${themeColors.success}30` }]}>
+            <Check size={10} color={themeColors.success} strokeWidth={3} />
           </View>
         ) : (
           <View style={[styles.pillPending, { borderColor: typeColor }]} />
@@ -82,24 +84,26 @@ const DayRow = ({
   onWorkoutPress,
   onRemoveWorkout,
 }) => {
+  const { colors: themeColors } = useTheme();
   const hasPlans = plannedWorkouts.length > 0;
 
   return (
     <View
       style={[
         styles.dayRow,
-        isToday && styles.dayRowToday,
+        isToday && [styles.dayRowToday, { backgroundColor: themeColors.accent.primaryDim }],
       ]}
     >
       {/* Today indicator bar */}
-      {isToday && <View style={styles.todayIndicator} />}
+      {isToday && <View style={[styles.todayIndicator, { backgroundColor: themeColors.accent.primary }]} />}
 
       {/* Day label */}
       <View style={styles.dayLabelContainer}>
         <Text style={[
           styles.dayLabel,
-          isToday && styles.dayLabelToday,
-          isPast && !hasPlans && styles.dayLabelPast,
+          { color: themeColors.text.primary },
+          isToday && { color: themeColors.accent.primary },
+          isPast && !hasPlans && { color: themeColors.text.tertiary },
         ]}>
           {day.full}
         </Text>
@@ -123,7 +127,8 @@ const DayRow = ({
           <View style={styles.emptyDay}>
             <Text style={[
               styles.emptyDayText,
-              isToday && styles.emptyDayTextToday,
+              { color: themeColors.text.tertiary },
+              isToday && { color: themeColors.accent.primary, opacity: 0.7 },
             ]}>
               {isPast ? 'Rest day' : 'No plans'}
             </Text>
@@ -136,7 +141,8 @@ const DayRow = ({
         onPress={() => onPlanDay(day.index)}
         style={({ pressed }) => [
           styles.addButtonContainer,
-          isToday && styles.addButtonContainerToday,
+          { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border },
+          isToday && { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent },
           pressed && styles.addButtonPressed,
         ]}
         hitSlop={12}
@@ -145,7 +151,7 @@ const DayRow = ({
       >
         <Plus
           size={16}
-          color={isToday ? COLORS.accent.primary : COLORS.text.tertiary}
+          color={isToday ? themeColors.accent.primary : themeColors.text.tertiary}
           strokeWidth={2}
         />
       </Pressable>
@@ -163,6 +169,8 @@ export default function WeeklyPlanCard({
   onWorkoutPress,
   onRemoveWorkout,
 }) {
+  const { colors: themeColors } = useTheme();
+
   // Calculate which days are in the past
   const isPastDay = (dayIndex) => {
     if (!isCurrentWeek) return false;
@@ -182,13 +190,13 @@ export default function WeeklyPlanCard({
   }, 0);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>WEEKLY PLAN</Text>
+        <Text style={[styles.title, { color: themeColors.text.secondary }]}>WEEKLY PLAN</Text>
         {totalPlanned > 0 && (
-          <View style={styles.progressBadge}>
-            <Text style={styles.progressText}>
+          <View style={[styles.progressBadge, { backgroundColor: themeColors.accent.primaryDim }]}>
+            <Text style={[styles.progressText, { color: themeColors.accent.primary }]}>
               {totalCompleted}/{totalPlanned}
             </Text>
           </View>
@@ -209,7 +217,7 @@ export default function WeeklyPlanCard({
               onWorkoutPress={onWorkoutPress}
               onRemoveWorkout={onRemoveWorkout}
             />
-            {idx < WEEK_DAYS.length - 1 && <View style={styles.divider} />}
+            {idx < WEEK_DAYS.length - 1 && <View style={[styles.divider, { backgroundColor: themeColors.surface.border }]} />}
           </React.Fragment>
         ))}
       </View>

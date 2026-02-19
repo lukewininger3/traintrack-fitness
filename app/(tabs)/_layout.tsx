@@ -1,35 +1,59 @@
-import { Tabs } from 'expo-router';
-import { Activity, LayoutDashboard, Target, TrendingUp, Trophy, Users } from 'lucide-react-native';
-import { View, StyleSheet, Platform } from 'react-native';
-import { COLORS, SPACING, RADIUS } from '../../src/theme/design';
+import { Tabs, router } from 'expo-router';
+import { Activity, LayoutDashboard, Target, TrendingUp, Trophy, Users, User } from 'lucide-react-native';
+import { View, StyleSheet, Platform, Pressable } from 'react-native';
+import { useTheme } from '../../src/contexts/ThemeContext';
+import { SPACING, RADIUS } from '../../src/theme/design';
+
+// Profile button component for header
+const ProfileButton = () => {
+  const { colors, isDark } = useTheme();
+
+  return (
+    <Pressable
+      onPress={() => router.push('/profile')}
+      style={[
+        styles.profileButton,
+        { backgroundColor: isDark ? colors.surface.card : '#FFFFFF' }
+      ]}
+    >
+      <User size={18} color={colors.text.secondary} strokeWidth={2} />
+    </Pressable>
+  );
+};
 
 export default function TabsLayout() {
+  const { colors, isDark } = useTheme();
+
   return (
     <Tabs
       screenOptions={{
         headerStyle: {
-          backgroundColor: COLORS.background.primary,
+          backgroundColor: colors.background.primary,
           borderBottomWidth: 0,
           shadowOpacity: 0,
           elevation: 0,
         },
-        headerTintColor: COLORS.text.primary,
+        headerTintColor: colors.text.primary,
         headerTitleStyle: {
           fontWeight: '800',
           fontSize: 20,
           letterSpacing: -0.5,
         },
         headerShadowVisible: false,
-        tabBarStyle: {
-          backgroundColor: COLORS.background.primary,
-          borderTopWidth: 1,
-          borderTopColor: COLORS.surface.border,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 12,
-          paddingTop: 12,
-          height: Platform.OS === 'ios' ? 88 : 70,
+        headerRight: () => <ProfileButton />,
+        headerRightContainerStyle: {
+          paddingRight: SPACING.md,
         },
-        tabBarActiveTintColor: COLORS.accent.primary,
-        tabBarInactiveTintColor: COLORS.text.tertiary,
+        tabBarStyle: {
+          backgroundColor: colors.background.primary,
+          borderTopWidth: 1,
+          borderTopColor: colors.surface.border,
+          paddingBottom: Platform.OS === 'ios' ? 36 : 16,
+          paddingTop: 12,
+          height: Platform.OS === 'ios' ? 96 : 78,
+        },
+        tabBarActiveTintColor: colors.accent.primary,
+        tabBarInactiveTintColor: colors.text.tertiary,
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: '600',
@@ -52,7 +76,7 @@ export default function TabsLayout() {
             letterSpacing: 2,
           },
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? styles.activeIconContainer : undefined}>
+            <View style={focused ? [styles.activeIconContainer, { backgroundColor: colors.accent.primaryDim }] : undefined}>
               <LayoutDashboard
                 size={22}
                 color={color}
@@ -72,7 +96,7 @@ export default function TabsLayout() {
             letterSpacing: 2,
           },
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? styles.activeIconContainer : undefined}>
+            <View style={focused ? [styles.activeIconContainer, { backgroundColor: colors.accent.primaryDim }] : undefined}>
               <Activity
                 size={22}
                 color={color}
@@ -92,7 +116,7 @@ export default function TabsLayout() {
             letterSpacing: 2,
           },
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? styles.activeIconContainer : undefined}>
+            <View style={focused ? [styles.activeIconContainer, { backgroundColor: colors.accent.primaryDim }] : undefined}>
               <Target
                 size={22}
                 color={color}
@@ -119,7 +143,7 @@ export default function TabsLayout() {
             letterSpacing: 2,
           },
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? styles.activeIconContainer : undefined}>
+            <View style={focused ? [styles.activeIconContainer, { backgroundColor: colors.accent.primaryDim }] : undefined}>
               <TrendingUp
                 size={22}
                 color={color}
@@ -139,7 +163,7 @@ export default function TabsLayout() {
             letterSpacing: 2,
           },
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? styles.activeIconContainer : undefined}>
+            <View style={focused ? [styles.activeIconContainer, { backgroundColor: colors.accent.primaryDim }] : undefined}>
               <Users
                 size={22}
                 color={color}
@@ -169,9 +193,15 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   activeIconContainer: {
-    backgroundColor: COLORS.accent.primaryDim,
     borderRadius: RADIUS.md,
     padding: 6,
     marginBottom: -4,
+  },
+  profileButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

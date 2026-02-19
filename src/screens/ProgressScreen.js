@@ -1,4 +1,4 @@
-import { ChevronDown, Search, TrendingUp, X, ArrowUp, ArrowDown, Zap, Dumbbell, Trophy } from 'lucide-react-native';
+import { ChevronDown, Search, TrendingUp, X, ArrowUp, ArrowDown, Zap, Dumbbell, Trophy, Weight } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,6 +18,7 @@ import { loadWorkouts } from '../utils/storage';
 import { calculateOneRepMax } from '../utils/personalRecords';
 import { getCurrentWeekStats } from '../utils/weeklyRecap';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { useTheme } from '../contexts/ThemeContext';
 import { Calendar } from 'lucide-react-native';
 import BottomSheet from '../components/ui/BottomSheet';
 
@@ -25,7 +26,19 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 32;
 const CHART_HEIGHT = 300;
 
+// Helper to format volume numbers (e.g., 12500 -> "12.5K")
+const formatVolume = (volume) => {
+  if (volume >= 1000000) {
+    return `${(volume / 1000000).toFixed(1)}M`;
+  }
+  if (volume >= 1000) {
+    return `${(volume / 1000).toFixed(1)}K`;
+  }
+  return volume.toString();
+};
+
 export default function ProgressScreen() {
+  const { colors: themeColors } = useTheme();
   const [workouts, setWorkouts] = useState([]);
   const [exercises, setExercises] = useState({});
   const [selectedExercise, setSelectedExercise] = useState(null);
@@ -365,9 +378,9 @@ export default function ProgressScreen() {
   // Loading state
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.accent.primary} />
-        <Text style={styles.loadingText}>Loading progress data...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: themeColors.background.primary }]}>
+        <ActivityIndicator size="large" color={themeColors.accent.primary} />
+        <Text style={[styles.loadingText, { color: themeColors.text.tertiary }]}>Loading progress data...</Text>
       </View>
     );
   }
@@ -387,41 +400,52 @@ export default function ProgressScreen() {
     <View style={styles.analyticsContainer}>
       {/* Weekly Recap Card */}
       {weeklyStats && (
-        <Animated.View entering={FadeIn.duration(300)} style={styles.card}>
+        <Animated.View entering={FadeIn.duration(300)} style={[styles.card, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
           <View style={styles.weeklyHeader}>
             <View style={styles.weeklyIconContainer}>
-              <Zap size={16} color={COLORS.warning} strokeWidth={2.5} fill={COLORS.warning} />
+              <Zap size={16} color={themeColors.warning} strokeWidth={2.5} fill={themeColors.warning} />
             </View>
             <View>
-              <Text style={styles.cardTitle}>WEEKLY RECAP</Text>
-              <Text style={styles.weeklySubtitle}>{weeklyStats.weekLabel}</Text>
+              <Text style={[styles.cardTitle, { color: themeColors.text.primary }]}>WEEKLY RECAP</Text>
+              <Text style={[styles.weeklySubtitle, { color: themeColors.text.tertiary }]}>{weeklyStats.weekLabel}</Text>
             </View>
           </View>
 
-          {/* Stats Grid */}
+          {/* Stats Grid - 2x2 layout */}
           <View style={styles.weeklyStatsGrid}>
-            <View style={styles.weeklyStatItem}>
-              <Text style={styles.weeklyStatValue}>{weeklyStats.totalWorkouts}</Text>
-              <Text style={styles.weeklyStatLabel}>WORKOUTS</Text>
+            <View style={styles.weeklyStatsRow}>
+              <View style={styles.weeklyStatItem}>
+                <Text style={[styles.weeklyStatValue, { color: themeColors.text.primary }]}>{weeklyStats.totalWorkouts}</Text>
+                <Text style={[styles.weeklyStatLabel, { color: themeColors.text.tertiary }]}>WORKOUTS</Text>
+              </View>
+              <View style={[styles.weeklyStatDivider, { backgroundColor: themeColors.surface.border }]} />
+              <View style={styles.weeklyStatItem}>
+                <Text style={[styles.weeklyStatValue, { color: themeColors.text.primary }]}>{weeklyStats.daysActive}</Text>
+                <Text style={[styles.weeklyStatLabel, { color: themeColors.text.tertiary }]}>DAYS ACTIVE</Text>
+              </View>
             </View>
-            <View style={styles.weeklyStatDivider} />
-            <View style={styles.weeklyStatItem}>
-              <Text style={styles.weeklyStatValue}>{weeklyStats.daysActive}</Text>
-              <Text style={styles.weeklyStatLabel}>DAYS ACTIVE</Text>
-            </View>
-            <View style={styles.weeklyStatDivider} />
-            <View style={styles.weeklyStatItem}>
-              <Text style={[styles.weeklyStatValue, weeklyStats.prsCount > 0 && { color: COLORS.warning }]}>
-                {weeklyStats.prsCount}
-              </Text>
-              <Text style={styles.weeklyStatLabel}>PRs HIT</Text>
+            <View style={[styles.weeklyStatsRowDivider, { backgroundColor: themeColors.surface.border }]} />
+            <View style={styles.weeklyStatsRow}>
+              <View style={styles.weeklyStatItem}>
+                <Text style={[styles.weeklyStatValue, { color: themeColors.text.primary }]}>
+                  {formatVolume(weeklyStats.totalVolume || 0)}
+                </Text>
+                <Text style={[styles.weeklyStatLabel, { color: themeColors.text.tertiary }]}>VOLUME (LBS)</Text>
+              </View>
+              <View style={[styles.weeklyStatDivider, { backgroundColor: themeColors.surface.border }]} />
+              <View style={styles.weeklyStatItem}>
+                <Text style={[styles.weeklyStatValue, { color: themeColors.text.primary }, weeklyStats.prsCount > 0 && { color: themeColors.warning }]}>
+                  {weeklyStats.prsCount}
+                </Text>
+                <Text style={[styles.weeklyStatLabel, { color: themeColors.text.tertiary }]}>PRs HIT</Text>
+              </View>
             </View>
           </View>
 
           {/* Workout Type Breakdown - Pie Chart */}
           {totalWorkoutTypes > 0 && (
-            <View style={styles.exerciseTypeSection}>
-              <Text style={styles.exerciseTypeTitle}>WORKOUT BREAKDOWN</Text>
+            <View style={[styles.exerciseTypeSection, { backgroundColor: themeColors.background.elevated }]}>
+              <Text style={[styles.exerciseTypeTitle, { color: themeColors.text.tertiary }]}>WORKOUT BREAKDOWN</Text>
               <View style={styles.pieChartContainer}>
                 <Svg width={100} height={100} viewBox="0 0 100 100">
                   {(() => {
@@ -454,7 +478,7 @@ export default function ProgressScreen() {
                             cx={cx}
                             cy={cy}
                             r={radius}
-                            fill={COLORS.workoutTypes[type] || COLORS.text.tertiary}
+                            fill={themeColors.workoutTypes[type] || themeColors.text.tertiary}
                           />
                         );
                       }
@@ -464,7 +488,7 @@ export default function ProgressScreen() {
                         <Path
                           key={type}
                           d={d}
-                          fill={COLORS.workoutTypes[type] || COLORS.text.tertiary}
+                          fill={themeColors.workoutTypes[type] || themeColors.text.tertiary}
                         />
                       );
                     });
@@ -473,9 +497,9 @@ export default function ProgressScreen() {
                 <View style={styles.pieChartLegend}>
                   {workoutTypeEntries.map(([type, count]) => (
                     <View key={type} style={styles.pieChartLegendItem}>
-                      <View style={[styles.exerciseTypeDot, { backgroundColor: COLORS.workoutTypes[type] || COLORS.text.tertiary }]} />
-                      <Text style={styles.pieChartLegendText}>{type}</Text>
-                      <Text style={styles.pieChartLegendCount}>{count}</Text>
+                      <View style={[styles.exerciseTypeDot, { backgroundColor: themeColors.workoutTypes[type] || themeColors.text.tertiary }]} />
+                      <Text style={[styles.pieChartLegendText, { color: themeColors.text.secondary }]}>{type}</Text>
+                      <Text style={[styles.pieChartLegendCount, { color: themeColors.text.primary }]}>{count}</Text>
                     </View>
                   ))}
                 </View>
@@ -486,61 +510,61 @@ export default function ProgressScreen() {
       )}
 
       {/* Consistency Stats Card */}
-      <Animated.View entering={FadeIn.duration(300)} style={styles.card}>
+      <Animated.View entering={FadeIn.duration(300)} style={[styles.card, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
         <View style={styles.consistencyHeader}>
-          <Calendar size={18} color={COLORS.accent.primary} strokeWidth={2.5} />
-          <Text style={styles.cardTitle}>MONTHLY CONSISTENCY</Text>
+          <Calendar size={18} color={themeColors.accent.primary} strokeWidth={2.5} />
+          <Text style={[styles.cardTitle, { color: themeColors.text.primary }]}>MONTHLY CONSISTENCY</Text>
         </View>
-        <Text style={styles.cardSubtitle}>Active days this month so far</Text>
+        <Text style={[styles.cardSubtitle, { color: themeColors.text.tertiary }]}>Active days this month so far</Text>
 
         <View style={styles.consistencyContent}>
           <View style={styles.consistencyMain}>
-            <Text style={styles.consistencyPercent}>{consistencyPercent}%</Text>
-            <Text style={styles.consistencyLabel}>of days active</Text>
+            <Text style={[styles.consistencyPercent, { color: themeColors.accent.primary }]}>{consistencyPercent}%</Text>
+            <Text style={[styles.consistencyLabel, { color: themeColors.text.tertiary }]}>of days active</Text>
           </View>
-          <View style={styles.consistencyDivider} />
+          <View style={[styles.consistencyDivider, { backgroundColor: themeColors.surface.border }]} />
           <View style={styles.consistencyDetail}>
             <View style={styles.consistencyRow}>
-              <Text style={styles.consistencyDetailLabel}>Active days</Text>
-              <Text style={styles.consistencyDetailValue}>{consistencyStats.daysThisMonth}</Text>
+              <Text style={[styles.consistencyDetailLabel, { color: themeColors.text.tertiary }]}>Active days</Text>
+              <Text style={[styles.consistencyDetailValue, { color: themeColors.text.primary }]}>{consistencyStats.daysThisMonth}</Text>
             </View>
             <View style={styles.consistencyRow}>
-              <Text style={styles.consistencyDetailLabel}>Days passed</Text>
-              <Text style={styles.consistencyDetailValue}>{consistencyStats.daysPassed}</Text>
+              <Text style={[styles.consistencyDetailLabel, { color: themeColors.text.tertiary }]}>Days passed</Text>
+              <Text style={[styles.consistencyDetailValue, { color: themeColors.text.primary }]}>{consistencyStats.daysPassed}</Text>
             </View>
             <View style={styles.consistencyRow}>
-              <Text style={styles.consistencyDetailLabel}>Total workouts</Text>
-              <Text style={styles.consistencyDetailValue}>{consistencyStats.totalWorkoutsThisMonth}</Text>
+              <Text style={[styles.consistencyDetailLabel, { color: themeColors.text.tertiary }]}>Total workouts</Text>
+              <Text style={[styles.consistencyDetailValue, { color: themeColors.text.primary }]}>{consistencyStats.totalWorkoutsThisMonth}</Text>
             </View>
           </View>
         </View>
 
         {/* Progress bar */}
         <View style={styles.progressBarContainer}>
-          <View style={styles.progressBarTrack}>
-            <View style={[styles.progressBarFill, { width: `${Math.min(consistencyPercent, 100)}%` }]} />
+          <View style={[styles.progressBarTrack, { backgroundColor: themeColors.surface.border }]}>
+            <View style={[styles.progressBarFill, { width: `${Math.min(consistencyPercent, 100)}%`, backgroundColor: themeColors.accent.primary }]} />
           </View>
         </View>
       </Animated.View>
 
       {/* Strength Gains Card */}
       {strengthProgression.topGainers.length > 0 && (
-        <Animated.View entering={FadeIn.duration(300).delay(100)} style={styles.card}>
-          <Text style={styles.cardTitle}>STRENGTH GAINS</Text>
-          <Text style={styles.cardSubtitle}>Recent weight increases</Text>
+        <Animated.View entering={FadeIn.duration(300).delay(100)} style={[styles.card, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+          <Text style={[styles.cardTitle, { color: themeColors.text.primary }]}>STRENGTH GAINS</Text>
+          <Text style={[styles.cardSubtitle, { color: themeColors.text.tertiary }]}>Recent weight increases</Text>
 
           <View style={styles.gainsList}>
             {strengthProgression.topGainers.map((exercise, idx) => (
-              <View key={idx} style={styles.gainRow}>
+              <View key={idx} style={[styles.gainRow, { backgroundColor: themeColors.background.elevated }]}>
                 <View style={styles.gainInfo}>
-                  <Text style={styles.gainName} numberOfLines={1}>{exercise.name}</Text>
-                  <Text style={styles.gainWeight}>
+                  <Text style={[styles.gainName, { color: themeColors.text.primary }]} numberOfLines={1}>{exercise.name}</Text>
+                  <Text style={[styles.gainWeight, { color: themeColors.text.tertiary }]}>
                     {exercise.previousWeight} → {exercise.currentWeight} lbs
                   </Text>
                 </View>
                 <View style={styles.gainBadge}>
-                  <ArrowUp size={12} color={COLORS.success} strokeWidth={3} />
-                  <Text style={styles.gainPercent}>+{exercise.percentChange.toFixed(0)}%</Text>
+                  <ArrowUp size={12} color={themeColors.success} strokeWidth={3} />
+                  <Text style={[styles.gainPercent, { color: themeColors.success }]}>+{exercise.percentChange.toFixed(0)}%</Text>
                 </View>
               </View>
             ))}
@@ -550,22 +574,22 @@ export default function ProgressScreen() {
 
       {/* Declining Exercises Card */}
       {strengthProgression.declining.length > 0 && (
-        <Animated.View entering={FadeIn.duration(300).delay(200)} style={styles.card}>
-          <Text style={styles.cardTitle}>NEEDS ATTENTION</Text>
-          <Text style={styles.cardSubtitle}>Weight decreases to monitor</Text>
+        <Animated.View entering={FadeIn.duration(300).delay(200)} style={[styles.card, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+          <Text style={[styles.cardTitle, { color: themeColors.text.primary }]}>NEEDS ATTENTION</Text>
+          <Text style={[styles.cardSubtitle, { color: themeColors.text.tertiary }]}>Weight decreases to monitor</Text>
 
           <View style={styles.gainsList}>
             {strengthProgression.declining.map((exercise, idx) => (
-              <View key={idx} style={styles.gainRow}>
+              <View key={idx} style={[styles.gainRow, { backgroundColor: themeColors.background.elevated }]}>
                 <View style={styles.gainInfo}>
-                  <Text style={styles.gainName} numberOfLines={1}>{exercise.name}</Text>
-                  <Text style={styles.gainWeight}>
+                  <Text style={[styles.gainName, { color: themeColors.text.primary }]} numberOfLines={1}>{exercise.name}</Text>
+                  <Text style={[styles.gainWeight, { color: themeColors.text.tertiary }]}>
                     {exercise.previousWeight} → {exercise.currentWeight} lbs
                   </Text>
                 </View>
                 <View style={[styles.gainBadge, styles.declineBadge]}>
-                  <ArrowDown size={12} color={COLORS.error} strokeWidth={3} />
-                  <Text style={[styles.gainPercent, styles.declinePercent]}>
+                  <ArrowDown size={12} color={themeColors.error} strokeWidth={3} />
+                  <Text style={[styles.gainPercent, { color: themeColors.error }]}>
                     {exercise.percentChange.toFixed(0)}%
                   </Text>
                 </View>
@@ -578,9 +602,9 @@ export default function ProgressScreen() {
       {/* Empty state for analytics */}
       {strengthProgression.topGainers.length === 0 && consistencyStats.totalWorkoutsThisMonth === 0 && (
         <View style={styles.emptyAnalytics}>
-          <TrendingUp size={48} color={COLORS.text.tertiary} strokeWidth={1.5} />
-          <Text style={styles.emptyTitle}>NO DATA YET</Text>
-          <Text style={styles.emptyText}>Complete workouts to see your analytics</Text>
+          <TrendingUp size={48} color={themeColors.text.tertiary} strokeWidth={1.5} />
+          <Text style={[styles.emptyTitle, { color: themeColors.text.secondary }]}>NO DATA YET</Text>
+          <Text style={[styles.emptyText, { color: themeColors.text.tertiary }]}>Complete workouts to see your analytics</Text>
         </View>
       )}
     </View>
@@ -592,58 +616,59 @@ export default function ProgressScreen() {
     <>
       {exerciseList.length === 0 ? (
         <View style={styles.emptyState}>
-          <View style={styles.emptyIconContainer}>
-            <TrendingUp size={48} color={COLORS.text.tertiary} strokeWidth={1.5} />
+          <View style={[styles.emptyIconContainer, { backgroundColor: themeColors.surface.card }]}>
+            <TrendingUp size={48} color={themeColors.text.tertiary} strokeWidth={1.5} />
           </View>
-          <Text style={styles.emptyTitle}>NO EXERCISE DATA</Text>
-          <Text style={styles.emptyText}>Complete workouts to track your progress</Text>
+          <Text style={[styles.emptyTitle, { color: themeColors.text.secondary }]}>NO EXERCISE DATA</Text>
+          <Text style={[styles.emptyText, { color: themeColors.text.tertiary }]}>Complete workouts to track your progress</Text>
         </View>
       ) : (
         <>
           {/* Exercise Dropdown */}
           <View style={styles.dropdownContainer}>
-            <Text style={styles.label}>SELECT EXERCISE</Text>
+            <Text style={[styles.label, { color: themeColors.text.secondary }]}>SELECT EXERCISE</Text>
             <Pressable
-              style={styles.dropdown}
+              style={[styles.dropdown, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
               onPress={() => setShowDropdown(true)}
             >
               <Text style={[
                 styles.dropdownText,
-                !selectedExercise && styles.dropdownPlaceholder
+                { color: themeColors.text.primary },
+                !selectedExercise && { color: themeColors.text.tertiary }
               ]}>
                 {selectedExercise || 'Tap to select an exercise'}
               </Text>
-              <View style={styles.dropdownIcon}>
-                <ChevronDown size={20} color={COLORS.accent.primary} strokeWidth={2.5} />
+              <View style={[styles.dropdownIcon, { backgroundColor: themeColors.accent.primaryDim }]}>
+                <ChevronDown size={20} color={themeColors.accent.primary} strokeWidth={2.5} />
               </View>
             </Pressable>
           </View>
 
           {/* Chart or Prompt */}
           {!selectedExercise ? (
-            <View style={styles.promptContainer}>
-              <View style={styles.promptIconContainer}>
-                <TrendingUp size={48} color={COLORS.accent.primary} strokeWidth={1.5} />
+            <View style={[styles.promptContainer, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+              <View style={[styles.promptIconContainer, { backgroundColor: themeColors.accent.primaryDim }]}>
+                <TrendingUp size={48} color={themeColors.accent.primary} strokeWidth={1.5} />
               </View>
-              <Text style={styles.promptTitle}>SELECT AN EXERCISE</Text>
-              <Text style={styles.promptText}>
+              <Text style={[styles.promptTitle, { color: themeColors.text.primary }]}>SELECT AN EXERCISE</Text>
+              <Text style={[styles.promptText, { color: themeColors.text.secondary }]}>
                 Choose an exercise from the dropdown above to view your weight progression over time
               </Text>
             </View>
           ) : selectedExercise && exercises[selectedExercise] && exercises[selectedExercise].length > 0 ? (
-            <View style={styles.chartCard}>
+            <View style={[styles.chartCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
               <View style={styles.chartHeader}>
                 <View>
-                  <Text style={styles.chartTitle}>{selectedExercise}</Text>
-                  <Text style={styles.chartSubtitle}>Weight Progression</Text>
+                  <Text style={[styles.chartTitle, { color: themeColors.text.primary }]}>{selectedExercise}</Text>
+                  <Text style={[styles.chartSubtitle, { color: themeColors.text.tertiary }]}>Weight Progression</Text>
                 </View>
-                <View style={styles.chartBadge}>
-                  <Text style={styles.chartBadgeText}>{svgPoints.length} sessions</Text>
+                <View style={[styles.chartBadge, { backgroundColor: themeColors.accent.primaryDim }]}>
+                  <Text style={[styles.chartBadgeText, { color: themeColors.accent.primary }]}>{svgPoints.length} sessions</Text>
                 </View>
               </View>
 
               <View
-                style={styles.chartWrapper}
+                style={[styles.chartWrapper, { backgroundColor: themeColors.background.primary }]}
                 onStartShouldSetResponder={() => {
                   setIsTouchingChart(true);
                   return true;
@@ -669,7 +694,7 @@ export default function ProgressScreen() {
                             y1={y}
                             x2={chartMetrics.padding.left + chartMetrics.chartWidth}
                             y2={y}
-                            stroke={COLORS.surface.border}
+                            stroke={themeColors.surface.border}
                             strokeWidth="1"
                             strokeDasharray="4,4"
                           />
@@ -697,7 +722,7 @@ export default function ProgressScreen() {
                                 x={chartMetrics.padding.left - 10}
                                 y={y + 4}
                                 fontSize="11"
-                                fill={COLORS.text.tertiary}
+                                fill={themeColors.text.tertiary}
                                 textAnchor="end"
                                 fontWeight="600"
                               >
@@ -713,7 +738,7 @@ export default function ProgressScreen() {
                         x={15}
                         y={CHART_HEIGHT / 2}
                         fontSize="10"
-                        fill={COLORS.text.tertiary}
+                        fill={themeColors.text.tertiary}
                         textAnchor="middle"
                         transform={`rotate(-90, 15, ${CHART_HEIGHT / 2})`}
                         fontWeight="600"
@@ -735,7 +760,7 @@ export default function ProgressScreen() {
                               x={point.svgX}
                               y={CHART_HEIGHT - chartMetrics.padding.bottom + 20}
                               fontSize="10"
-                              fill={COLORS.text.tertiary}
+                              fill={themeColors.text.tertiary}
                               textAnchor="middle"
                               fontWeight="600"
                             >
@@ -751,7 +776,7 @@ export default function ProgressScreen() {
                         <Polyline
                           points={svgPoints.map(p => `${p.svgX},${p.svgY}`).join(' ')}
                           fill="none"
-                          stroke={COLORS.accent.primary}
+                          stroke={themeColors.accent.primary}
                           strokeWidth="3"
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -765,8 +790,8 @@ export default function ProgressScreen() {
                           cx={point.svgX}
                           cy={point.svgY}
                           r="7"
-                          fill={COLORS.accent.primary}
-                          stroke={COLORS.background.primary}
+                          fill={themeColors.accent.primary}
+                          stroke={themeColors.background.primary}
                           strokeWidth="2"
                         />
                       ))}
@@ -777,7 +802,7 @@ export default function ProgressScreen() {
                         y1={chartMetrics.padding.top}
                         x2={chartMetrics.padding.left}
                         y2={chartMetrics.padding.top + chartMetrics.chartHeight}
-                        stroke={COLORS.surface.border}
+                        stroke={themeColors.surface.border}
                         strokeWidth="2"
                       />
                       <Line
@@ -785,7 +810,7 @@ export default function ProgressScreen() {
                         y1={chartMetrics.padding.top + chartMetrics.chartHeight}
                         x2={chartMetrics.padding.left + chartMetrics.chartWidth}
                         y2={chartMetrics.padding.top + chartMetrics.chartHeight}
-                        stroke={COLORS.surface.border}
+                        stroke={themeColors.surface.border}
                         strokeWidth="2"
                       />
                     </Svg>
@@ -799,24 +824,26 @@ export default function ProgressScreen() {
                             position: 'absolute',
                             left: Math.max(10, Math.min(tooltipData.svgX - 70, CHART_WIDTH - 150)),
                             top: tooltipData.svgY - 80,
+                            backgroundColor: themeColors.background.secondary,
+                            borderColor: themeColors.accent.primary,
                           }
                         ]}
                       >
-                        <Text style={styles.tooltipDate}>
+                        <Text style={[styles.tooltipDate, { color: themeColors.accent.primary }]}>
                           {new Date(tooltipData.date).toLocaleDateString()}
                         </Text>
                         <View style={styles.tooltipRow}>
-                          <Text style={styles.tooltipLabel}>Weight</Text>
-                          <Text style={styles.tooltipValueHighlight}>{tooltipData.weight} lbs</Text>
+                          <Text style={[styles.tooltipLabel, { color: themeColors.text.tertiary }]}>Weight</Text>
+                          <Text style={[styles.tooltipValueHighlight, { color: themeColors.accent.primary }]}>{tooltipData.weight} lbs</Text>
                         </View>
                         <View style={styles.tooltipRow}>
-                          <Text style={styles.tooltipLabel}>Reps</Text>
-                          <Text style={styles.tooltipValueHighlight}>{tooltipData.reps}</Text>
+                          <Text style={[styles.tooltipLabel, { color: themeColors.text.tertiary }]}>Reps</Text>
+                          <Text style={[styles.tooltipValueHighlight, { color: themeColors.accent.primary }]}>{tooltipData.reps}</Text>
                         </View>
                         {tooltipData.estimated1RM > 0 && (
                           <View style={styles.tooltipRow}>
-                            <Text style={styles.tooltipLabel}>Est. 1RM</Text>
-                            <Text style={styles.tooltipValueHighlight}>{tooltipData.estimated1RM} lbs</Text>
+                            <Text style={[styles.tooltipLabel, { color: themeColors.text.tertiary }]}>Est. 1RM</Text>
+                            <Text style={[styles.tooltipValueHighlight, { color: themeColors.accent.primary }]}>{tooltipData.estimated1RM} lbs</Text>
                           </View>
                         )}
                       </View>
@@ -825,18 +852,18 @@ export default function ProgressScreen() {
                 )}
               </View>
 
-              <Text style={styles.hintText}>Touch chart to see details</Text>
+              <Text style={[styles.hintText, { color: themeColors.text.tertiary }]}>Touch chart to see details</Text>
             </View>
           ) : selectedExercise ? (
-            <View style={styles.emptyChart}>
-              <View style={styles.emptyChartIcon}>
-                <TrendingUp size={40} color={COLORS.text.tertiary} strokeWidth={1.5} />
+            <View style={[styles.emptyChart, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+              <View style={[styles.emptyChartIcon, { backgroundColor: themeColors.background.elevated }]}>
+                <TrendingUp size={40} color={themeColors.text.tertiary} strokeWidth={1.5} />
               </View>
-              <Text style={styles.emptyChartTitle}>NO DATA YET</Text>
-              <Text style={styles.emptyChartText}>
+              <Text style={[styles.emptyChartTitle, { color: themeColors.text.secondary }]}>NO DATA YET</Text>
+              <Text style={[styles.emptyChartText, { color: themeColors.text.tertiary }]}>
                 No sets recorded for {selectedExercise}
               </Text>
-              <Text style={styles.emptyChartSubtext}>
+              <Text style={[styles.emptyChartSubtext, { color: themeColors.text.tertiary }]}>
                 Complete a workout with this exercise to track progress
               </Text>
             </View>
@@ -847,23 +874,37 @@ export default function ProgressScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: themeColors.background.primary }]}>
       {/* View Toggle */}
-      <View style={styles.toggleContainer}>
-        <View style={styles.toggleWrapper}>
+      <View style={[styles.toggleContainer, { backgroundColor: themeColors.background.primary }]}>
+        <View style={[styles.toggleWrapper, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
           <Pressable
-            style={[styles.toggleButton, activeView === 'analytics' && styles.toggleButtonActive]}
+            style={[
+              styles.toggleButton,
+              activeView === 'analytics' && { backgroundColor: themeColors.accent.primary }
+            ]}
             onPress={() => setActiveView('analytics')}
           >
-            <Text style={[styles.toggleText, activeView === 'analytics' && styles.toggleTextActive]}>
+            <Text style={[
+              styles.toggleText,
+              { color: themeColors.text.tertiary },
+              activeView === 'analytics' && { color: themeColors.text.inverse }
+            ]}>
               Analytics
             </Text>
           </Pressable>
           <Pressable
-            style={[styles.toggleButton, activeView === 'charts' && styles.toggleButtonActive]}
+            style={[
+              styles.toggleButton,
+              activeView === 'charts' && { backgroundColor: themeColors.accent.primary }
+            ]}
             onPress={() => setActiveView('charts')}
           >
-            <Text style={[styles.toggleText, activeView === 'charts' && styles.toggleTextActive]}>
+            <Text style={[
+              styles.toggleText,
+              { color: themeColors.text.tertiary },
+              activeView === 'charts' && { color: themeColors.text.inverse }
+            ]}>
               Charts
             </Text>
           </Pressable>
@@ -894,27 +935,27 @@ export default function ProgressScreen() {
         height="75%"
         scrollable={false}
       >
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>SELECT EXERCISE</Text>
+        <View style={[styles.modalHeader, { borderBottomColor: themeColors.surface.border }]}>
+          <Text style={[styles.modalTitle, { color: themeColors.text.primary }]}>SELECT EXERCISE</Text>
           <Pressable
             onPress={() => {
               setShowDropdown(false);
               setSearchQuery('');
               setSelectedCategory(null);
             }}
-            style={styles.modalCloseButton}
+            style={[styles.modalCloseButton, { backgroundColor: themeColors.surface.card }]}
           >
-            <X size={20} color={COLORS.text.primary} strokeWidth={2.5} />
+            <X size={20} color={themeColors.text.primary} strokeWidth={2.5} />
           </Pressable>
         </View>
 
         {/* Search Input */}
-        <View style={styles.searchContainer}>
-          <Search size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+        <View style={[styles.searchContainer, { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border }]}>
+          <Search size={18} color={themeColors.text.tertiary} strokeWidth={2} />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: themeColors.text.primary }]}
             placeholder="Search exercises..."
-            placeholderTextColor={COLORS.text.tertiary}
+            placeholderTextColor={themeColors.text.tertiary}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoCapitalize="none"
@@ -922,7 +963,7 @@ export default function ProgressScreen() {
           />
           {searchQuery.length > 0 && (
             <Pressable onPress={() => setSearchQuery('')} style={styles.clearButton}>
-              <X size={16} color={COLORS.text.tertiary} strokeWidth={2} />
+              <X size={16} color={themeColors.text.tertiary} strokeWidth={2} />
             </Pressable>
           )}
         </View>
@@ -934,13 +975,15 @@ export default function ProgressScreen() {
               <Pressable
                 style={[
                   styles.categoryChip,
-                  selectedCategory === null && styles.categoryChipActive
+                  { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border },
+                  selectedCategory === null && { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }
                 ]}
                 onPress={() => setSelectedCategory(null)}
               >
                 <Text style={[
                   styles.categoryChipText,
-                  selectedCategory === null && styles.categoryChipTextActive
+                  { color: themeColors.text.secondary },
+                  selectedCategory === null && { color: themeColors.accent.primary }
                 ]}>
                   All
                 </Text>
@@ -950,13 +993,15 @@ export default function ProgressScreen() {
                   key={category}
                   style={[
                     styles.categoryChip,
-                    selectedCategory === category && styles.categoryChipActive
+                    { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border },
+                    selectedCategory === category && { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }
                   ]}
                   onPress={() => setSelectedCategory(category)}
                 >
                   <Text style={[
                     styles.categoryChipText,
-                    selectedCategory === category && styles.categoryChipTextActive
+                    { color: themeColors.text.secondary },
+                    selectedCategory === category && { color: themeColors.accent.primary }
                   ]}>
                     {category}
                   </Text>
@@ -973,24 +1018,26 @@ export default function ProgressScreen() {
                 key={exerciseName}
                 style={[
                   styles.modalItem,
-                  selectedExercise === exerciseName && styles.modalItemSelected
+                  { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border },
+                  selectedExercise === exerciseName && { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }
                 ]}
                 onPress={() => handleExerciseSelect(exerciseName)}
               >
                 <Text style={[
                   styles.modalItemText,
-                  selectedExercise === exerciseName && styles.modalItemTextSelected
+                  { color: themeColors.text.primary },
+                  selectedExercise === exerciseName && { color: themeColors.accent.primary }
                 ]}>
                   {exerciseName}
                 </Text>
                 {selectedExercise === exerciseName && (
-                  <View style={styles.selectedIndicator} />
+                  <View style={[styles.selectedIndicator, { backgroundColor: themeColors.accent.primary }]} />
                 )}
               </Pressable>
             ))
           ) : (
             <View style={styles.noResults}>
-              <Text style={styles.noResultsText}>No exercises found</Text>
+              <Text style={[styles.noResultsText, { color: themeColors.text.tertiary }]}>No exercises found</Text>
             </View>
           )}
         </ScrollView>
@@ -1088,13 +1135,21 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   weeklyStatsGrid: {
+    marginBottom: SPACING.lg,
+  },
+  weeklyStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: SPACING.lg,
+  },
+  weeklyStatsRowDivider: {
+    height: 1,
+    backgroundColor: COLORS.surface.border,
+    marginVertical: SPACING.md,
   },
   weeklyStatItem: {
     flex: 1,
     alignItems: 'center',
+    paddingVertical: SPACING.sm,
   },
   weeklyStatValue: {
     ...TYPOGRAPHY.statMedium,
@@ -1105,7 +1160,7 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.label,
     fontSize: 9,
     color: COLORS.text.tertiary,
-    marginTop: 2,
+    marginTop: 4,
   },
   weeklyStatDivider: {
     width: 1,
