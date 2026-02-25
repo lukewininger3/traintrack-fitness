@@ -353,9 +353,13 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
   // Auto-save workout state to prevent data loss
   const autoSaveTimeoutRef = useRef(null);
   const lastSavedRef = useRef(null);
+  const isDiscardedRef = useRef(false);
 
   // Save when workout changes (debounced)
   useEffect(() => {
+    // Don't auto-save if workout was discarded
+    if (isDiscardedRef.current) return;
+
     // Only auto-save if workout has meaningful data (name or exercises)
     const hasMeaningfulData = workout.name.trim() || workout.exercises.length > 0;
     if (!hasMeaningfulData) return;
@@ -367,6 +371,7 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
 
     // Debounce the save
     autoSaveTimeoutRef.current = setTimeout(() => {
+      if (isDiscardedRef.current) return;
       const workoutJson = JSON.stringify(workout);
       // Only save if data has actually changed
       if (workoutJson !== lastSavedRef.current) {
@@ -389,6 +394,7 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
   // Save immediately when app goes to background
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
+      if (isDiscardedRef.current) return;
       if (nextAppState === 'background' || nextAppState === 'inactive') {
         const hasMeaningfulData = workout.name.trim() || workout.exercises.length > 0;
         if (hasMeaningfulData) {
@@ -553,6 +559,11 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
 
   // Discard workout (clear in-progress state)
   const discardWorkout = useCallback(async () => {
+    // Prevent any further auto-saves
+    isDiscardedRef.current = true;
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
     await clearInProgressWorkout();
   }, []);
 

@@ -1,13 +1,18 @@
-import { ChevronLeft, ChevronRight, ChevronRight as ArrowRight, Dumbbell, Activity, Bike, Waves, Flame, Play, RotateCcw, X } from 'lucide-react-native';
+import { Calendar, Check, ChevronLeft, ChevronRight, ChevronRight as ArrowRight, Dumbbell, Activity, Bike, Waves, Flame, Play, RotateCcw, Scale, X } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Dimensions,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableWithoutFeedback,
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -516,16 +521,16 @@ export default function DashboardScreen({ navigation }) {
           </View>
         ) : (
           <Pressable
-            style={[styles.noWorkoutCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
+            style={[styles.noWorkoutCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.borderAccent }]}
             onPress={() => router.push('/(tabs)/goals')}
           >
             <View style={styles.noWorkoutContent}>
-              <View style={[styles.noWorkoutIcon, { backgroundColor: themeColors.background.elevated }]}>
-                <Dumbbell size={24} color={themeColors.text.primary} strokeWidth={2} />
+              <View style={[styles.noWorkoutIcon, { backgroundColor: themeColors.accent.primaryDim }]}>
+                <Calendar size={22} color={themeColors.accent.primary} strokeWidth={2.5} />
               </View>
               <View style={styles.noWorkoutText}>
-                <Text style={[styles.noWorkoutTitle, { color: themeColors.text.primary }]}>No workout planned today</Text>
-                <Text style={[styles.noWorkoutHint, { color: themeColors.text.secondary }]}>Tap to plan your workouts →</Text>
+                <Text style={[styles.noWorkoutTitle, { color: themeColors.text.secondary }]}>No workout planned today</Text>
+                <Text style={[styles.noWorkoutHint, { color: themeColors.accent.primary }]}>Tap to plan your workout</Text>
               </View>
             </View>
           </Pressable>

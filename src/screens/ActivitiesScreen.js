@@ -1,7 +1,7 @@
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Activity, Bike, Bookmark, Dumbbell, Edit2, FileText, LayoutGrid, List, MessageSquare, Plus, RotateCcw, Trash2 } from 'lucide-react-native';
-import React, { useCallback, useEffect, useState } from 'react';
+import { Activity, Bike, Bookmark, Camera, Dumbbell, Edit2, FileText, LayoutGrid, List, MessageSquare, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Keyboard,
@@ -37,6 +37,7 @@ export default function ActivitiesScreen() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [viewMode, setViewMode] = useState('compact'); // 'compact' | 'expanded'
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Load data on mount
   useEffect(() => {
@@ -106,6 +107,34 @@ export default function ActivitiesScreen() {
   const getWorkoutColor = (type) => {
     return themeColors.workoutTypes[type] || themeColors.text.tertiary;
   };
+
+  // Check if workout has media in any exercise
+  const workoutHasMedia = (workout) => {
+    return workout.exercises?.some(ex => ex.media?.length > 0);
+  };
+
+  // Filter sections based on search query
+  const filteredSections = useMemo(() => {
+    if (!searchQuery.trim()) return sections;
+
+    const query = searchQuery.toLowerCase();
+    return sections
+      .map(section => ({
+        ...section,
+        data: section.data.filter(workout => {
+          // Filter by workout name
+          if (workout.name?.toLowerCase().includes(query)) return true;
+          // Filter by workout type
+          if (workout.type?.toLowerCase().includes(query)) return true;
+          // Filter by date
+          if (formatDateShort(workout.date).toLowerCase().includes(query)) return true;
+          // Filter by exercise names
+          if (workout.exercises?.some(ex => ex.name?.toLowerCase().includes(query))) return true;
+          return false;
+        }),
+      }))
+      .filter(section => section.data.length > 0);
+  }, [sections, searchQuery]);
 
   const deleteWorkout = async (workoutId) => {
     Alert.alert(
@@ -259,6 +288,12 @@ export default function ActivitiesScreen() {
                   <Text style={[styles.workoutExercises, { color: themeColors.text.tertiary }]}>
                     {exerciseCount} exercises
                   </Text>
+                  {workoutHasMedia(workout) && (
+                    <>
+                      <View style={[styles.metaDot, { backgroundColor: themeColors.text.tertiary }]} />
+                      <Camera size={12} color={themeColors.secondary.primary} strokeWidth={2} />
+                    </>
+                  )}
                 </View>
               </View>
               <Pressable
@@ -341,8 +376,27 @@ export default function ActivitiesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background.primary }]}>
+      {/* Search Bar */}
+      <View style={[styles.searchContainer, { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border }]}>
+        <Search size={18} color={themeColors.text.tertiary} strokeWidth={2} />
+        <TextInput
+          style={[styles.searchInput, { color: themeColors.text.primary }]}
+          placeholder="Search workouts..."
+          placeholderTextColor={themeColors.text.tertiary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {searchQuery.length > 0 && (
+          <Pressable onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+            <X size={16} color={themeColors.text.tertiary} strokeWidth={2} />
+          </Pressable>
+        )}
+      </View>
+
       <SectionList
-        sections={sections}
+        sections={filteredSections}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderWorkout}
         renderSectionHeader={renderSectionHeader}
@@ -366,7 +420,7 @@ export default function ActivitiesScreen() {
       <BottomSheet
         isVisible={!!selectedWorkout}
         onClose={() => setSelectedWorkout(null)}
-        height="80%"
+        height="82%"
         scrollable={false}
       >
         {selectedWorkout && (
@@ -427,7 +481,7 @@ export default function ActivitiesScreen() {
             </ScrollView>
 
             {/* Action Buttons - Bottom */}
-            <View style={[styles.modalActionBar, { paddingBottom: insets.bottom || SPACING.sm, borderTopColor: themeColors.surface.border, backgroundColor: themeColors.background.elevated }]}>
+            <View style={[styles.modalActionBar, { paddingBottom: Math.max(insets.bottom, SPACING.sm), borderTopColor: themeColors.surface.border, backgroundColor: themeColors.background.elevated }]}>
               <Pressable
                 onPress={handleSaveAsTemplate}
                 style={[styles.actionButtonTertiary, { backgroundColor: themeColors.tertiary.dim, borderColor: themeColors.tertiary.primary + '40' }]}
@@ -489,11 +543,12 @@ export default function ActivitiesScreen() {
       <BottomSheet
         isVisible={showNewWorkoutSheet}
         onClose={() => setShowNewWorkoutSheet(false)}
-        height="35%"
+        height="28%"
       >
-        <Text style={[styles.sheetTitle, { color: themeColors.text.secondary }]}>START WORKOUT</Text>
+        <View style={styles.sheetContent}>
+          <Text style={[styles.sheetTitle, { color: themeColors.text.secondary }]}>START WORKOUT</Text>
 
-        <Pressable
+          <Pressable
           style={[styles.sheetOption, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
           onPress={() => {
             setShowNewWorkoutSheet(false);
@@ -530,6 +585,7 @@ export default function ActivitiesScreen() {
             <Text style={[styles.sheetOptionDescription, { color: themeColors.text.tertiary }]}>Use a saved workout template</Text>
           </View>
         </Pressable>
+        </View>
       </BottomSheet>
 
       {/* Save as Template Modal - Centered */}
@@ -581,7 +637,8 @@ export default function ActivitiesScreen() {
           </KeyboardAvoidingView>
         </TouchableWithoutFeedback>
       </Modal>
-    </View>
+
+          </View>
   );
 }
 
@@ -590,6 +647,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background.primary,
   },
+
+  // Search
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background.elevated,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    gap: SPACING.sm,
+  },
+  searchInput: {
+    flex: 1,
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.primary,
+    paddingVertical: SPACING.md,
+  },
+  clearSearchButton: {
+    padding: SPACING.xs,
+  },
+
   listContent: {
     paddingHorizontal: SPACING.lg,
     paddingBottom: 120,
@@ -812,7 +894,6 @@ const styles = StyleSheet.create({
   // Bottom Sheet Inner
   sheetInner: {
     flex: 1,
-    paddingTop: SPACING.sm,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -854,13 +935,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalScrollContent: {
-    padding: SPACING.lg,
-    paddingBottom: SPACING.md,
+    padding: SPACING.md,
+    paddingBottom: SPACING.sm,
   },
   modalActionBar: {
     flexDirection: 'row',
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
+    paddingVertical: SPACING.sm,
     gap: SPACING.sm,
     borderTopWidth: 1,
     borderTopColor: COLORS.surface.border,
@@ -1041,10 +1122,14 @@ const styles = StyleSheet.create({
   },
 
   // New Workout Sheet
+  sheetContent: {
+    padding: SPACING.lg,
+    paddingTop: SPACING.sm,
+  },
   sheetTitle: {
     ...TYPOGRAPHY.label,
     color: COLORS.text.secondary,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
   },
   sheetOption: {
     flexDirection: 'row',

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Play, Pause, ChevronUp, ChevronDown, Settings, X } from 'lucide-react-native';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { Audio } from 'expo-av';
+import { Play, Pause, ChevronUp, ChevronDown, Settings, X, Volume2 } from 'lucide-react-native';
+import { TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { useTheme } from '../contexts/ThemeContext';
 
 /**
  * TempoGuide Component
@@ -20,34 +22,152 @@ import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
  * Simplified version: Just lift/lower durations
  */
 
+// Generate a simple WAV beep sound as base64
+const generateBeepWav = (frequency, durationMs = 150, volume = 0.5) => {
+  const sampleRate = 44100;
+  const numSamples = Math.floor(sampleRate * durationMs / 1000);
+  const numChannels = 1;
+  const bitsPerSample = 16;
+
+  // Create WAV header
+  const dataSize = numSamples * numChannels * (bitsPerSample / 8);
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  // RIFF header
+  const writeString = (offset, string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true); // fmt chunk size
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
+  view.setUint16(32, numChannels * (bitsPerSample / 8), true);
+  view.setUint16(34, bitsPerSample, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  // Generate sine wave
+  for (let i = 0; i < numSamples; i++) {
+    // Apply envelope (fade in/out) for cleaner sound
+    let envelope = 1;
+    const fadeLength = numSamples * 0.1;
+    if (i < fadeLength) {
+      envelope = i / fadeLength;
+    } else if (i > numSamples - fadeLength) {
+      envelope = (numSamples - i) / fadeLength;
+    }
+
+    const sample = Math.sin(2 * Math.PI * frequency * i / sampleRate) * volume * envelope;
+    const intSample = Math.max(-32768, Math.min(32767, Math.floor(sample * 32767)));
+    view.setInt16(44 + i * 2, intSample, true);
+  }
+
+  // Convert to base64
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+};
+
+// Pre-generate beep sounds - higher pitch for lift, lower for lower
+const LIFT_BEEP_BASE64 = generateBeepWav(880, 150, 0.6); // A5 - higher pitch
+const LOWER_BEEP_BASE64 = generateBeepWav(440, 200, 0.6); // A4 - lower pitch
+
 export default function TempoGuide({ visible, onClose }) {
+  const { colors: themeColors } = useTheme();
   const [isRunning, setIsRunning] = useState(false);
   const [liftDuration, setLiftDuration] = useState(2); // seconds
   const [lowerDuration, setLowerDuration] = useState(3); // seconds
   const [currentPhase, setCurrentPhase] = useState(null); // 'lift' | 'lower' | null
   const [countdown, setCountdown] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
-  const [useVibration, setUseVibration] = useState(true);
+  const [useSound, setUseSound] = useState(true);
 
   const intervalRef = useRef(null);
   const phaseRef = useRef('lift');
   const countdownRef = useRef(0);
+  const liftSoundRef = useRef(null);
+  const lowerSoundRef = useRef(null);
 
-  // Play haptic feedback for phase changes
+  // Initialize audio sounds
+  useEffect(() => {
+    const loadSounds = async () => {
+      try {
+        // Configure audio mode for playback through speaker/headphones
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+
+        // Load lift sound
+        const { sound: liftSound } = await Audio.Sound.createAsync(
+          { uri: `data:audio/wav;base64,${LIFT_BEEP_BASE64}` },
+          { shouldPlay: false }
+        );
+        liftSoundRef.current = liftSound;
+
+        // Load lower sound
+        const { sound: lowerSound } = await Audio.Sound.createAsync(
+          { uri: `data:audio/wav;base64,${LOWER_BEEP_BASE64}` },
+          { shouldPlay: false }
+        );
+        lowerSoundRef.current = lowerSound;
+      } catch (error) {
+        console.warn('Failed to load tempo sounds:', error);
+      }
+    };
+
+    loadSounds();
+
+    return () => {
+      // Cleanup sounds
+      if (liftSoundRef.current) {
+        liftSoundRef.current.unloadAsync();
+      }
+      if (lowerSoundRef.current) {
+        lowerSoundRef.current.unloadAsync();
+      }
+    };
+  }, []);
+
+  // Play sound or haptic feedback for phase changes
   const playBeep = useCallback(async (isLift) => {
-    if (useVibration) {
+    if (useSound) {
+      try {
+        const sound = isLift ? liftSoundRef.current : lowerSoundRef.current;
+        if (sound) {
+          await sound.setPositionAsync(0);
+          await sound.playAsync();
+        }
+      } catch (error) {
+        // Fallback to haptics if sound fails
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }
+    } else {
+      // Haptic fallback when sound is disabled
       if (isLift) {
-        // Strong single vibration for lift
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       } else {
-        // Double medium vibration for lower
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setTimeout(() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }, 100);
       }
     }
-  }, [useVibration]);
+  }, [useSound]);
 
   // Start/stop the tempo guide
   const toggleRunning = useCallback(() => {
@@ -128,82 +248,85 @@ export default function TempoGuide({ visible, onClose }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: themeColors.surface.elevated, borderColor: themeColors.surface.border }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Tempo Guide</Text>
+        <Text style={[styles.title, { color: themeColors.text.primary }]}>Tempo Guide</Text>
         <View style={styles.headerButtons}>
           <Pressable
             onPress={() => setShowSettings(!showSettings)}
             style={styles.iconButton}
             hitSlop={8}
           >
-            <Settings size={20} color={COLORS.text.secondary} />
+            <Settings size={20} color={themeColors.text.secondary} />
           </Pressable>
           <Pressable onPress={onClose} style={styles.iconButton} hitSlop={8}>
-            <X size={20} color={COLORS.text.secondary} />
+            <X size={20} color={themeColors.text.secondary} />
           </Pressable>
         </View>
       </View>
 
       {/* Settings Panel */}
       {showSettings && (
-        <View style={styles.settingsPanel}>
+        <View style={[styles.settingsPanel, { backgroundColor: themeColors.background.tertiary }]}>
           <View style={styles.settingRow}>
             <View style={styles.settingLabel}>
-              <ChevronUp size={16} color={COLORS.accent.primary} />
-              <Text style={styles.settingText}>Lift Duration</Text>
+              <ChevronUp size={16} color={themeColors.accent.primary} />
+              <Text style={[styles.settingText, { color: themeColors.text.secondary }]}>Lift Duration</Text>
             </View>
             <View style={styles.settingControls}>
               <Pressable
                 onPress={() => adjustDuration('lift', -1)}
-                style={styles.adjustButton}
+                style={[styles.adjustButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
                 disabled={isRunning}
               >
-                <Text style={styles.adjustButtonText}>−</Text>
+                <Text style={[styles.adjustButtonText, { color: themeColors.text.primary }]}>−</Text>
               </Pressable>
-              <Text style={styles.durationValue}>{liftDuration}s</Text>
+              <Text style={[styles.durationValue, { color: themeColors.text.primary }]}>{liftDuration}s</Text>
               <Pressable
                 onPress={() => adjustDuration('lift', 1)}
-                style={styles.adjustButton}
+                style={[styles.adjustButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
                 disabled={isRunning}
               >
-                <Text style={styles.adjustButtonText}>+</Text>
+                <Text style={[styles.adjustButtonText, { color: themeColors.text.primary }]}>+</Text>
               </Pressable>
             </View>
           </View>
 
           <View style={styles.settingRow}>
             <View style={styles.settingLabel}>
-              <ChevronDown size={16} color={COLORS.secondary.primary} />
-              <Text style={styles.settingText}>Lower Duration</Text>
+              <ChevronDown size={16} color={themeColors.secondary.primary} />
+              <Text style={[styles.settingText, { color: themeColors.text.secondary }]}>Lower Duration</Text>
             </View>
             <View style={styles.settingControls}>
               <Pressable
                 onPress={() => adjustDuration('lower', -1)}
-                style={styles.adjustButton}
+                style={[styles.adjustButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
                 disabled={isRunning}
               >
-                <Text style={styles.adjustButtonText}>−</Text>
+                <Text style={[styles.adjustButtonText, { color: themeColors.text.primary }]}>−</Text>
               </Pressable>
-              <Text style={styles.durationValue}>{lowerDuration}s</Text>
+              <Text style={[styles.durationValue, { color: themeColors.text.primary }]}>{lowerDuration}s</Text>
               <Pressable
                 onPress={() => adjustDuration('lower', 1)}
-                style={styles.adjustButton}
+                style={[styles.adjustButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
                 disabled={isRunning}
               >
-                <Text style={styles.adjustButtonText}>+</Text>
+                <Text style={[styles.adjustButtonText, { color: themeColors.text.primary }]}>+</Text>
               </Pressable>
             </View>
           </View>
 
           <Pressable
-            onPress={() => setUseVibration(!useVibration)}
+            onPress={() => setUseSound(!useSound)}
             style={styles.toggleRow}
           >
-            <Text style={styles.settingText}>Vibration</Text>
-            <View style={[styles.toggle, useVibration && styles.toggleActive]}>
-              <View style={[styles.toggleKnob, useVibration && styles.toggleKnobActive]} />
+            <View style={styles.settingLabel}>
+              <Volume2 size={16} color={themeColors.text.secondary} />
+              <Text style={[styles.settingText, { color: themeColors.text.secondary }]}>Sound</Text>
+            </View>
+            <View style={[styles.toggle, { backgroundColor: themeColors.surface.border }, useSound && { backgroundColor: themeColors.accent.primary }]}>
+              <View style={[styles.toggleKnob, { backgroundColor: themeColors.text.primary }, useSound && { backgroundColor: themeColors.text.inverse, transform: [{ translateX: 20 }] }]} />
             </View>
           </Pressable>
         </View>
@@ -215,25 +338,27 @@ export default function TempoGuide({ visible, onClose }) {
           <>
             <View style={[
               styles.phaseIndicator,
-              currentPhase === 'lift' ? styles.liftPhase : styles.lowerPhase
+              currentPhase === 'lift'
+                ? { backgroundColor: themeColors.accent.primaryDim }
+                : { backgroundColor: themeColors.secondary.dim }
             ]}>
               {currentPhase === 'lift' ? (
-                <ChevronUp size={48} color={COLORS.accent.primary} strokeWidth={3} />
+                <ChevronUp size={48} color={themeColors.accent.primary} strokeWidth={3} />
               ) : (
-                <ChevronDown size={48} color={COLORS.secondary.primary} strokeWidth={3} />
+                <ChevronDown size={48} color={themeColors.secondary.primary} strokeWidth={3} />
               )}
             </View>
-            <Text style={styles.phaseText}>
+            <Text style={[styles.phaseText, { color: themeColors.text.secondary }]}>
               {currentPhase === 'lift' ? 'LIFT' : 'LOWER'}
             </Text>
-            <Text style={styles.countdownText}>{countdown}</Text>
+            <Text style={[styles.countdownText, { color: themeColors.text.primary }]}>{countdown}</Text>
           </>
         ) : (
           <View style={styles.readyState}>
-            <Text style={styles.tempoPreview}>
+            <Text style={[styles.tempoPreview, { color: themeColors.text.primary }]}>
               {liftDuration}s up • {lowerDuration}s down
             </Text>
-            <Text style={styles.readyHint}>Press play to start</Text>
+            <Text style={[styles.readyHint, { color: themeColors.text.tertiary }]}>Press play to start</Text>
           </View>
         )}
       </View>
@@ -241,12 +366,12 @@ export default function TempoGuide({ visible, onClose }) {
       {/* Play/Pause Button */}
       <Pressable
         onPress={toggleRunning}
-        style={[styles.playButton, isRunning && styles.pauseButton]}
+        style={[styles.playButton, { backgroundColor: themeColors.accent.primary }, isRunning && { backgroundColor: themeColors.secondary.primary }]}
       >
         {isRunning ? (
-          <Pause size={28} color={COLORS.text.inverse} strokeWidth={2.5} />
+          <Pause size={28} color={themeColors.text.inverse} strokeWidth={2.5} />
         ) : (
-          <Play size={28} color={COLORS.text.inverse} strokeWidth={2.5} />
+          <Play size={28} color={themeColors.text.inverse} strokeWidth={2.5} />
         )}
       </Pressable>
     </View>
@@ -255,10 +380,8 @@ export default function TempoGuide({ visible, onClose }) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.surface.elevated,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
   },
@@ -270,7 +393,6 @@ const styles = StyleSheet.create({
   },
   title: {
     ...TYPOGRAPHY.h4,
-    color: COLORS.text.primary,
   },
   headerButtons: {
     flexDirection: 'row',
@@ -280,7 +402,6 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   settingsPanel: {
-    backgroundColor: COLORS.background.tertiary,
     borderRadius: RADIUS.md,
     padding: SPACING.md,
     marginBottom: SPACING.md,
@@ -298,7 +419,6 @@ const styles = StyleSheet.create({
   },
   settingText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.secondary,
   },
   settingControls: {
     flexDirection: 'row',
@@ -309,19 +429,15 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: RADIUS.md,
-    backgroundColor: COLORS.surface.card,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   adjustButtonText: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text.primary,
   },
   durationValue: {
     ...TYPOGRAPHY.h4,
-    color: COLORS.text.primary,
     width: 36,
     textAlign: 'center',
   },
@@ -335,21 +451,15 @@ const styles = StyleSheet.create({
     width: 44,
     height: 24,
     borderRadius: 12,
-    backgroundColor: COLORS.surface.border,
     padding: 2,
-  },
-  toggleActive: {
-    backgroundColor: COLORS.accent.primary,
   },
   toggleKnob: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: COLORS.text.primary,
   },
   toggleKnobActive: {
     transform: [{ translateX: 20 }],
-    backgroundColor: COLORS.text.inverse,
   },
   mainDisplay: {
     alignItems: 'center',
@@ -365,43 +475,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: SPACING.sm,
   },
-  liftPhase: {
-    backgroundColor: COLORS.accent.primaryDim,
-  },
-  lowerPhase: {
-    backgroundColor: COLORS.secondary.dim,
-  },
   phaseText: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary,
     marginBottom: SPACING.xs,
   },
   countdownText: {
     ...TYPOGRAPHY.stat,
-    color: COLORS.text.primary,
   },
   readyState: {
     alignItems: 'center',
   },
   tempoPreview: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text.primary,
     marginBottom: SPACING.xs,
   },
   readyHint: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
   },
   playButton: {
-    backgroundColor: COLORS.accent.primary,
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
-  },
-  pauseButton: {
-    backgroundColor: COLORS.secondary.primary,
   },
 });

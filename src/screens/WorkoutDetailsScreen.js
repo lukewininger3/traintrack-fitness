@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { WORKOUT_TYPES } from '../constants/workoutTypes';
-import { getTodayString, loadWorkouts, saveWorkouts } from '../utils/storage';
+import { getTodayString, loadWorkouts, saveWorkouts, clearInProgressWorkout } from '../utils/storage';
 import { checkAndUpdatePRs } from '../utils/personalRecords';
 import { TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import { useTheme } from '../contexts/ThemeContext';
@@ -247,7 +247,14 @@ export default function WorkoutDetailsScreen() {
         'Your changes will not be saved. The original workout will remain unchanged.',
         [
           { text: 'Keep Editing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: () => router.replace('/activities') },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: async () => {
+              await clearInProgressWorkout();
+              router.replace('/activities');
+            }
+          },
         ]
       );
     } else {
@@ -257,7 +264,14 @@ export default function WorkoutDetailsScreen() {
         'This workout will not be saved.',
         [
           { text: 'Keep Editing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: () => router.replace('/activities') },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: async () => {
+              await clearInProgressWorkout();
+              router.replace('/activities');
+            }
+          },
         ]
       );
     }
@@ -299,6 +313,9 @@ export default function WorkoutDetailsScreen() {
 
       // Check for new PRs
       await checkAndUpdatePRs(savedWorkout);
+
+      // Clear the in-progress workout since we've saved successfully
+      await clearInProgressWorkout();
 
       setIsSaving(false);
       router.replace('/activities');
@@ -424,7 +441,7 @@ export default function WorkoutDetailsScreen() {
       {/* Type Picker Modal */}
       <Modal visible={showTypePicker} transparent animationType="fade" onRequestClose={() => setShowTypePicker(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowTypePicker(false)}>
-          <View style={[styles.pickerModal, { backgroundColor: themeColors.surface.card }]}>
+          <View style={[styles.pickerModal, { backgroundColor: themeColors.background.primary }]}>
             <View style={[styles.pickerHandle, { backgroundColor: themeColors.surface.border }]} />
             <Text style={[styles.pickerTitle, { color: themeColors.text.tertiary }]}>SELECT TYPE</Text>
             {WORKOUT_TYPES.map(type => (
@@ -450,7 +467,7 @@ export default function WorkoutDetailsScreen() {
       {showDatePicker && (
         <Modal transparent animationType="fade" visible={showDatePicker}>
           <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
-            <View style={[styles.datePickerModal, { backgroundColor: themeColors.surface.card }]}>
+            <View style={[styles.pickerModal, { backgroundColor: themeColors.background.primary }]}>
               <View style={[styles.pickerHandle, { backgroundColor: themeColors.surface.border }]} />
               <Text style={[styles.pickerTitle, { color: themeColors.text.tertiary }]}>SELECT DATE</Text>
               <DateTimePicker
@@ -475,7 +492,7 @@ export default function WorkoutDetailsScreen() {
       {showTimePicker && (
         <Modal transparent animationType="fade" visible={showTimePicker}>
           <Pressable style={styles.modalOverlay} onPress={() => setShowTimePicker(false)}>
-            <View style={[styles.datePickerModal, { backgroundColor: themeColors.surface.card }]}>
+            <View style={[styles.pickerModal, { backgroundColor: themeColors.background.primary }]}>
               <View style={[styles.pickerHandle, { backgroundColor: themeColors.surface.border }]} />
               <Text style={[styles.pickerTitle, { color: themeColors.text.tertiary }]}>SELECT TIME</Text>
               <DateTimePicker
@@ -622,10 +639,11 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
   pickerModal: {
+    backgroundColor: '#1F1F23',
     borderTopLeftRadius: RADIUS.xl,
     borderTopRightRadius: RADIUS.xl,
     padding: SPACING.lg,

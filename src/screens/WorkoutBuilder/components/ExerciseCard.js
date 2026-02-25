@@ -1,6 +1,9 @@
-import { Check, GripVertical, History, Link, MessageSquare, Plus, Trash2, X } from 'lucide-react-native';
+import { Camera, Check, GripVertical, History, Link, MessageSquare, Play, Plus, Trash2, X } from 'lucide-react-native';
 import React, { useState, useEffect, useRef } from 'react';
-import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as VideoThumbnails from 'expo-video-thumbnails';
+import { Video, ResizeMode } from 'expo-av';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -176,6 +179,7 @@ export default function ExerciseCard({
   onDelete,
   onUpdateSets,
   onUpdateNotes,
+  onUpdateMedia,
   onSetConfirmed,
   previousSession,
   isCardioWorkout = false,
@@ -189,8 +193,11 @@ export default function ExerciseCard({
   const { colors: themeColors } = useTheme();
   const [showNotes, setShowNotes] = useState(!!exercise.notes);
   const [showPrevious, setShowPrevious] = useState(false);
+  const [showMedia, setShowMedia] = useState(false);
   const [localNotes, setLocalNotes] = useState(exercise.notes || '');
   const [pendingFocusSetIndex, setPendingFocusSetIndex] = useState(null);
+  const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState(null);
 
   // Refs for weight/distance inputs to enable auto-focus on new sets
   const weightInputRefs = useRef([]);
@@ -198,20 +205,28 @@ export default function ExerciseCard({
   // Drag-to-reorder state
   const dragTranslateY = useSharedValue(0);
   const isDragging = useSharedValue(false);
-  const swapThreshold = 120;
+  const swapThreshold = 70; // Smaller threshold for faster multi-card dragging
   const lastSwapOffset = useSharedValue(0);
 
   const triggerMoveUp = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Break superset when reordering
+    if (exercise.supersetId) {
+      onUpdateSuperset?.(index, null);
+    }
     onMoveUp?.(index);
   };
   const triggerMoveDown = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Break superset when reordering
+    if (exercise.supersetId) {
+      onUpdateSuperset?.(index, null);
+    }
     onMoveDown?.(index);
   };
 
   const dragGesture = Gesture.Pan()
-    .activateAfterLongPress(250)
+    .activateAfterLongPress(200) // Slightly faster activation
     .onStart(() => {
       isDragging.value = true;
       lastSwapOffset.value = 0;
@@ -323,6 +338,11 @@ export default function ExerciseCard({
     setShowPrevious(!showPrevious);
   };
 
+  // Toggle media section
+  const toggleMedia = () => {
+    setShowMedia(!showMedia);
+  };
+
   const handleAddSet = () => {
     let newSet;
     if (isCardioExercise) {
@@ -360,6 +380,120 @@ export default function ExerciseCard({
     if (localNotes !== exercise.notes) {
       onUpdateNotes(index, localNotes);
     }
+  };
+
+  // Helper to generate video thumbnail
+  const generateVideoThumbnail = async (videoUri) => {
+    try {
+      const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, {
+        time: 500, // Get frame at 500ms
+      });
+      return uri;
+    } catch (e) {
+      console.warn('Failed to generate video thumbnail:', e);
+      return null;
+    }
+  };
+
+  // Media handling
+  const handleAddMedia = () => {
+    Alert.alert(
+      'Add Media',
+      'Choose an option',
+      [
+        {
+          text: 'Take Photo/Video',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission needed', 'Camera permission is required to take photos/videos.');
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.All,
+              allowsEditing: true,
+              quality: 0.8,
+              videoMaxDuration: 60,
+            });
+            if (!result.canceled && result.assets?.[0]) {
+              const asset = result.assets[0];
+              const isVideo = asset.type === 'video' || /\.(mp4|mov|m4v)$/i.test(asset.uri);
+              const newMedia = {
+                uri: asset.uri,
+                type: isVideo ? 'video' : 'image',
+                id: Date.now().toString(),
+              };
+              // Generate thumbnail for videos
+              if (isVideo) {
+                const thumbnail = await generateVideoThumbnail(asset.uri);
+                if (thumbnail) {
+                  newMedia.thumbnail = thumbnail;
+                }
+              }
+              const currentMedia = exercise.media || [];
+              onUpdateMedia?.(index, [...currentMedia, newMedia]);
+            }
+          },
+        },
+        {
+          text: 'Choose from Library',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission needed', 'Photo library permission is required.');
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.All,
+              allowsEditing: true,
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.[0]) {
+              const asset = result.assets[0];
+              const isVideo = asset.type === 'video' || /\.(mp4|mov|m4v)$/i.test(asset.uri);
+              const newMedia = {
+                uri: asset.uri,
+                type: isVideo ? 'video' : 'image',
+                id: Date.now().toString(),
+              };
+              // Generate thumbnail for videos
+              if (isVideo) {
+                const thumbnail = await generateVideoThumbnail(asset.uri);
+                if (thumbnail) {
+                  newMedia.thumbnail = thumbnail;
+                }
+              }
+              const currentMedia = exercise.media || [];
+              onUpdateMedia?.(index, [...currentMedia, newMedia]);
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleRemoveMedia = (mediaId) => {
+    Alert.alert(
+      'Remove Media',
+      'Are you sure you want to remove this media?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            const currentMedia = exercise.media || [];
+            onUpdateMedia?.(index, currentMedia.filter(m => m.id !== mediaId));
+          },
+        },
+      ]
+    );
+  };
+
+  const handleViewMedia = (media) => {
+    setSelectedMedia(media);
+    setMediaViewerVisible(true);
   };
 
   // Handle notes focus - scroll to make it visible
@@ -418,11 +552,11 @@ export default function ExerciseCard({
       {/* Superset connector line - shows above card if part of superset and not first */}
       {isInSuperset && !isFirstInSuperset && (
         <View style={styles.supersetConnector}>
-          <View style={[styles.supersetLine, { backgroundColor: themeColors.warning }]} />
-          <View style={[styles.supersetBadge, { backgroundColor: themeColors.warningDim }]}>
-            <Text style={[styles.supersetBadgeText, { color: themeColors.warning }]}>SUPERSET</Text>
+          <View style={[styles.supersetLine, { backgroundColor: themeColors.secondary.primary }]} />
+          <View style={[styles.supersetBadge, { backgroundColor: themeColors.secondary.dim }]}>
+            <Text style={[styles.supersetBadgeText, { color: themeColors.secondary.primary }]}>SUPERSET</Text>
           </View>
-          <View style={[styles.supersetLine, { backgroundColor: themeColors.warning }]} />
+          <View style={[styles.supersetLine, { backgroundColor: themeColors.secondary.primary }]} />
         </View>
       )}
 
@@ -444,19 +578,20 @@ export default function ExerciseCard({
             <Text style={[styles.exerciseName, { color: themeColors.text.primary }]}>{exercise.name}</Text>
           </View>
           <View style={styles.exerciseActions}>
-            {/* Superset button - links with exercise below */}
+            {/* Superset button - links with exercise below - Orange */}
             {!isCardioWorkout && index < totalExercises - 1 && (
               <Pressable
                 onPress={handleSupersetToggle}
-                style={[styles.actionButton, isLinkedToNext && { backgroundColor: themeColors.warningDim }]}
+                style={[styles.actionButton, isLinkedToNext && { backgroundColor: themeColors.secondary.dim }]}
               >
                 <Link
                   size={15}
-                  color={isLinkedToNext ? themeColors.warning : themeColors.text.tertiary}
+                  color={isLinkedToNext ? themeColors.secondary.primary : themeColors.text.tertiary}
                   strokeWidth={2}
                 />
               </Pressable>
             )}
+            {/* Last session button - Cyan/Blue */}
             {hasPreviousSession && (
               <Pressable
                 onPress={togglePrevious}
@@ -469,17 +604,31 @@ export default function ExerciseCard({
                 />
               </Pressable>
             )}
+            {/* Notes button - Accent/Green */}
             <Pressable
               onPress={toggleNotes}
-              style={[styles.actionButton, showNotes && { backgroundColor: themeColors.tertiary.dim }]}
+              style={[styles.actionButton, showNotes && { backgroundColor: themeColors.accent.primaryDim }]}
             >
               <MessageSquare
                 size={15}
-                color={showNotes || exercise.notes ? themeColors.tertiary.primary : themeColors.text.tertiary}
-                fill={exercise.notes ? themeColors.tertiary.primary : 'transparent'}
+                color={showNotes || exercise.notes ? themeColors.accent.primary : themeColors.text.tertiary}
+                fill={exercise.notes ? themeColors.accent.primary : 'transparent'}
                 strokeWidth={2}
               />
             </Pressable>
+            {/* Media button */}
+            <Pressable
+              onPress={toggleMedia}
+              style={[styles.actionButton, showMedia && { backgroundColor: themeColors.secondary.dim }]}
+            >
+              <Camera
+                size={15}
+                color={showMedia || exercise.media?.length ? themeColors.secondary.primary : themeColors.text.tertiary}
+                fill={exercise.media?.length ? themeColors.secondary.primary : 'transparent'}
+                strokeWidth={2}
+              />
+            </Pressable>
+            {/* Delete button - Red */}
             <Pressable
               onPress={handleDelete}
               style={styles.actionButton}
@@ -516,6 +665,80 @@ export default function ExerciseCard({
             />
           </View>
         )}
+
+        {/* Media Section (collapsible) */}
+        {showMedia && (
+          <View style={styles.mediaSection}>
+            <View style={styles.mediaSectionHeader}>
+              <Text style={[styles.mediaSectionLabel, { color: themeColors.text.secondary }]}>Media</Text>
+            </View>
+            <View style={styles.mediaGrid}>
+              {(exercise.media || []).map((media) => (
+                <Pressable
+                  key={media.id}
+                  onPress={() => handleViewMedia(media)}
+                  onLongPress={() => handleRemoveMedia(media.id)}
+                  style={[styles.mediaThumbnail, { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border }]}
+                >
+                  {media.type === 'video' ? (
+                    <View style={styles.videoThumbnailContainer}>
+                      <Image source={{ uri: media.thumbnail || media.uri }} style={styles.thumbnailImage} />
+                      <View style={[styles.playOverlay, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+                        <Play size={20} color="#fff" fill="#fff" />
+                      </View>
+                    </View>
+                  ) : (
+                    <Image source={{ uri: media.uri }} style={styles.thumbnailImage} />
+                  )}
+                </Pressable>
+              ))}
+              <Pressable
+                onPress={handleAddMedia}
+                style={[styles.addMediaButton, { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border }]}
+              >
+                <Camera size={20} color={themeColors.secondary.primary} />
+                <Text style={[styles.addMediaText, { color: themeColors.secondary.primary }]}>Add</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {/* Media Viewer Modal */}
+        <Modal
+          visible={mediaViewerVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setMediaViewerVisible(false)}
+        >
+          <Pressable
+            style={styles.mediaViewerOverlay}
+            onPress={() => setMediaViewerVisible(false)}
+          >
+            <View style={[styles.mediaViewerContent, { backgroundColor: themeColors.background.primary }]}>
+              {selectedMedia?.type === 'video' ? (
+                <Video
+                  source={{ uri: selectedMedia.uri }}
+                  style={styles.mediaViewerVideo}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay
+                />
+              ) : selectedMedia ? (
+                <Image
+                  source={{ uri: selectedMedia.uri }}
+                  style={styles.mediaViewerImage}
+                  resizeMode="contain"
+                />
+              ) : null}
+              <Pressable
+                onPress={() => setMediaViewerVisible(false)}
+                style={[styles.closeMediaButton, { backgroundColor: themeColors.background.elevated }]}
+              >
+                <X size={24} color={themeColors.text.primary} />
+              </Pressable>
+            </View>
+          </Pressable>
+        </Modal>
 
         {/* Sets */}
         <View style={styles.setsContainer}>
@@ -747,6 +970,96 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     minHeight: 50,
     textAlignVertical: 'top',
+  },
+
+  // Media
+  mediaSection: {
+    marginBottom: SPACING.sm,
+  },
+  mediaSectionHeader: {
+    marginBottom: SPACING.xs,
+  },
+  mediaSectionLabel: {
+    ...TYPOGRAPHY.label,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  mediaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  mediaThumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  videoThumbnailContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  playOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addMediaButton: {
+    width: 60,
+    height: 60,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  addMediaText: {
+    ...TYPOGRAPHY.label,
+    fontSize: 9,
+    fontWeight: '600',
+  },
+  mediaViewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mediaViewerContent: {
+    width: '90%',
+    height: '70%',
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  mediaViewerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  mediaViewerVideo: {
+    width: '100%',
+    height: '100%',
+  },
+  closeMediaButton: {
+    position: 'absolute',
+    top: SPACING.sm,
+    right: SPACING.sm,
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Sets

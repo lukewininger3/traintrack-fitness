@@ -23,7 +23,8 @@ import { Calendar } from 'lucide-react-native';
 import BottomSheet from '../components/ui/BottomSheet';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_WIDTH = SCREEN_WIDTH - 32;
+// Account for content padding (16) + card padding (24) on each side = 80 total
+const CHART_WIDTH = SCREEN_WIDTH - 80;
 const CHART_HEIGHT = 300;
 
 // Helper to format volume numbers (e.g., 12500 -> "12.5K")
@@ -255,7 +256,7 @@ export default function ProgressScreen() {
     if (chartData.length === 0) return null;
 
     const pointRadius = 6;
-    const padding = { top: 20, right: 40, bottom: 50, left: 50 };
+    const padding = { top: 20, right: 45, bottom: 50, left: 45 };
     const chartWidth = CHART_WIDTH - padding.left - padding.right;
     const chartHeight = CHART_HEIGHT - padding.top - padding.bottom;
 
@@ -1524,7 +1525,6 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     padding: SPACING.sm,
     position: 'relative',
-    overflow: 'hidden',
   },
   hintText: {
     ...TYPOGRAPHY.caption,

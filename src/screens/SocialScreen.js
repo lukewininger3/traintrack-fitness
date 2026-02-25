@@ -32,6 +32,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -555,28 +556,17 @@ const ActivityItem = ({ activity, index }) => {
 
   const handleShare = async () => {
     try {
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (!isAvailable) {
-        Alert.alert('Sharing not available', 'Sharing is not available on this device');
-        return;
-      }
-
       // Create shareable text content
       const workoutInfo = `${activity.friend?.name || 'Someone'} completed ${activity.workoutName} (${activity.workoutType})! 💪\n\n${workoutSummary}\n\nShared via TrainTrack`;
 
-      // Use share sheet with text
-      await Sharing.shareAsync('data:text/plain;base64,' + btoa(workoutInfo), {
-        mimeType: 'text/plain',
-        dialogTitle: 'Share Workout',
-        UTI: 'public.plain-text',
+      await Share.share({
+        message: workoutInfo,
+        title: `${activity.friend?.name}'s Workout`,
       });
     } catch (error) {
-      // Fallback: just show an alert with the info
-      Alert.alert(
-        'Share Workout',
-        `${activity.friend?.name || 'Someone'} completed ${activity.workoutName}!\n\n${workoutSummary}`,
-        [{ text: 'OK' }]
-      );
+      if (error.message !== 'User did not share') {
+        Alert.alert('Error', 'Failed to share workout');
+      }
     }
   };
 
@@ -593,34 +583,39 @@ const ActivityItem = ({ activity, index }) => {
       <Pressable onPress={handleNavigate} style={styles.activityCardPressable}>
         {/* Compact Header: Avatar + Name + Workout Icon + Timestamp */}
         <View style={styles.activityHeader}>
-          <Avatar imageUrl={activity.friend?.profilePicture} size={36} />
+          <Avatar imageUrl={activity.friend?.profilePicture} size={40} />
           <View style={styles.activityHeaderText}>
             <View style={styles.activityNameRow}>
               <Text style={[styles.activityFriend, { color: themeColors.text.primary }]}>{activity.friend?.name || 'Unknown'}</Text>
-              <View style={[styles.workoutTypeIconSmall, { backgroundColor: workoutTypeColor + '25' }]}>
-                <WorkoutIcon size={12} color={workoutTypeColor} strokeWidth={2.5} />
-              </View>
+              <Text style={[styles.activityCompletedText, { color: themeColors.text.tertiary }]}>completed a workout</Text>
             </View>
             <Text style={[styles.activityTime, { color: themeColors.text.tertiary }]}>{activity.timeAgo}</Text>
           </View>
         </View>
 
         {/* Workout Info Banner */}
-        <View style={[styles.activityWorkoutBanner, { backgroundColor: themeColors.background.tertiary }]}>
+        <View style={[styles.activityWorkoutBanner, { backgroundColor: workoutTypeColor + '12', borderColor: workoutTypeColor + '30' }]}>
+          <View style={[styles.workoutTypeIconLarge, { backgroundColor: workoutTypeColor + '20' }]}>
+            <WorkoutIcon size={20} color={workoutTypeColor} strokeWidth={2} />
+          </View>
           <View style={styles.activityWorkoutInfo}>
             <Text style={[styles.activityWorkoutName, { color: themeColors.text.primary }]}>{activity.workoutName}</Text>
             <Text style={[styles.activityWorkoutSummary, { color: themeColors.text.secondary }]}>{workoutSummary}</Text>
           </View>
-          <ChevronRight size={18} color={themeColors.text.tertiary} strokeWidth={2} />
+          <ChevronRight size={20} color={themeColors.text.tertiary} strokeWidth={2} />
         </View>
       </Pressable>
 
-      {/* Actions Bar - Icons only for Like/Share, text for Comment */}
+      {/* Actions Bar */}
       <View style={[styles.activityActions, { borderTopColor: themeColors.surface.border }]}>
-        <Pressable onPress={handleLike} style={styles.actionButton} disabled={isLiking}>
+        <Pressable
+          onPress={handleLike}
+          style={[styles.actionButton, isLiked && { backgroundColor: SOCIAL_COLORS.heartDim }]}
+          disabled={isLiking}
+        >
           <Animated.View style={heartAnimatedStyle}>
             <Heart
-              size={20}
+              size={18}
               color={isLiked ? SOCIAL_COLORS.heart : themeColors.text.tertiary}
               fill={isLiked ? SOCIAL_COLORS.heart : 'transparent'}
               strokeWidth={2}
@@ -940,12 +935,21 @@ export default function SocialScreen() {
               />
             ))
           ) : (
-            <View style={styles.emptyState}>
-              <Sparkles size={48} color={themeColors.text.tertiary} strokeWidth={1.5} />
-              <Text style={[styles.emptyTitle, { color: themeColors.text.secondary }]}>No Activity Yet</Text>
-              <Text style={[styles.emptySubtext, { color: themeColors.text.tertiary }]}>
+            <View style={[styles.emptyState, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+              <View style={[styles.emptyIconContainer, { backgroundColor: themeColors.accent.primaryDim }]}>
+                <Sparkles size={32} color={themeColors.accent.primary} strokeWidth={1.5} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: themeColors.text.primary }]}>No Activity Yet</Text>
+              <Text style={[styles.emptySubtext, { color: themeColors.text.secondary }]}>
                 Add friends to see their workouts here
               </Text>
+              <Pressable
+                style={[styles.emptyActionButton, { backgroundColor: themeColors.accent.primary }]}
+                onPress={() => setActiveTab('friends')}
+              >
+                <UserPlus size={16} color={themeColors.text.inverse} strokeWidth={2} />
+                <Text style={[styles.emptyActionText, { color: themeColors.text.inverse }]}>Find Friends</Text>
+              </Pressable>
             </View>
           )}
         </ScrollView>
@@ -1034,10 +1038,12 @@ export default function SocialScreen() {
                 />
               ))
             ) : (
-              <View style={styles.emptyFriends}>
-                <Users size={32} color={themeColors.text.tertiary} strokeWidth={1.5} />
-                <Text style={[styles.emptyFriendsText, { color: themeColors.text.secondary }]}>No friends yet</Text>
-                <Text style={[styles.emptyFriendsSubtext, { color: themeColors.text.tertiary }]}>Search above to find friends</Text>
+              <View style={[styles.emptyFriends, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+                <View style={[styles.emptyIconContainer, { backgroundColor: SOCIAL_COLORS.connectionDim }]}>
+                  <Users size={28} color={SOCIAL_COLORS.connection} strokeWidth={1.5} />
+                </View>
+                <Text style={[styles.emptyFriendsText, { color: themeColors.text.primary }]}>No friends yet</Text>
+                <Text style={[styles.emptyFriendsSubtext, { color: themeColors.text.secondary }]}>Use the search bar above to find and add friends</Text>
               </View>
             )}
           </View>
@@ -1070,8 +1076,8 @@ const styles = StyleSheet.create({
 
   // Toggle Tab Bar
   toggleContainer: {
-    paddingHorizontal: SPACING.sm,
-    paddingTop: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
     paddingBottom: SPACING.sm,
     backgroundColor: COLORS.background.primary,
   },
@@ -1134,14 +1140,15 @@ const styles = StyleSheet.create({
   // Activity Card
   activityCard: {
     backgroundColor: COLORS.surface.card,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.surface.border,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
     overflow: 'hidden',
   },
   activityCardPressable: {
     padding: SPACING.md,
+    paddingBottom: SPACING.sm,
   },
   activityHeader: {
     flexDirection: 'row',
@@ -1175,13 +1182,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
+  activityCompletedText: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 12,
+    marginLeft: SPACING.xs,
+  },
   activityWorkoutBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background.tertiary,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
     padding: SPACING.md,
     gap: SPACING.sm,
+  },
+  workoutTypeIconLarge: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   activityWorkoutInfo: {
     flex: 1,
@@ -1215,7 +1234,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: SPACING.xs,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.sm,
+    marginHorizontal: 2,
   },
   actionCount: {
     ...TYPOGRAPHY.caption,
@@ -1705,34 +1727,61 @@ const styles = StyleSheet.create({
   },
   emptyFriends: {
     alignItems: 'center',
-    paddingVertical: SPACING.lg,
-    gap: SPACING.xs,
+    paddingVertical: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.sm,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
   },
   emptyFriendsText: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.secondary,
-    fontSize: 14,
+    fontSize: 15,
   },
   emptyFriendsSubtext: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
-    fontSize: 12,
+    ...TYPOGRAPHY.body,
+    fontSize: 13,
+    textAlign: 'center',
+    maxWidth: 220,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.xxl,
-    gap: SPACING.sm,
+    paddingVertical: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    marginTop: SPACING.lg,
+  },
+  emptyIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.xs,
   },
   emptyTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text.secondary,
     fontSize: 18,
   },
   emptySubtext: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.tertiary,
     textAlign: 'center',
+    fontSize: 14,
+    maxWidth: 250,
+  },
+  emptyActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: RADIUS.full,
+    marginTop: SPACING.sm,
+  },
+  emptyActionText: {
+    ...TYPOGRAPHY.bodyBold,
     fontSize: 14,
   },
 });

@@ -303,12 +303,12 @@ export default function FriendWorkoutDetailScreen() {
         style={styles.content}
         keyboardVerticalOffset={0}
       >
-        <Pressable onPress={dismissKeyboard} style={{ flex: 1 }}>
           <ScrollView
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            onScrollBeginDrag={dismissKeyboard}
           >
           {/* Card-style Workout Info */}
           <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={[styles.viewShotContainer, { backgroundColor: themeColors.background.primary }]}>
@@ -444,7 +444,6 @@ export default function FriendWorkoutDetailScreen() {
             )}
           </View>
         </ScrollView>
-        </Pressable>
 
         {/* Bottom Actions - Comment Input + Like/Comment/Share */}
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + SPACING.sm, borderTopColor: themeColors.surface.border, backgroundColor: themeColors.background.primary }]}>

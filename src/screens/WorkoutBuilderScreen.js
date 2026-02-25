@@ -547,6 +547,11 @@ export default function WorkoutBuilderScreen() {
                 updated[idx] = { ...updated[idx], notes };
                 setWorkout({ ...workout, exercises: updated });
               }}
+              onUpdateMedia={(idx, media) => {
+                const updated = [...workout.exercises];
+                updated[idx] = { ...updated[idx], media };
+                setWorkout({ ...workout, exercises: updated });
+              }}
               onDelete={(idx) => {
                 const updated = workout.exercises.filter((_, i) => i !== idx);
                 setWorkout({ ...workout, exercises: updated });

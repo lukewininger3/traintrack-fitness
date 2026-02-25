@@ -9,8 +9,9 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
+import { TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import { useTimer } from '../contexts/TimerContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { DURATION_PRESETS } from '../utils/timerStorage';
 
 /**
@@ -20,6 +21,7 @@ import { DURATION_PRESETS } from '../utils/timerStorage';
  */
 export default function RestTimerButton() {
   const timer = useTimer();
+  const { colors: themeColors } = useTheme();
   const [showSettings, setShowSettings] = useState(false);
 
   return (
@@ -28,8 +30,9 @@ export default function RestTimerButton() {
       <Pressable
         style={[
           styles.floatingButton,
-          timer.isRunning && styles.floatingButtonActive,
-          timer.isComplete && styles.floatingButtonComplete,
+          { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border },
+          timer.isRunning && { borderColor: themeColors.accent.primary, backgroundColor: themeColors.accent.primaryDim },
+          timer.isComplete && { borderColor: themeColors.success, backgroundColor: themeColors.successDim },
         ]}
         onPress={() => timer.setIsExpanded(true)}
         accessibilityLabel={`Rest timer: ${timer.formattedTime}`}
@@ -44,7 +47,7 @@ export default function RestTimerButton() {
                 cx={34}
                 cy={34}
                 r={30}
-                stroke={COLORS.surface.border}
+                stroke={themeColors.surface.border}
                 strokeWidth={3}
                 fill="transparent"
               />
@@ -53,7 +56,7 @@ export default function RestTimerButton() {
                 cx={34}
                 cy={34}
                 r={30}
-                stroke={COLORS.accent.primary}
+                stroke={themeColors.accent.primary}
                 strokeWidth={3}
                 fill="transparent"
                 strokeDasharray={`${2 * Math.PI * 30}`}
@@ -67,8 +70,9 @@ export default function RestTimerButton() {
         <Text
           style={[
             styles.floatingButtonText,
-            timer.isRunning && styles.floatingButtonTextActive,
-            timer.isComplete && styles.floatingButtonTextComplete,
+            { color: themeColors.text.secondary },
+            timer.isRunning && { color: themeColors.accent.primary },
+            timer.isComplete && { color: themeColors.success },
           ]}
         >
           {timer.formattedTime}
@@ -83,41 +87,41 @@ export default function RestTimerButton() {
         onRequestClose={() => timer.setIsExpanded(false)}
       >
         <Pressable style={styles.overlay} onPress={() => timer.setIsExpanded(false)}>
-          <Pressable style={styles.container}>
+          <Pressable style={[styles.container, { backgroundColor: themeColors.background.secondary, borderColor: themeColors.surface.border }]}>
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>REST TIMER</Text>
+              <Text style={[styles.headerTitle, { color: themeColors.text.secondary }]}>REST TIMER</Text>
               <View style={styles.headerButtons}>
                 <Pressable
-                  style={styles.headerButton}
+                  style={[styles.headerButton, { backgroundColor: themeColors.surface.card }]}
                   onPress={() => setShowSettings(!showSettings)}
                   accessibilityLabel="Timer settings"
                   accessibilityRole="button"
                 >
                   <Settings
                     size={20}
-                    color={showSettings ? COLORS.accent.primary : COLORS.text.secondary}
+                    color={showSettings ? themeColors.accent.primary : themeColors.text.secondary}
                     strokeWidth={2}
                   />
                 </Pressable>
                 <Pressable
-                  style={styles.headerButton}
+                  style={[styles.headerButton, { backgroundColor: themeColors.surface.card }]}
                   onPress={() => timer.setIsExpanded(false)}
                   accessibilityLabel="Close timer"
                   accessibilityRole="button"
                 >
-                  <X size={20} color={COLORS.text.secondary} strokeWidth={2} />
+                  <X size={20} color={themeColors.text.secondary} strokeWidth={2} />
                 </Pressable>
               </View>
             </View>
 
             {/* Settings Panel */}
             {showSettings && (
-              <View style={styles.settingsPanel}>
+              <View style={[styles.settingsPanel, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
                 <View style={styles.settingRow}>
                   <View style={styles.settingInfo}>
-                    <Text style={styles.settingLabel}>Auto-Start Timer</Text>
-                    <Text style={styles.settingDescription}>
+                    <Text style={[styles.settingLabel, { color: themeColors.text.primary }]}>Auto-Start Timer</Text>
+                    <Text style={[styles.settingDescription, { color: themeColors.text.tertiary }]}>
                       Start rest timer automatically after logging a set
                     </Text>
                   </View>
@@ -125,30 +129,30 @@ export default function RestTimerButton() {
                     value={timer.isAutoMode}
                     onValueChange={() => timer.toggleTimerMode()}
                     trackColor={{
-                      false: COLORS.surface.border,
-                      true: COLORS.accent.primaryDim,
+                      false: themeColors.surface.border,
+                      true: themeColors.accent.primaryDim,
                     }}
                     thumbColor={
                       timer.isAutoMode
-                        ? COLORS.accent.primary
-                        : COLORS.text.tertiary
+                        ? themeColors.accent.primary
+                        : themeColors.text.tertiary
                     }
                   />
                 </View>
-                <View style={styles.settingDivider} />
+                <View style={[styles.settingDivider, { backgroundColor: themeColors.surface.border }]} />
                 <View style={styles.settingRow}>
-                  <Text style={styles.settingLabel}>Haptic Feedback</Text>
+                  <Text style={[styles.settingLabel, { color: themeColors.text.primary }]}>Haptic Feedback</Text>
                   <Switch
                     value={timer.settings.hapticEnabled}
                     onValueChange={(value) => timer.updateSetting('hapticEnabled', value)}
                     trackColor={{
-                      false: COLORS.surface.border,
-                      true: COLORS.accent.primaryDim,
+                      false: themeColors.surface.border,
+                      true: themeColors.accent.primaryDim,
                     }}
                     thumbColor={
                       timer.settings.hapticEnabled
-                        ? COLORS.accent.primary
-                        : COLORS.text.tertiary
+                        ? themeColors.accent.primary
+                        : themeColors.text.tertiary
                     }
                   />
                 </View>
@@ -158,14 +162,14 @@ export default function RestTimerButton() {
             {/* Timer Display */}
             <View style={styles.timerContainer}>
               {/* Progress Ring with SVG */}
-              <View style={styles.progressRing}>
+              <View style={[styles.progressRing, { backgroundColor: themeColors.surface.card }]}>
                 <Svg width={200} height={200} style={styles.progressSvgLarge}>
                   {/* Background circle */}
                   <Circle
                     cx={100}
                     cy={100}
                     r={96}
-                    stroke={COLORS.surface.border}
+                    stroke={themeColors.surface.border}
                     strokeWidth={4}
                     fill="transparent"
                   />
@@ -174,7 +178,7 @@ export default function RestTimerButton() {
                     cx={100}
                     cy={100}
                     r={96}
-                    stroke={timer.isComplete ? COLORS.success : COLORS.accent.primary}
+                    stroke={timer.isComplete ? themeColors.success : themeColors.accent.primary}
                     strokeWidth={4}
                     fill="transparent"
                     strokeDasharray={`${2 * Math.PI * 96}`}
@@ -184,17 +188,18 @@ export default function RestTimerButton() {
                   />
                 </Svg>
                 {/* Inner Circle */}
-                <View style={styles.timerInner}>
+                <View style={[styles.timerInner, { backgroundColor: themeColors.background.secondary }]}>
                   <Text
                     style={[
                       styles.timerText,
-                      timer.isRunning && styles.timerTextActive,
-                      timer.isComplete && styles.timerTextComplete,
+                      { color: themeColors.text.primary },
+                      timer.isRunning && { color: themeColors.accent.primary },
+                      timer.isComplete && { color: themeColors.success },
                     ]}
                   >
                     {timer.formattedTime}
                   </Text>
-                  <Text style={styles.timerLabel}>
+                  <Text style={[styles.timerLabel, { color: themeColors.text.tertiary }]}>
                     {timer.isComplete
                       ? 'COMPLETE'
                       : timer.isRunning
@@ -208,25 +213,26 @@ export default function RestTimerButton() {
             {/* Controls */}
             <View style={styles.controls}>
               <Pressable
-                style={styles.controlButton}
+                style={[styles.controlButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
                 onPress={timer.reset}
               >
-                <RotateCcw size={24} color={COLORS.text.secondary} strokeWidth={2} />
+                <RotateCcw size={24} color={themeColors.text.secondary} strokeWidth={2} />
               </Pressable>
 
               <Pressable
                 style={[
                   styles.playButton,
-                  timer.isRunning && styles.playButtonActive,
+                  { backgroundColor: themeColors.accent.primary, shadowColor: themeColors.accent.primary },
+                  timer.isRunning && { backgroundColor: themeColors.secondary.primary },
                 ]}
                 onPress={timer.toggle}
               >
                 {timer.isRunning ? (
-                  <Pause size={32} color={COLORS.text.inverse} strokeWidth={2.5} />
+                  <Pause size={32} color={themeColors.text.inverse} strokeWidth={2.5} />
                 ) : (
                   <Play
                     size={32}
-                    color={COLORS.text.inverse}
+                    color={themeColors.text.inverse}
                     strokeWidth={2.5}
                     style={{ marginLeft: 4 }}
                   />
@@ -241,14 +247,16 @@ export default function RestTimerButton() {
                   key={preset.value}
                   style={[
                     styles.presetButton,
-                    timer.duration === preset.value && styles.presetButtonActive,
+                    { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border },
+                    timer.duration === preset.value && { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent },
                   ]}
                   onPress={() => timer.setDuration(preset.value)}
                 >
                   <Text
                     style={[
                       styles.presetText,
-                      timer.duration === preset.value && styles.presetTextActive,
+                      { color: themeColors.text.secondary },
+                      timer.duration === preset.value && { color: themeColors.accent.primary },
                     ]}
                   >
                     {preset.label}
@@ -272,9 +280,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: COLORS.background.elevated,
     borderWidth: 2,
-    borderColor: COLORS.surface.border,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -284,24 +290,9 @@ const styles = StyleSheet.create({
     elevation: 8,
     zIndex: 1000,
   },
-  floatingButtonActive: {
-    borderColor: COLORS.accent.primary,
-    backgroundColor: COLORS.accent.primaryDim,
-  },
-  floatingButtonComplete: {
-    borderColor: COLORS.success,
-    backgroundColor: 'rgba(0, 255, 136, 0.15)',
-  },
   floatingButtonText: {
     fontSize: 14,
     fontWeight: '700',
-    color: COLORS.text.secondary,
-  },
-  floatingButtonTextActive: {
-    color: COLORS.accent.primary,
-  },
-  floatingButtonTextComplete: {
-    color: COLORS.success,
   },
   progressRingContainer: {
     position: 'absolute',
@@ -324,11 +315,9 @@ const styles = StyleSheet.create({
   container: {
     width: '90%',
     maxWidth: 400,
-    backgroundColor: COLORS.background.secondary,
     borderRadius: RADIUS.xl,
     padding: SPACING.xl,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
   },
 
   // Header
@@ -340,7 +329,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.secondary,
   },
   headerButtons: {
     flexDirection: 'row',
@@ -349,17 +337,14 @@ const styles = StyleSheet.create({
   headerButton: {
     padding: SPACING.sm,
     borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.surface.card,
   },
 
   // Settings
   settingsPanel: {
-    backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.md,
     padding: SPACING.md,
     marginBottom: SPACING.lg,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
   },
   settingRow: {
     flexDirection: 'row',
@@ -373,16 +358,13 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text.primary,
   },
   settingDescription: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
     marginTop: 2,
   },
   settingDivider: {
     height: 1,
-    backgroundColor: COLORS.surface.border,
     marginVertical: SPACING.sm,
   },
 
@@ -395,7 +377,6 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: COLORS.surface.card,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -406,23 +387,14 @@ const styles = StyleSheet.create({
     width: 180,
     height: 180,
     borderRadius: 90,
-    backgroundColor: COLORS.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   timerText: {
     ...TYPOGRAPHY.stat,
-    color: COLORS.text.primary,
-  },
-  timerTextActive: {
-    color: COLORS.accent.primary,
-  },
-  timerTextComplete: {
-    color: COLORS.success,
   },
   timerLabel: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text.tertiary,
     marginTop: SPACING.xs,
   },
 
@@ -438,9 +410,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: COLORS.surface.card,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -448,17 +418,12 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: COLORS.accent.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: COLORS.accent.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 16,
     elevation: 8,
-  },
-  playButtonActive: {
-    backgroundColor: COLORS.secondary.primary,
   },
 
   // Presets
@@ -471,20 +436,10 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.md,
     borderRadius: RADIUS.full,
-    backgroundColor: COLORS.surface.card,
     borderWidth: 1,
-    borderColor: COLORS.surface.border,
-  },
-  presetButtonActive: {
-    backgroundColor: COLORS.accent.primaryDim,
-    borderColor: COLORS.surface.borderAccent,
   },
   presetText: {
     ...TYPOGRAPHY.caption,
     fontWeight: '600',
-    color: COLORS.text.secondary,
-  },
-  presetTextActive: {
-    color: COLORS.accent.primary,
   },
 });

@@ -102,9 +102,9 @@ export const DARK_COLORS = {
   error: '#FF3B3B',
   errorDim: hexToRgba('#FF3B3B', 0.15),
 
-  // Streak color - distinct from all workout types
-  streak: '#F43F5E',
-  streakDim: hexToRgba('#F43F5E', 0.15),
+  // Streak color - gold to match lightning symbol
+  streak: '#FFD600',
+  streakDim: hexToRgba('#FFD600', 0.15),
 
   // Surfaces
   surface: {
@@ -151,26 +151,26 @@ export const LIGHT_COLORS = {
     elevated: '#FFFFFF',     // Modals, sheets
   },
 
-  // Accent - Dark charcoal (readable on light backgrounds)
+  // Accent - Darker lime green (visible on white, same hue as dark mode)
   accent: {
-    primary: '#1A1A1A',
-    secondary: '#333333',
-    primaryDim: hexToRgba('#1A1A1A', 0.10),
-    primaryGlow: hexToRgba('#1A1A1A', 0.15),
-    muted: hexToRgba('#1A1A1A', 0.06),
+    primary: '#65A30D',
+    secondary: '#4D7C0F',
+    primaryDim: hexToRgba('#65A30D', 0.15),
+    primaryGlow: hexToRgba('#65A30D', 0.25),
+    muted: hexToRgba('#65A30D', 0.10),
   },
 
-  // Secondary - Hot Coral (slightly muted for light mode)
+  // Secondary - Darker coral (visible on white, same hue as dark mode)
   secondary: {
-    primary: '#E85A2A',
-    dim: hexToRgba('#E85A2A', 0.12),
-    muted: hexToRgba('#E85A2A', 0.08),
+    primary: '#EA580C',
+    dim: hexToRgba('#EA580C', 0.15),
+    muted: hexToRgba('#EA580C', 0.10),
   },
 
-  // Tertiary - Electric Blue (slightly muted)
+  // Tertiary - Darker cyan (visible on white, same hue as dark mode)
   tertiary: {
-    primary: '#00B8DB',
-    dim: hexToRgba('#00B8DB', 0.12),
+    primary: '#0891B2',
+    dim: hexToRgba('#0891B2', 0.15),
   },
 
   // Text - Dark for readability
@@ -179,20 +179,20 @@ export const LIGHT_COLORS = {
     secondary: '#525252',    // Secondary text
     tertiary: '#A3A3A3',     // Muted text
     disabled: '#D4D4D4',     // Disabled text
-    inverse: '#FFFFFF',      // For dark backgrounds
+    inverse: '#FFFFFF',      // For accent backgrounds (white text on darker green)
   },
 
-  // State colors - Slightly deeper for light mode contrast
-  success: '#059669',
-  successDim: hexToRgba('#059669', 0.12),
-  warning: '#D97706',
-  warningDim: hexToRgba('#D97706', 0.12),
+  // State colors - Darker shades (visible on white, same hue as dark mode)
+  success: '#16A34A',
+  successDim: hexToRgba('#16A34A', 0.15),
+  warning: '#CA8A04',
+  warningDim: hexToRgba('#CA8A04', 0.15),
   error: '#DC2626',
-  errorDim: hexToRgba('#DC2626', 0.12),
+  errorDim: hexToRgba('#DC2626', 0.15),
 
-  // Streak color
-  streak: '#E11D48',
-  streakDim: hexToRgba('#E11D48', 0.12),
+  // Streak color - darker gold (visible on white, same hue as dark mode)
+  streak: '#CA8A04',
+  streakDim: hexToRgba('#CA8A04', 0.15),
 
   // Surfaces
   surface: {
@@ -201,7 +201,7 @@ export const LIGHT_COLORS = {
     cardActive: '#F5F5F5',
     border: '#E5E5E5',
     borderLight: '#F0F0F0',
-    borderAccent: hexToRgba('#1A1A1A', 0.20),
+    borderAccent: hexToRgba('#65A30D', 0.30),
     divider: '#E5E5E5',
     elevated: '#FFFFFF',
   },
@@ -213,40 +213,35 @@ export const LIGHT_COLORS = {
     heavy: 'rgba(10, 10, 10, 0.7)',
   },
 
-  // Workout types - same vibrant colors work on light backgrounds
+  // Workout types - darker shades visible on white (same hue as dark mode)
   workoutTypes: {
-    Strength: '#84CC16',     // Lime-500 - readable on white
-    Running: '#EA580C',      // Orange-600 - readable on white
-    Cycling: '#0891B2',      // Cyan-600 - readable on white
-    Swimming: '#0D9488',     // Teal-600 - readable on white
-    Other: '#7C3AED',        // Violet-600 - readable on white
+    Strength: '#65A30D',     // Darker lime
+    Running: '#EA580C',      // Darker coral
+    Cycling: '#0891B2',      // Darker cyan
+    Swimming: '#0D9488',     // Darker teal
+    Other: '#7C3AED',        // Darker violet
   },
 
-  // Activity colors with muted backgrounds for light mode
+  // Activity colors - same as dark mode with light muted backgrounds
   activity: {
     Strength: {
       ...ACTIVITY_COLORS.Strength,
-      primary: '#84CC16',
       muted: ACTIVITY_COLORS.Strength.mutedLight,
     },
     Running: {
       ...ACTIVITY_COLORS.Running,
-      primary: '#EA580C',
       muted: ACTIVITY_COLORS.Running.mutedLight,
     },
     Cycling: {
       ...ACTIVITY_COLORS.Cycling,
-      primary: '#0891B2',
       muted: ACTIVITY_COLORS.Cycling.mutedLight,
     },
     Swimming: {
       ...ACTIVITY_COLORS.Swimming,
-      primary: '#0D9488',
       muted: ACTIVITY_COLORS.Swimming.mutedLight,
     },
     Other: {
       ...ACTIVITY_COLORS.Other,
-      primary: '#7C3AED',
       muted: ACTIVITY_COLORS.Other.mutedLight,
     },
   },

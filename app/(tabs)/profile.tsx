@@ -7,13 +7,18 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../src/config/supabase';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useTheme } from '../../src/contexts/ThemeContext';
@@ -26,12 +31,16 @@ import { TYPOGRAPHY, SPACING, RADIUS, DARK_COLORS } from '../../src/theme/design
 export default function ProfileScreen() {
   const { user, profile, refreshProfile, signOut } = useAuth();
   const { isDark, colors: COLORS, toggleTheme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [loadingSample, setLoadingSample] = useState(false);
   const [prStats, setPRStats] = useState<{ totalPRs: number; recentPRs: number } | null>(null);
   const [shareWorkouts, setShareWorkouts] = useState(true);
   const [updatingShare, setUpdatingShare] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
 
   useEffect(() => {
     loadPRStats();
@@ -150,6 +159,73 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleEditUsername = () => {
+    setNewUsername(profile?.username || '');
+    setShowUsernameModal(true);
+  };
+
+  const handleUpdateUsername = async () => {
+    const trimmedUsername = newUsername.trim().toLowerCase();
+
+    if (!trimmedUsername) {
+      Alert.alert('Error', 'Please enter a username');
+      return;
+    }
+
+    if (trimmedUsername.length < 3) {
+      Alert.alert('Error', 'Username must be at least 3 characters');
+      return;
+    }
+
+    if (trimmedUsername.length > 20) {
+      Alert.alert('Error', 'Username must be 20 characters or less');
+      return;
+    }
+
+    if (!/^[a-z0-9_]+$/.test(trimmedUsername)) {
+      Alert.alert('Error', 'Username can only contain letters, numbers, and underscores');
+      return;
+    }
+
+    if (trimmedUsername === profile?.username) {
+      setShowUsernameModal(false);
+      return;
+    }
+
+    setIsUpdatingUsername(true);
+    try {
+      // Check if username is already taken
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', trimmedUsername)
+        .neq('id', (user as any)?.id)
+        .single();
+
+      if (existing) {
+        Alert.alert('Username Taken', 'This username is already in use. Please choose another.');
+        setIsUpdatingUsername(false);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ username: trimmedUsername })
+        .eq('id', (user as any)?.id);
+
+      if (error) throw error;
+
+      await refreshProfile();
+      setShowUsernameModal(false);
+      Alert.alert('Success', 'Username updated successfully!');
+    } catch (error) {
+      console.error('Error updating username:', error);
+      Alert.alert('Error', 'Failed to update username. Please try again.');
+    } finally {
+      setIsUpdatingUsername(false);
+    }
+  };
+
   const handleClearAllData = async () => {
     Alert.alert(
       'Clear All Data',
@@ -237,8 +313,9 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: COLORS.background.primary }]} showsVerticalScrollIndicator={false}>
-      <View style={styles.content}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background.primary }]} edges={['top']}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
         {/* Profile Header */}
         <View style={styles.header}>
           <Pressable
@@ -294,17 +371,18 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <View style={styles.infoRow}>
+          <Pressable style={styles.infoRow} onPress={handleEditUsername}>
             <View style={[styles.infoIcon, { backgroundColor: COLORS.secondary.dim }]}>
               <UserIcon size={18} color={COLORS.secondary.primary} strokeWidth={2} />
             </View>
             <View style={styles.infoContent}>
-              <Text style={[styles.infoLabel, { color: COLORS.text.tertiary }]}>USER ID</Text>
-              <Text style={[styles.infoValueSmall, { color: COLORS.text.secondary }]}>
-                {(user as any)?.id?.substring(0, 12) || 'Unknown'}...
+              <Text style={[styles.infoLabel, { color: COLORS.text.tertiary }]}>USERNAME</Text>
+              <Text style={[styles.infoValue, { color: COLORS.text.primary }]}>
+                @{profile?.username || 'Set username'}
               </Text>
             </View>
-          </View>
+            <ChevronRight size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+          </Pressable>
         </View>
 
         {/* Personal Records Card */}
@@ -400,20 +478,6 @@ export default function ProfileScreen() {
             )}
           </View>
 
-          {profile?.username && (
-            <>
-              <View style={[styles.divider, { backgroundColor: COLORS.surface.border }]} />
-              <View style={styles.infoRow}>
-                <View style={[styles.infoIcon, { backgroundColor: COLORS.tertiary.dim }]}>
-                  <Users size={18} color={COLORS.tertiary.primary} strokeWidth={2} />
-                </View>
-                <View style={styles.infoContent}>
-                  <Text style={[styles.infoLabel, { color: COLORS.text.tertiary }]}>USERNAME</Text>
-                  <Text style={[styles.infoValue, { color: COLORS.text.primary }]}>@{profile.username}</Text>
-                </View>
-              </View>
-            </>
-          )}
         </View>
 
         {/* Appearance Card */}
@@ -510,18 +574,79 @@ export default function ProfileScreen() {
           <Text style={[styles.footerText, { color: COLORS.text.tertiary }]}>Built for athletes</Text>
         </View>
       </View>
+
+      {/* Username Edit Modal */}
+      <Modal
+        visible={showUsernameModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowUsernameModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { backgroundColor: COLORS.background.secondary }]}>
+            <Text style={[styles.modalTitle, { color: COLORS.text.primary }]}>Change Username</Text>
+            <Text style={[styles.modalSubtitle, { color: COLORS.text.secondary }]}>
+              Choose a unique username (3-20 characters)
+            </Text>
+            <View style={[styles.usernameInputContainer, { backgroundColor: COLORS.surface.card, borderColor: COLORS.surface.border }]}>
+              <Text style={[styles.usernamePrefix, { color: COLORS.text.tertiary }]}>@</Text>
+              <TextInput
+                style={[styles.usernameInput, { color: COLORS.text.primary }]}
+                value={newUsername}
+                onChangeText={(text) => setNewUsername(text.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                placeholder="username"
+                placeholderTextColor={COLORS.text.tertiary}
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={20}
+                autoFocus
+              />
+            </View>
+            <Text style={[styles.usernameHint, { color: COLORS.text.tertiary }]}>
+              Letters, numbers, and underscores only
+            </Text>
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalCancelButton, { backgroundColor: COLORS.surface.card }]}
+                onPress={() => setShowUsernameModal(false)}
+                disabled={isUpdatingUsername}
+              >
+                <Text style={[styles.modalCancelText, { color: COLORS.text.secondary }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalSaveButton, { backgroundColor: COLORS.accent.primary }]}
+                onPress={handleUpdateUsername}
+                disabled={isUpdatingUsername}
+              >
+                {isUpdatingUsername ? (
+                  <ActivityIndicator size="small" color={COLORS.text.inverse} />
+                ) : (
+                  <Text style={[styles.modalSaveText, { color: COLORS.text.inverse }]}>Save</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 // Use DARK_COLORS as fallback for static styles - dynamic colors applied inline
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
   },
   content: {
     padding: SPACING.lg,
-    paddingTop: SPACING.xxxl,
+    paddingTop: SPACING.lg,
     paddingBottom: SPACING.xxxl,
   },
 
@@ -738,5 +863,78 @@ const styles = StyleSheet.create({
   footerText: {
     ...TYPOGRAPHY.caption,
     fontSize: 11,
+  },
+
+  // Username Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingTop: 120,
+  },
+  modalContent: {
+    width: '100%',
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+  },
+  modalTitle: {
+    ...TYPOGRAPHY.h3,
+    textAlign: 'center',
+    marginBottom: SPACING.xs,
+  },
+  modalSubtitle: {
+    ...TYPOGRAPHY.body,
+    textAlign: 'center',
+    marginBottom: SPACING.lg,
+  },
+  usernameInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    paddingHorizontal: SPACING.md,
+  },
+  usernamePrefix: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 16,
+    marginRight: 2,
+  },
+  usernameInput: {
+    flex: 1,
+    ...TYPOGRAPHY.body,
+    fontSize: 16,
+    paddingVertical: SPACING.md,
+  },
+  usernameHint: {
+    ...TYPOGRAPHY.caption,
+    textAlign: 'center',
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  modalCancelButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+  },
+  modalCancelText: {
+    ...TYPOGRAPHY.bodyBold,
+  },
+  modalSaveButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+  },
+  modalSaveText: {
+    ...TYPOGRAPHY.bodyBold,
   },
 });

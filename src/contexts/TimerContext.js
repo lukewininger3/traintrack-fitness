@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { loadTimerSettings, saveTimerSettings, TIMER_MODES } from '../utils/timerStorage';
@@ -17,6 +18,9 @@ export function TimerProvider({ children }) {
     timerMode: TIMER_MODES.MANUAL,
   });
   const intervalRef = useRef(null);
+  // Track when timer started for background time calculation
+  const timerStartTimeRef = useRef(null);
+  const timeRemainingAtStartRef = useRef(null);
 
   // Load settings on mount
   useEffect(() => {
@@ -56,6 +60,36 @@ export function TimerProvider({ children }) {
     };
   }, [isRunning]);
 
+  // Handle app returning from background - recalculate timer
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active' && timerStartTimeRef.current && timeRemainingAtStartRef.current !== null) {
+        // App came back to foreground, recalculate remaining time
+        const now = Date.now();
+        const elapsedSeconds = Math.floor((now - timerStartTimeRef.current) / 1000);
+        const newTimeRemaining = Math.max(0, timeRemainingAtStartRef.current - elapsedSeconds);
+
+        setTimeRemaining(newTimeRemaining);
+
+        if (newTimeRemaining <= 0) {
+          // Timer completed while in background
+          setIsRunning(false);
+          setIsComplete(true);
+          timerStartTimeRef.current = null;
+          timeRemainingAtStartRef.current = null;
+
+          // Haptic feedback for completion
+          if (settings.hapticEnabled) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, [settings.hapticEnabled]);
+
   // Timer countdown logic
   useEffect(() => {
     if (!isRunning || timeRemaining <= 0) {
@@ -71,6 +105,9 @@ export function TimerProvider({ children }) {
         if (prev <= 1) {
           setIsRunning(false);
           setIsComplete(true);
+          // Clear start time tracking when completed
+          timerStartTimeRef.current = null;
+          timeRemainingAtStartRef.current = null;
 
           // Haptic feedback on completion
           if (settings.hapticEnabled) {
@@ -96,15 +133,21 @@ export function TimerProvider({ children }) {
     if (settings.hapticEnabled) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+    // Record start time for background calculation
+    timerStartTimeRef.current = Date.now();
+    timeRemainingAtStartRef.current = timeRemaining;
     setIsComplete(false);
     setIsRunning(true);
-  }, [settings.hapticEnabled]);
+  }, [settings.hapticEnabled, timeRemaining]);
 
   // Pause the timer
   const pause = useCallback(() => {
     if (settings.hapticEnabled) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+    // Clear start time tracking when paused
+    timerStartTimeRef.current = null;
+    timeRemainingAtStartRef.current = null;
     setIsRunning(false);
   }, [settings.hapticEnabled]);
 
@@ -122,6 +165,9 @@ export function TimerProvider({ children }) {
     if (settings.hapticEnabled) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+    // Clear start time tracking
+    timerStartTimeRef.current = null;
+    timeRemainingAtStartRef.current = null;
     setIsRunning(false);
     setIsComplete(false);
     setTimeRemaining(duration);
@@ -143,6 +189,9 @@ export function TimerProvider({ children }) {
     if (settings.hapticEnabled) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+    // Record start time for background calculation
+    timerStartTimeRef.current = Date.now();
+    timeRemainingAtStartRef.current = newDuration;
     setDuration(newDuration);
     setTimeRemaining(newDuration);
     setIsComplete(false);
@@ -172,6 +221,9 @@ export function TimerProvider({ children }) {
       if (settings.hapticEnabled) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
+      // Record start time for background calculation
+      timerStartTimeRef.current = Date.now();
+      timeRemainingAtStartRef.current = duration;
       setTimeRemaining(duration);
       setIsComplete(false);
       setIsRunning(true);
