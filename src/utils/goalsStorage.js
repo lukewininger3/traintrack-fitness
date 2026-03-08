@@ -157,13 +157,22 @@ const refreshGoalsFromCloud = async (weekStart) => {
         updatedAt: data.updated_at,
       };
 
-      // Save to local
+      // Only update local if cloud data is newer
       const localData = await AsyncStorage.getItem(GOALS_STORAGE_KEY);
       const allGoals = localData ? JSON.parse(localData) : {};
-      allGoals[weekStart] = cloudGoals;
-      await AsyncStorage.setItem(GOALS_STORAGE_KEY, JSON.stringify(allGoals));
+      const existingLocal = allGoals[weekStart];
 
-      return cloudGoals;
+      // Compare timestamps - only overwrite if cloud is newer
+      const cloudTime = new Date(data.updated_at).getTime();
+      const localTime = existingLocal?.updatedAt ? new Date(existingLocal.updatedAt).getTime() : 0;
+
+      if (cloudTime > localTime) {
+        allGoals[weekStart] = cloudGoals;
+        await AsyncStorage.setItem(GOALS_STORAGE_KEY, JSON.stringify(allGoals));
+        return cloudGoals;
+      }
+
+      return existingLocal || cloudGoals;
     }
 
     return null;
@@ -621,3 +630,137 @@ export const GOAL_PRESETS = [
   { type: 'type_count', label: '1 cardio session', target: 1, workoutType: 'Running' },
   { type: 'days', label: 'Active 4 days', target: 4 },
 ];
+
+const WEEKLY_PLAN_TEMPLATES_KEY = '@traintrack_weekly_plan_templates';
+
+/**
+ * Save current week's planned workouts as a template
+ */
+export const saveWeeklyPlanTemplate = async (name, plannedWorkouts) => {
+  try {
+    const data = await AsyncStorage.getItem(WEEKLY_PLAN_TEMPLATES_KEY);
+    const templates = data ? JSON.parse(data) : [];
+
+    // Strip completed status and workoutId from template
+    const templateWorkouts = plannedWorkouts.map(w => ({
+      name: w.name,
+      workoutType: w.workoutType,
+      dayOfWeek: w.dayOfWeek,
+      exercises: w.exercises || [],
+    }));
+
+    const newTemplate = {
+      id: Date.now(),
+      name,
+      workouts: templateWorkouts,
+      createdAt: new Date().toISOString(),
+    };
+
+    templates.unshift(newTemplate);
+    // Keep only last 10 templates
+    const trimmedTemplates = templates.slice(0, 10);
+    await AsyncStorage.setItem(WEEKLY_PLAN_TEMPLATES_KEY, JSON.stringify(trimmedTemplates));
+    return { success: true, template: newTemplate };
+  } catch (error) {
+    console.error('Error saving weekly plan template:', error);
+    return { success: false, error };
+  }
+};
+
+/**
+ * Load all weekly plan templates
+ */
+export const loadWeeklyPlanTemplates = async () => {
+  try {
+    const data = await AsyncStorage.getItem(WEEKLY_PLAN_TEMPLATES_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('Error loading weekly plan templates:', error);
+    return [];
+  }
+};
+
+/**
+ * Delete a weekly plan template
+ */
+export const deleteWeeklyPlanTemplate = async (templateId) => {
+  try {
+    const data = await AsyncStorage.getItem(WEEKLY_PLAN_TEMPLATES_KEY);
+    const templates = data ? JSON.parse(data) : [];
+    const filtered = templates.filter(t => t.id !== templateId);
+    await AsyncStorage.setItem(WEEKLY_PLAN_TEMPLATES_KEY, JSON.stringify(filtered));
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting weekly plan template:', error);
+    return { success: false, error };
+  }
+};
+
+/**
+ * Apply a template to the current week
+ */
+export const applyWeeklyPlanTemplate = async (template, weekStart) => {
+  try {
+    const goals = await loadWeeklyGoals(weekStart);
+    if (!goals) return { success: false, error: 'No goals found for this week' };
+
+    // Create new planned workouts from template
+    const newPlannedWorkouts = template.workouts.map(w => ({
+      id: Date.now() + Math.random(),
+      name: w.name,
+      workoutType: w.workoutType,
+      dayOfWeek: w.dayOfWeek,
+      exercises: w.exercises || [],
+      completed: false,
+      workoutId: null,
+    }));
+
+    // Merge with existing (or replace)
+    goals.plannedWorkouts = newPlannedWorkouts;
+    await saveWeeklyGoals(goals, weekStart);
+    return { success: true };
+  } catch (error) {
+    console.error('Error applying weekly plan template:', error);
+    return { success: false, error };
+  }
+};
+
+/**
+ * Copy last week's plan to current week
+ */
+export const copyLastWeekPlan = async (currentWeekStart) => {
+  try {
+    // Calculate last week's start date
+    const currentStart = new Date(currentWeekStart + 'T12:00:00');
+    currentStart.setDate(currentStart.getDate() - 7);
+    const lastWeekStart = formatLocalDate(currentStart);
+
+    const lastWeekGoals = await loadWeeklyGoals(lastWeekStart);
+    if (!lastWeekGoals?.plannedWorkouts?.length) {
+      return { success: false, error: 'No planned workouts found for last week' };
+    }
+
+    const currentGoals = await loadWeeklyGoals(currentWeekStart);
+    if (!currentGoals) {
+      return { success: false, error: 'No goals found for current week' };
+    }
+
+    // Copy planned workouts (reset completed status)
+    const copiedWorkouts = lastWeekGoals.plannedWorkouts.map(w => ({
+      id: Date.now() + Math.random(),
+      name: w.name,
+      workoutType: w.workoutType,
+      dayOfWeek: w.dayOfWeek,
+      exercises: w.exercises || [],
+      completed: false,
+      workoutId: null,
+    }));
+
+    currentGoals.plannedWorkouts = copiedWorkouts;
+    await saveWeeklyGoals(currentGoals, currentWeekStart);
+    return { success: true, count: copiedWorkouts.length };
+  } catch (error) {
+    console.error('Error copying last week plan:', error);
+    return { success: false, error };
+  }
+};

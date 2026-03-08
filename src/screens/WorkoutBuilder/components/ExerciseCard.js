@@ -1,4 +1,4 @@
-import { Camera, Check, GripVertical, History, Link, MessageSquare, Play, Plus, Trash2, X } from 'lucide-react-native';
+import { Camera, Check, GripVertical, History, Link, MessageSquare, Play, Plus, X } from 'lucide-react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import { Alert, Image, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,6 +17,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { TYPOGRAPHY, SPACING, RADIUS } from '../../../theme/design';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { Swipeable } from '../../../components/ui/Swipeable';
 
 // Format time in minutes to mm:ss format
 const formatPace = (paceInMinutes) => {
@@ -201,6 +202,7 @@ export default function ExerciseCard({
 
   // Refs for weight/distance inputs to enable auto-focus on new sets
   const weightInputRefs = useRef([]);
+  const notesInputRef = useRef(null);
 
   // Drag-to-reorder state
   const dragTranslateY = useSharedValue(0);
@@ -226,7 +228,9 @@ export default function ExerciseCard({
   };
 
   const dragGesture = Gesture.Pan()
-    .activateAfterLongPress(200) // Slightly faster activation
+    .activateAfterLongPress(200)
+    .activeOffsetY([-5, 5])
+    .failOffsetX([-20, 20])
     .onStart(() => {
       isDragging.value = true;
       lastSwapOffset.value = 0;
@@ -326,6 +330,11 @@ export default function ExerciseCard({
   const toggleNotes = () => {
     if (!showNotes) {
       setShowPrevious(false);
+      // Focus the notes input after it renders
+      setTimeout(() => {
+        notesInputRef.current?.focus();
+        onNotesFocus?.();
+      }, 100);
     }
     setShowNotes(!showNotes);
   };
@@ -560,10 +569,11 @@ export default function ExerciseCard({
         </View>
       )}
 
-      <View
-        ref={cardRef}
-        style={[styles.exerciseCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
-      >
+      <Swipeable onDelete={handleDelete}>
+        <View
+          ref={cardRef}
+          style={[styles.exerciseCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
+        >
         {/* Header */}
         <View style={styles.exerciseHeader}>
           {/* Drag handle - long press + pan to reorder */}
@@ -628,19 +638,8 @@ export default function ExerciseCard({
                 strokeWidth={2}
               />
             </Pressable>
-            {/* Delete button - Red */}
-            <Pressable
-              onPress={handleDelete}
-              style={styles.actionButton}
-          >
-            <Trash2
-              size={15}
-              color={themeColors.error}
-              strokeWidth={2}
-            />
-          </Pressable>
+          </View>
         </View>
-      </View>
 
         {/* Previous Session Panel (toggleable) */}
         <PreviousSessionPanel
@@ -654,6 +653,7 @@ export default function ExerciseCard({
         {showNotes && (
           <View style={styles.notesSection}>
             <TextInput
+              ref={notesInputRef}
               style={[styles.notesInput, { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border, color: themeColors.text.primary }]}
               value={localNotes}
               onChangeText={setLocalNotes}
@@ -860,6 +860,7 @@ export default function ExerciseCard({
           </Pressable>
         </View>
       </View>
+      </Swipeable>
     </Animated.View>
   );
 }

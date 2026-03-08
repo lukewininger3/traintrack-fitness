@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Pressable } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
@@ -13,6 +13,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { Trash2, RotateCcw } from 'lucide-react-native';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS, ANIMATIONS } from '../../theme/design';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DELETE_THRESHOLD = 100;
@@ -41,11 +42,13 @@ export function Swipeable({
   deleteLabel = 'Delete',
   actionLabel,
   actionIcon,
-  actionColor = COLORS.tertiary.primary,
+  actionColor,
   enabled = true,
   haptic = true,
   style,
 }) {
+  const { colors: themeColors } = useTheme();
+  const resolvedActionColor = actionColor || themeColors.tertiary.primary;
   const translateX = useSharedValue(0);
   const itemHeight = useSharedValue(0);
   const isDeleting = useSharedValue(false);
@@ -67,6 +70,7 @@ export function Swipeable({
   const panGesture = Gesture.Pan()
     .enabled(enabled)
     .activeOffsetX([-10, 10])
+    .failOffsetY([-15, 15])
     .onUpdate((event) => {
       // Only allow swiping left (negative translateX)
       const clampedX = Math.min(0, event.translationX);
@@ -156,22 +160,26 @@ export function Swipeable({
       {/* Background actions */}
       <View style={styles.actionsContainer}>
         {onAction && (
-          <Animated.View style={[styles.actionButton, { backgroundColor: actionColor }, secondaryActionStyle]}>
-            {actionIcon || <RotateCcw size={20} color={COLORS.text.primary} />}
-            {actionLabel && (
-              <Text style={styles.actionText}>{actionLabel}</Text>
-            )}
-          </Animated.View>
+          <Pressable onPress={handleAction}>
+            <Animated.View style={[styles.actionButton, { backgroundColor: resolvedActionColor }, secondaryActionStyle]}>
+              {actionIcon || <RotateCcw size={20} color={themeColors.text.primary} />}
+              {actionLabel && (
+                <Text style={[styles.actionText, { color: themeColors.text.primary }]}>{actionLabel}</Text>
+              )}
+            </Animated.View>
+          </Pressable>
         )}
-        <Animated.View style={[styles.actionButton, styles.deleteButton, deleteActionStyle]}>
-          <Trash2 size={20} color={COLORS.text.primary} />
-          <Text style={styles.actionText}>{deleteLabel}</Text>
-        </Animated.View>
+        <Pressable onPress={handleDelete}>
+          <Animated.View style={[styles.actionButton, { backgroundColor: themeColors.error }, deleteActionStyle]}>
+            <Trash2 size={20} color={themeColors.text.primary} />
+            <Text style={[styles.actionText, { color: themeColors.text.primary }]}>{deleteLabel}</Text>
+          </Animated.View>
+        </Pressable>
       </View>
 
       {/* Swipeable content */}
       <GestureDetector gesture={composedGesture}>
-        <Animated.View style={[styles.content, animatedStyle]}>
+        <Animated.View style={[styles.content, { backgroundColor: themeColors.background.primary }, animatedStyle]}>
           {children}
         </Animated.View>
       </GestureDetector>
@@ -196,7 +204,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   content: {
-    backgroundColor: COLORS.background.primary,
+    // backgroundColor set dynamically via theme
   },
   actionsContainer: {
     position: 'absolute',
@@ -214,12 +222,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: SPACING.sm,
   },
-  deleteButton: {
-    backgroundColor: COLORS.error,
-  },
   actionText: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.primary,
     marginTop: SPACING.xs,
     fontWeight: '600',
   },

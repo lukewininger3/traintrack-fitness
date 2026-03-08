@@ -1,7 +1,8 @@
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Activity, Bike, Bookmark, Camera, Dumbbell, Edit2, FileText, LayoutGrid, List, MessageSquare, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, interpolate } from 'react-native-reanimated';
 import {
   Alert,
   Keyboard,
@@ -38,6 +39,50 @@ export default function ActivitiesScreen() {
   const [templateName, setTemplateName] = useState('');
   const [viewMode, setViewMode] = useState('compact'); // 'compact' | 'expanded'
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const lastScrollY = useRef(0);
+  const searchHeight = useSharedValue(0);
+  const searchInputRef = useRef(null);
+
+  // Animated style for search bar
+  const searchAnimatedStyle = useAnimatedStyle(() => ({
+    height: searchHeight.value,
+    opacity: interpolate(searchHeight.value, [0, 52], [0, 1]),
+    marginTop: interpolate(searchHeight.value, [0, 52], [0, SPACING.md]),
+    marginBottom: interpolate(searchHeight.value, [0, 52], [0, SPACING.xs]),
+    overflow: 'hidden',
+  }));
+
+  // Toggle search visibility
+  const toggleSearch = () => {
+    if (showSearch) {
+      // Hide search
+      Keyboard.dismiss();
+      searchHeight.value = withTiming(0, { duration: 200 });
+      setShowSearch(false);
+      setSearchQuery('');
+    } else {
+      // Show search
+      setShowSearch(true);
+      searchHeight.value = withTiming(52, { duration: 200 });
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
+  };
+
+  // Handle scroll to hide search
+  const handleScroll = (event) => {
+    const currentY = event.nativeEvent.contentOffset.y;
+    const scrollingDown = currentY > lastScrollY.current && currentY > 50;
+
+    if (scrollingDown && showSearch) {
+      Keyboard.dismiss();
+      searchHeight.value = withTiming(0, { duration: 200 });
+      setShowSearch(false);
+      setSearchQuery('');
+    }
+
+    lastScrollY.current = currentY;
+  };
 
   // Load data on mount
   useEffect(() => {
@@ -230,7 +275,14 @@ export default function ActivitiesScreen() {
       </View>
       <View style={styles.sectionHeaderSpacer} />
       <Pressable
-        style={[styles.viewToggle, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
+        onPress={toggleSearch}
+        style={[styles.headerButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }, showSearch && { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.accent.primary }]}
+        hitSlop={8}
+      >
+        <Search size={18} color={showSearch ? themeColors.accent.primary : themeColors.text.secondary} strokeWidth={2} />
+      </Pressable>
+      <Pressable
+        style={[styles.headerButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
         onPress={() => setViewMode(viewMode === 'compact' ? 'expanded' : 'compact')}
         hitSlop={8}
       >
@@ -376,24 +428,27 @@ export default function ActivitiesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background.primary }]}>
-      {/* Search Bar */}
-      <View style={[styles.searchContainer, { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border }]}>
-        <Search size={18} color={themeColors.text.tertiary} strokeWidth={2} />
-        <TextInput
-          style={[styles.searchInput, { color: themeColors.text.primary }]}
-          placeholder="Search workouts..."
-          placeholderTextColor={themeColors.text.tertiary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        {searchQuery.length > 0 && (
-          <Pressable onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
-            <X size={16} color={themeColors.text.tertiary} strokeWidth={2} />
-          </Pressable>
-        )}
-      </View>
+      {/* Animated Search Bar */}
+      <Animated.View style={[styles.searchContainerAnimated, searchAnimatedStyle]}>
+        <View style={[styles.searchContainer, { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border }]}>
+          <Search size={18} color={themeColors.text.tertiary} strokeWidth={2} />
+          <TextInput
+            ref={searchInputRef}
+            style={[styles.searchInput, { color: themeColors.text.primary }]}
+            placeholder="Search workouts..."
+            placeholderTextColor={themeColors.text.tertiary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+              <X size={16} color={themeColors.text.tertiary} strokeWidth={2} />
+            </Pressable>
+          )}
+        </View>
+      </Animated.View>
 
       <SectionList
         sections={filteredSections}
@@ -403,6 +458,8 @@ export default function ActivitiesScreen() {
         stickySectionHeadersEnabled={true}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <View style={[styles.emptyIconContainer, { backgroundColor: themeColors.surface.card }]}>
@@ -649,15 +706,16 @@ const styles = StyleSheet.create({
   },
 
   // Search
+  searchContainerAnimated: {
+    marginHorizontal: SPACING.lg,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.background.elevated,
     borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.md,
-    marginBottom: SPACING.xs,
+    height: 52,
     borderWidth: 1,
     borderColor: COLORS.surface.border,
     gap: SPACING.sm,
@@ -704,7 +762,7 @@ const styles = StyleSheet.create({
   sectionHeaderSpacer: {
     flex: 1,
   },
-  viewToggle: {
+  headerButton: {
     width: 36,
     height: 36,
     borderRadius: RADIUS.md,
@@ -713,6 +771,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.surface.border,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: SPACING.xs,
   },
 
   // Week Separator

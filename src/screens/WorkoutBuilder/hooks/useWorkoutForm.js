@@ -369,7 +369,7 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
       clearTimeout(autoSaveTimeoutRef.current);
     }
 
-    // Debounce the save
+    // Debounce the save (500ms for faster protection against crashes)
     autoSaveTimeoutRef.current = setTimeout(() => {
       if (isDiscardedRef.current) return;
       const workoutJson = JSON.stringify(workout);
@@ -382,7 +382,7 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
         });
         lastSavedRef.current = workoutJson;
       }
-    }, 1000); // Save 1 second after last change
+    }, 500); // Save 500ms after last change
 
     return () => {
       if (autoSaveTimeoutRef.current) {
@@ -409,6 +409,28 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription?.remove();
+  }, [workout, editingWorkoutId, isEditing]);
+
+  // Immediately save workout state (call after important actions like set confirmation)
+  const flushSave = useCallback(() => {
+    if (isDiscardedRef.current) return;
+    const hasMeaningfulData = workout.name.trim() || workout.exercises.length > 0;
+    if (!hasMeaningfulData) return;
+
+    // Clear pending debounced save
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    const workoutJson = JSON.stringify(workout);
+    if (workoutJson !== lastSavedRef.current) {
+      saveInProgressWorkout({
+        workout,
+        editingWorkoutId: editingWorkoutId || null,
+        isEditing,
+      });
+      lastSavedRef.current = workoutJson;
+    }
   }, [workout, editingWorkoutId, isEditing]);
 
   // Action dispatchers
@@ -589,5 +611,6 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
     saveWorkoutData,
     findPreviousSession,
     discardWorkout,
+    flushSave,
   };
 }

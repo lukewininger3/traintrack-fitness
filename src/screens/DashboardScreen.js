@@ -1,4 +1,4 @@
-import { Calendar, Check, ChevronLeft, ChevronRight, ChevronRight as ArrowRight, Dumbbell, Activity, Bike, Waves, Flame, Play, RotateCcw, Scale, X } from 'lucide-react-native';
+import { Calendar, Check, ChevronLeft, ChevronRight, ChevronRight as ArrowRight, Dumbbell, Activity, Bike, Waves, Flame, Play, RotateCcw, Scale, Target, X } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
@@ -18,9 +18,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { calculateWeekStreak } from '../utils/calculations';
+import { getStreakInfo } from '../utils/calculations';
 import { getTodayString, loadWorkouts, loadInProgressWorkout, clearInProgressWorkout } from '../utils/storage';
-import { loadWeeklyGoals, getWeekStart, getDateFromDayOfWeek } from '../utils/goalsStorage';
+import { loadWeeklyGoals, getWeekStart, getWeekEnd, getDateFromDayOfWeek } from '../utils/goalsStorage';
+import { loadWeightData, addWeightEntry } from '../utils/weightStorage';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -34,10 +35,15 @@ export default function DashboardScreen({ navigation }) {
   const [workouts, setWorkouts] = useState([]);
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
-  const [weekStreak, setWeekStreak] = useState(0);
+  const [streakInfo, setStreakInfo] = useState({ streak: 0, currentWeekHasWorkout: false, streakWeekKey: null });
   const [selectedWorkouts, setSelectedWorkouts] = useState(null);
   const [todayPlannedWorkouts, setTodayPlannedWorkouts] = useState([]);
   const [inProgressWorkout, setInProgressWorkout] = useState(null);
+  const [weeklyGoals, setWeeklyGoals] = useState([]);
+  const [showWeightModal, setShowWeightModal] = useState(false);
+  const [hasLoggedWeightToday, setHasLoggedWeightToday] = useState(false);
+  const [weightInput, setWeightInput] = useState('');
+  const [isSubmittingWeight, setIsSubmittingWeight] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -52,14 +58,14 @@ export default function DashboardScreen({ navigation }) {
     // Only load last 6 months of workouts to reduce memory usage
     const data = await loadWorkouts({ silent: true, maxMonths: 6 });
     setWorkouts(data || []);
-    setWeekStreak(calculateWeekStreak(data || []));
+    setStreakInfo(getStreakInfo(data || []));
 
-    // Load today's planned workouts
+    // Load today's planned workouts and weekly goals
     const weekStart = getWeekStart();
-    const goals = await loadWeeklyGoals(weekStart);
-    if (goals?.plannedWorkouts) {
+    const goalsData = await loadWeeklyGoals(weekStart);
+    if (goalsData?.plannedWorkouts) {
       const todayDayOfWeek = new Date().getDay();
-      const todayWorkouts = goals.plannedWorkouts.filter(p =>
+      const todayWorkouts = goalsData.plannedWorkouts.filter(p =>
         p.dayOfWeek === todayDayOfWeek && !p.completed
       );
       setTodayPlannedWorkouts(todayWorkouts);
@@ -67,9 +73,43 @@ export default function DashboardScreen({ navigation }) {
       setTodayPlannedWorkouts([]);
     }
 
+    // Set weekly goals
+    if (goalsData?.goals) {
+      setWeeklyGoals(goalsData.goals);
+    } else {
+      setWeeklyGoals([]);
+    }
+
     // Check for in-progress workout
     const savedWorkout = await loadInProgressWorkout();
     setInProgressWorkout(savedWorkout);
+
+    // Check if weight has been logged today
+    const weightData = await loadWeightData();
+    const today = getTodayString();
+    const hasTodayWeight = weightData.entries.some(e => e.date === today);
+    setHasLoggedWeightToday(hasTodayWeight);
+  };
+
+  // Submit weight entry
+  const submitWeight = async () => {
+    const weight = parseFloat(weightInput);
+    if (isNaN(weight) || weight <= 0) {
+      Alert.alert('Invalid Weight', 'Please enter a valid weight.');
+      return;
+    }
+
+    setIsSubmittingWeight(true);
+    const result = await addWeightEntry(weight);
+    setIsSubmittingWeight(false);
+
+    if (result.success) {
+      setShowWeightModal(false);
+      setHasLoggedWeightToday(true);
+      setWeightInput('');
+    } else {
+      Alert.alert('Error', 'Failed to save weight. Please try again.');
+    }
   };
 
   // Calculate stats for the viewed calendar month
@@ -77,6 +117,7 @@ export default function DashboardScreen({ navigation }) {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
+    const currentDay = now.getDate();
 
     // Check if viewing a future month
     const isFutureMonth = calendarYear > currentYear ||
@@ -86,19 +127,28 @@ export default function DashboardScreen({ navigation }) {
       return { isFuture: true, totalWorkouts: 0, change: 0 };
     }
 
+    // Determine the comparison day - for current month use today, for past months use end of month
+    const isCurrentMonth = calendarYear === currentYear && calendarMonth === currentMonth;
+    const comparisonDay = isCurrentMonth ? currentDay : new Date(calendarYear, calendarMonth + 1, 0).getDate();
+
     const firstDayViewedMonth = new Date(calendarYear, calendarMonth, 1);
-    const lastDayViewedMonth = new Date(calendarYear, calendarMonth + 1, 0);
+    const comparisonDateViewedMonth = new Date(calendarYear, calendarMonth, comparisonDay);
+
+    // Previous month - compare to the same point in time
     const prevMonthFirst = new Date(calendarYear, calendarMonth - 1, 1);
-    const prevMonthLast = new Date(calendarYear, calendarMonth, 0);
+    // Make sure we don't exceed the number of days in the previous month
+    const prevMonthDays = new Date(calendarYear, calendarMonth, 0).getDate();
+    const prevMonthComparisonDay = Math.min(comparisonDay, prevMonthDays);
+    const prevMonthComparisonDate = new Date(calendarYear, calendarMonth - 1, prevMonthComparisonDay);
 
     const viewedMonthWorkouts = workouts.filter(w => {
       const workoutDate = new Date(w.date);
-      return workoutDate >= firstDayViewedMonth && workoutDate <= lastDayViewedMonth;
+      return workoutDate >= firstDayViewedMonth && workoutDate <= comparisonDateViewedMonth;
     });
 
     const prevMonthWorkouts = workouts.filter(w => {
       const workoutDate = new Date(w.date);
-      return workoutDate >= prevMonthFirst && workoutDate <= prevMonthLast;
+      return workoutDate >= prevMonthFirst && workoutDate <= prevMonthComparisonDate;
     });
 
     return {
@@ -121,6 +171,39 @@ export default function DashboardScreen({ navigation }) {
 
   const getWorkoutColor = (type) => {
     return themeColors.workoutTypes[type] || themeColors.text.tertiary;
+  };
+
+  // Get goal label for display
+  const getGoalLabel = (goal) => {
+    if (goal.type === 'count') {
+      return 'Total Workouts';
+    } else if (goal.type === 'type_count') {
+      return `${goal.workoutType} Workouts`;
+    } else if (goal.type === 'days') {
+      return 'Active Days';
+    }
+    return 'Workouts';
+  };
+
+  // Calculate progress for a goal based on this week's completed workouts
+  const getGoalProgress = (goal) => {
+    const weekStartStr = getWeekStart();
+    const weekEndStr = getWeekEnd(weekStartStr);
+
+    // Filter workouts for this week using string comparison (YYYY-MM-DD format)
+    const thisWeekWorkouts = workouts.filter(w => {
+      return w.date >= weekStartStr && w.date <= weekEndStr;
+    });
+
+    if (goal.type === 'count') {
+      return thisWeekWorkouts.length;
+    } else if (goal.type === 'type_count') {
+      return thisWeekWorkouts.filter(w => w.type === goal.workoutType).length;
+    } else if (goal.type === 'days') {
+      const uniqueDays = new Set(thisWeekWorkouts.map(w => w.date));
+      return uniqueDays.size;
+    }
+    return 0;
   };
 
   // Start a planned workout - navigate to workout builder with planned data
@@ -224,7 +307,9 @@ export default function DashboardScreen({ navigation }) {
   const calendarData = useMemo(() => {
     const firstDay = new Date(calendarYear, calendarMonth, 1);
     const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
-    const startingDayOfWeek = firstDay.getDay();
+    // Convert to Monday-first: Mon=0, Tue=1, ..., Sun=6
+    const dayOfWeek = firstDay.getDay();
+    const startingDayOfWeek = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const daysInMonth = lastDay.getDate();
     const today = getTodayString();
 
@@ -294,8 +379,6 @@ export default function DashboardScreen({ navigation }) {
     return calendar;
   }, [calendarMonth, calendarYear, workouts]);
 
-  const isPositiveChange = viewedMonthStats.change >= 0;
-
   const today = getTodayString();
 
   return (
@@ -319,7 +402,7 @@ export default function DashboardScreen({ navigation }) {
           </View>
 
           <View style={styles.dayHeaders}>
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
+            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => (
               <Text key={idx} style={[styles.dayHeader, { color: themeColors.text.tertiary }]}>{day}</Text>
             ))}
             <View style={styles.weekHeaderSpacer} />
@@ -330,6 +413,28 @@ export default function DashboardScreen({ navigation }) {
             const hasWorkoutThisWeek = hasWorkoutInVisibleDays || week.adjacentMonthHasWorkout;
             const isCurrentWeek = week.some(day => day?.date === today);
 
+            // Get Monday of this week row to compare with streakWeekKey
+            const firstVisibleDay = week.find(day => day !== null);
+            let weekKey = null;
+            if (firstVisibleDay) {
+              const [year, month, dayNum] = firstVisibleDay.date.split('-').map(Number);
+              const date = new Date(year, month - 1, dayNum);
+              const dayOfWeek = date.getDay();
+              const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+              const monday = new Date(date);
+              monday.setDate(date.getDate() - daysSinceMonday);
+              const mYear = monday.getFullYear();
+              const mMonth = String(monday.getMonth() + 1).padStart(2, '0');
+              const mDay = String(monday.getDate()).padStart(2, '0');
+              weekKey = `${mYear}-${mMonth}-${mDay}`;
+            }
+
+            // Determine if this week row should show the streak badge
+            const isStreakWeek = streakInfo.streak > 0 && weekKey === streakInfo.streakWeekKey;
+
+            // Show pending indicator on current week if streak is active but not extended yet
+            const isStreakPending = isCurrentWeek && streakInfo.streak > 0 && !streakInfo.currentWeekHasWorkout;
+
             return (
               <View key={weekIdx} style={styles.weekRow}>
                 <View style={styles.daysRow}>
@@ -337,7 +442,6 @@ export default function DashboardScreen({ navigation }) {
                     const isFutureDay = day && day.date > today;
                     const workoutTypes = day?.workoutTypes || [];
                     const primaryColor = workoutTypes.length > 0 ? getWorkoutColor(workoutTypes[0]) : null;
-                    const workoutCount = day?.workoutCount || 0;
 
                     return (
                       <Pressable
@@ -391,15 +495,17 @@ export default function DashboardScreen({ navigation }) {
 
                 {/* Week Indicator */}
                 <View style={styles.weekIndicator}>
-                  {isCurrentWeek && weekStreak > 0 ? (
+                  {isStreakWeek ? (
                     <View style={[styles.streakBadge, { backgroundColor: themeColors.streakDim, borderColor: themeColors.streak }]}>
                       <Flame
                         size={14}
                         color={themeColors.streak}
                         strokeWidth={2.5}
                       />
-                      <Text style={[styles.streakBadgeNumber, { color: themeColors.streak }]}>{weekStreak}</Text>
+                      <Text style={[styles.streakBadgeNumber, { color: themeColors.streak }]}>{streakInfo.streak}</Text>
                     </View>
+                  ) : isStreakPending ? (
+                    <View style={[styles.weekCirclePending, { borderColor: themeColors.streak }]} />
                   ) : hasWorkoutThisWeek ? (
                     <View style={[styles.weekCircleFilled, { backgroundColor: themeColors.streak }]} />
                   ) : (
@@ -410,7 +516,6 @@ export default function DashboardScreen({ navigation }) {
             );
           })}
 
-          {/* Legend */}
           {/* Monthly Stats Footer */}
           {!viewedMonthStats.isFuture && (
             <View style={[styles.calendarFooter, { borderTopColor: themeColors.surface.border }]}>
@@ -421,13 +526,13 @@ export default function DashboardScreen({ navigation }) {
               <View style={[styles.calendarStatsDivider, { backgroundColor: themeColors.surface.border }]} />
               <View style={[
                 styles.calendarChangeBadge,
-                { backgroundColor: isPositiveChange ? themeColors.successDim : themeColors.errorDim }
+                { backgroundColor: viewedMonthStats.change >= 0 ? themeColors.successDim : themeColors.errorDim }
               ]}>
                 <Text style={[
                   styles.calendarChangeBadgeText,
-                  { color: isPositiveChange ? themeColors.success : themeColors.error }
+                  { color: viewedMonthStats.change >= 0 ? themeColors.success : themeColors.error }
                 ]}>
-                  {isPositiveChange ? '+' : ''}{viewedMonthStats.change} vs last month
+                  {viewedMonthStats.change >= 0 ? '+' : ''}{viewedMonthStats.change} vs this time last month
                 </Text>
               </View>
             </View>
@@ -448,6 +553,71 @@ export default function DashboardScreen({ navigation }) {
               ))}
           </View>
         </View>
+
+        {/* Log Weight Button - shows when no weight logged today */}
+        {!hasLoggedWeightToday && (
+          <Pressable
+            style={[styles.logWeightButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
+            onPress={() => setShowWeightModal(true)}
+          >
+            <Scale size={18} color={themeColors.tertiary.primary} strokeWidth={2} />
+            <Text style={[styles.logWeightText, { color: themeColors.text.primary }]}>Log Weight</Text>
+            <ArrowRight size={16} color={themeColors.text.tertiary} strokeWidth={2} />
+          </Pressable>
+        )}
+
+        {/* Weekly Goals Progress */}
+        {weeklyGoals.length > 0 && (
+          <View style={[styles.weeklyGoalsCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+            <View style={styles.weeklyGoalsHeader}>
+              <Target size={18} color={themeColors.accent.primary} strokeWidth={2} />
+              <Text style={[styles.weeklyGoalsTitle, { color: themeColors.text.primary }]}>Weekly Goals</Text>
+            </View>
+            {weeklyGoals.map((goal, index) => {
+              const current = getGoalProgress(goal);
+              const target = goal.target;
+              const progress = Math.min(current / target, 1);
+              const isComplete = current >= target;
+
+              return (
+                <View key={goal.id || index} style={styles.goalRow}>
+                  <View style={styles.goalInfo}>
+                    <View style={styles.goalLabelRow}>
+                      {isComplete && (
+                        <View style={[styles.goalCheckbox, { backgroundColor: themeColors.success }]}>
+                          <Check size={10} color={themeColors.text.inverse} strokeWidth={3} />
+                        </View>
+                      )}
+                      <Text style={[
+                        styles.goalLabel,
+                        { color: isComplete ? themeColors.success : themeColors.text.secondary }
+                      ]}>
+                        {getGoalLabel(goal)}
+                      </Text>
+                    </View>
+                    <Text style={[
+                      styles.goalCount,
+                      { color: isComplete ? themeColors.success : themeColors.text.primary }
+                    ]}>
+                      {current}/{target}
+                    </Text>
+                  </View>
+                  <View style={[styles.goalProgressBar, { backgroundColor: themeColors.background.elevated }]}>
+                    <View
+                      style={[
+                        styles.goalProgressFill,
+                        {
+                          width: `${progress * 100}%`,
+                          backgroundColor: isComplete ? themeColors.success : themeColors.accent.primary,
+                        }
+                      ]}
+                    />
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
 
         {/* Continue Workout Card - shows when there's an unsaved workout */}
         {inProgressWorkout && (
@@ -487,7 +657,7 @@ export default function DashboardScreen({ navigation }) {
               <View style={[styles.todayWorkoutIcon, { backgroundColor: themeColors.accent.primaryDim }]}>
                 <Play size={18} color={themeColors.accent.primary} strokeWidth={2.5} fill={themeColors.accent.primary} />
               </View>
-              <Text style={[styles.todayWorkoutTitle, { color: themeColors.accent.primary }]}>TODAY'S WORKOUT</Text>
+              <Text style={[styles.todayWorkoutTitle, { color: themeColors.accent.primary }]}>{"TODAY'S WORKOUT"}</Text>
             </View>
 
             {todayPlannedWorkouts.map((workout, index) => (
@@ -508,7 +678,6 @@ export default function DashboardScreen({ navigation }) {
                     <Text style={[styles.todayWorkoutName, { color: themeColors.text.primary }]}>{workout.name}</Text>
                     <Text style={[styles.todayWorkoutMeta, { color: themeColors.text.tertiary }]}>
                       {workout.workoutType}
-                      {workout.exercises?.length > 0 && ` • ${workout.exercises.length} exercises`}
                     </Text>
                   </View>
                 </View>
@@ -593,6 +762,69 @@ export default function DashboardScreen({ navigation }) {
           </SafeAreaView>
         </Modal>
       )}
+
+      {/* Weight Log Modal */}
+      <Modal
+        visible={showWeightModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowWeightModal(false)}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.weightModalOverlay}
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={[styles.weightModalContent, { backgroundColor: themeColors.background.secondary }]}>
+                <View style={styles.weightModalHeader}>
+                  <Text style={[styles.weightModalTitle, { color: themeColors.text.primary }]}>Log Weight</Text>
+                  <Pressable onPress={() => setShowWeightModal(false)}>
+                    <X size={24} color={themeColors.text.tertiary} />
+                  </Pressable>
+                </View>
+
+                <Text style={[styles.weightModalDate, { color: themeColors.text.tertiary }]}>
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </Text>
+
+                <View style={styles.weightModalInputRow}>
+                  <TextInput
+                    style={[styles.weightModalInput, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border, color: themeColors.text.primary }]}
+                    placeholder="0.0"
+                    placeholderTextColor={themeColors.text.tertiary}
+                    value={weightInput}
+                    onChangeText={setWeightInput}
+                    keyboardType="decimal-pad"
+                    autoFocus
+                  />
+                  <Text style={[styles.weightModalUnit, { color: themeColors.text.secondary }]}>lbs</Text>
+                </View>
+
+                <View style={styles.weightModalButtons}>
+                  <Pressable
+                    style={[styles.weightModalCancel, { backgroundColor: themeColors.surface.card }]}
+                    onPress={() => {
+                      setShowWeightModal(false);
+                      setWeightInput('');
+                    }}
+                  >
+                    <Text style={[styles.weightModalCancelText, { color: themeColors.text.secondary }]}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.weightModalSave, { backgroundColor: themeColors.accent.primary, opacity: weightInput ? 1 : 0.5 }]}
+                    onPress={submitWeight}
+                    disabled={isSubmittingWeight || !weightInput}
+                  >
+                    <Check size={18} color={themeColors.text.inverse} strokeWidth={2.5} />
+                    <Text style={[styles.weightModalSaveText, { color: themeColors.text.inverse }]}>Save</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
+      </Modal>
     </ScrollView>
   );
 }
@@ -742,6 +974,13 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: COLORS.secondary.primary,
   },
+  weekCirclePending: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    backgroundColor: 'transparent',
+  },
   streakBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -795,22 +1034,10 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xs,
     borderRadius: RADIUS.md,
   },
-  calendarChangeBadgePositive: {
-    backgroundColor: COLORS.successDim,
-  },
-  calendarChangeBadgeNegative: {
-    backgroundColor: COLORS.errorDim,
-  },
   calendarChangeBadgeText: {
     ...TYPOGRAPHY.caption,
     fontSize: 11,
     fontWeight: '700',
-  },
-  calendarChangeBadgeTextPositive: {
-    color: COLORS.success,
-  },
-  calendarChangeBadgeTextNegative: {
-    color: COLORS.error,
   },
 
   legend: {
@@ -1085,6 +1312,166 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
   },
   continueButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.inverse,
+  },
+
+  // Log Weight Button
+  logWeightButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  logWeightText: {
+    flex: 1,
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.primary,
+  },
+
+  // Weekly Goals Card
+  weeklyGoalsCard: {
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  weeklyGoalsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  weeklyGoalsTitle: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
+  },
+  goalRow: {
+    marginBottom: SPACING.md,
+  },
+  goalInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  goalLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  goalCheckbox: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalLabel: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
+  },
+  goalCount: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 13,
+    color: COLORS.text.primary,
+  },
+  goalProgressBar: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.background.elevated,
+    overflow: 'hidden',
+  },
+  goalProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: COLORS.accent.primary,
+  },
+
+  // Weight Modal
+  weightModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: SPACING.xl,
+  },
+  weightModalContent: {
+    width: '100%',
+    backgroundColor: COLORS.background.secondary,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+  },
+  weightModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  weightModalTitle: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.text.primary,
+  },
+  weightModalDate: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    marginBottom: SPACING.lg,
+  },
+  weightModalInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  weightModalInput: {
+    flex: 1,
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.md,
+    ...TYPOGRAPHY.h2,
+    color: COLORS.text.primary,
+    textAlign: 'center',
+  },
+  weightModalUnit: {
+    ...TYPOGRAPHY.h4,
+    color: COLORS.text.secondary,
+  },
+  weightModalButtons: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  weightModalCancel: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+  },
+  weightModalCancelText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.secondary,
+  },
+  weightModalSave: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accent.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    gap: SPACING.xs,
+  },
+  weightModalSaveText: {
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.text.inverse,
   },

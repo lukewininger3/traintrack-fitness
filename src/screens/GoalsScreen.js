@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Calendar, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, Edit3, Plus, Scale, Search, Target, Trash2, X } from 'lucide-react-native';
+import { Activity, BookOpen, Calendar, Check, ChevronLeft, ChevronRight, Clock, Copy, Dumbbell, Edit3, Plus, Save, Scale, Search, Target, Trash2, X } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -28,11 +28,15 @@ import {
   formatWeekRange,
   DAY_NAMES,
   updateGoalProgress,
-  GOAL_PRESETS,
   addPlannedWorkout,
   removePlannedWorkout,
   updatePlannedWorkout,
   getDateFromDayOfWeek,
+  copyLastWeekPlan,
+  saveWeeklyPlanTemplate,
+  loadWeeklyPlanTemplates,
+  applyWeeklyPlanTemplate,
+  deleteWeeklyPlanTemplate,
 } from '../utils/goalsStorage';
 import WeeklyPlanCard from '../components/WeeklyPlanCard';
 import WorkoutProgressRing from '../components/WorkoutProgressRing';
@@ -41,6 +45,7 @@ import {
   addWeightEntry,
   deleteWeightEntry,
   setWeightGoal,
+  clearWeightGoal,
   calculateWeightProgress,
   formatWeight,
 } from '../utils/weightStorage';
@@ -81,6 +86,9 @@ export default function GoalsScreen() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [customExercises, setCustomExercises] = useState([]);
   const [editingWorkout, setEditingWorkout] = useState(null); // For editing existing planned workout
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templates, setTemplates] = useState([]);
+  const [templateName, setTemplateName] = useState('');
 
   // Refs for scroll behavior
   const planScrollViewRef = useRef(null);
@@ -142,6 +150,10 @@ export default function GoalsScreen() {
       // Load weight data
       const weight = await loadWeightData();
       setWeightData(weight);
+
+      // Load templates
+      const savedTemplates = await loadWeeklyPlanTemplates();
+      setTemplates(savedTemplates);
     } catch (error) {
       console.error('Error loading goals data:', error);
     }
@@ -154,9 +166,14 @@ export default function GoalsScreen() {
   );
 
   const navigateWeek = (direction) => {
-    const current = new Date(weekStart);
+    // Parse as local date to avoid timezone issues
+    const [year, month, day] = weekStart.split('-').map(Number);
+    const current = new Date(year, month - 1, day);
     current.setDate(current.getDate() + (direction * 7));
-    setWeekStart(current.toISOString().split('T')[0]);
+    const newYear = current.getFullYear();
+    const newMonth = String(current.getMonth() + 1).padStart(2, '0');
+    const newDay = String(current.getDate()).padStart(2, '0');
+    setWeekStart(`${newYear}-${newMonth}-${newDay}`);
   };
 
   const handleAddGoal = async () => {
@@ -426,6 +443,81 @@ export default function GoalsScreen() {
     setTargetWeight('');
   };
 
+  const handleDeleteWeightGoal = () => {
+    Alert.alert(
+      'Delete Weight Goal',
+      'Are you sure you want to delete your weight goal? Your weight history will be kept.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await clearWeightGoal();
+            await loadData();
+          },
+        },
+      ]
+    );
+  };
+
+  // Copy last week's plan
+  const handleCopyLastWeek = async () => {
+    const result = await copyLastWeekPlan(weekStart);
+    if (result.success) {
+      Alert.alert('Plan Copied', `Copied ${result.count} workouts from last week`);
+      await loadData();
+    } else {
+      Alert.alert('No Plan Found', 'No planned workouts found for last week');
+    }
+  };
+
+  // Save current plan as template
+  const handleSaveTemplate = async () => {
+    if (!templateName.trim()) {
+      Alert.alert('Name Required', 'Please enter a name for this template');
+      return;
+    }
+    if (!goals?.plannedWorkouts?.length) {
+      Alert.alert('No Workouts', 'Add some planned workouts before saving as a template');
+      return;
+    }
+    const result = await saveWeeklyPlanTemplate(templateName.trim(), goals.plannedWorkouts);
+    if (result.success) {
+      Alert.alert('Template Saved', `"${templateName}" has been saved`);
+      setTemplateName('');
+      setShowTemplateModal(false);
+      await loadData();
+    }
+  };
+
+  // Apply a template
+  const handleApplyTemplate = async (template) => {
+    Alert.alert(
+      'Apply Template',
+      `This will replace your current weekly plan with "${template.name}". Continue?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Apply',
+          onPress: async () => {
+            const result = await applyWeeklyPlanTemplate(template, weekStart);
+            if (result.success) {
+              setShowTemplateModal(false);
+              await loadData();
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Delete a template
+  const handleDeleteTemplate = async (templateId) => {
+    await deleteWeeklyPlanTemplate(templateId);
+    await loadData();
+  };
+
   const weightProgress = weightData ? calculateWeightProgress(weightData) : null;
 
   // Get all planned workouts for a specific day (supports multiple)
@@ -463,6 +555,24 @@ export default function GoalsScreen() {
 
         {/* Weekly Plan */}
         <View style={styles.section}>
+          {/* Plan Actions */}
+          <View style={styles.planActionsRow}>
+            <Pressable
+              style={[styles.planActionButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
+              onPress={handleCopyLastWeek}
+            >
+              <Copy size={14} color={themeColors.accent.primary} strokeWidth={2} />
+              <Text style={[styles.planActionText, { color: themeColors.accent.primary }]}>Copy Last Week</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.planActionButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
+              onPress={() => setShowTemplateModal(true)}
+            >
+              <BookOpen size={14} color={themeColors.accent.primary} strokeWidth={2} />
+              <Text style={[styles.planActionText, { color: themeColors.accent.primary }]}>Templates</Text>
+            </Pressable>
+          </View>
+
           <WeeklyPlanCard
             weekStart={weekStart}
             getPlannedForDay={getPlannedForDay}
@@ -549,57 +659,115 @@ export default function GoalsScreen() {
             )}
           </View>
 
-          {weightProgress ? (
-            <Pressable style={styles.weightCard} onPress={() => setShowWeightHistory(true)}>
-              <View style={styles.weightHeader}>
-                <View style={styles.weightCurrent}>
-                  <Text style={styles.weightValue}>
-                    {formatWeight(weightProgress.currentWeight, weightData?.settings?.unit || 'lbs')}
+          {weightProgress ? (() => {
+            // Determine if user is going in the right direction
+            const startWeight = weightProgress.startWeight ?? weightData?.goal?.startWeight;
+            const currentWeight = weightProgress.currentWeight;
+            const hasStartWeight = startWeight !== undefined && startWeight !== null;
+            const actualChange = hasStartWeight ? currentWeight - startWeight : 0;
+            const isLosingWeight = actualChange < 0;
+            const isGainingWeight = actualChange > 0;
+            const goalDirection = weightProgress.direction;
+
+            // Determine if going right/wrong direction based on goal
+            let isRightDirection = false;
+            let isWrongDirection = false;
+            if (hasStartWeight && actualChange !== 0) {
+              if (goalDirection === 'lose') {
+                isRightDirection = isLosingWeight;
+                isWrongDirection = isGainingWeight;
+              } else if (goalDirection === 'gain') {
+                isRightDirection = isGainingWeight;
+                isWrongDirection = isLosingWeight;
+              }
+              // For 'maintain', neither direction is right/wrong
+            }
+
+            const progressColor = weightProgress.isComplete
+              ? themeColors.success
+              : isRightDirection
+                ? themeColors.success
+                : isWrongDirection
+                  ? themeColors.error
+                  : themeColors.text.secondary;
+
+            // Show actual change direction in text
+            const changeText = !hasStartWeight || actualChange === 0
+              ? 'No change yet'
+              : `${Math.abs(actualChange).toFixed(1)} ${weightData?.settings?.unit || 'lbs'} ${isLosingWeight ? 'lost' : 'gained'}`;
+
+            return (
+              <View style={[styles.weightCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+                <View style={styles.weightHeader}>
+                  <View style={styles.weightCurrent}>
+                    <Text style={[styles.weightValue, { color: themeColors.text.primary }]}>
+                      {formatWeight(weightProgress.currentWeight, weightData?.settings?.unit || 'lbs')}
+                    </Text>
+                    <Text style={[styles.weightLabel, { color: themeColors.text.tertiary }]}>CURRENT</Text>
+                  </View>
+                  <View style={styles.weightArrow}>
+                    <Text style={[styles.weightArrowText, { color: themeColors.text.tertiary }]}>→</Text>
+                  </View>
+                  <View style={styles.weightTarget}>
+                    <Text style={[styles.weightValue, { color: themeColors.text.primary }]}>
+                      {formatWeight(weightProgress.targetWeight, weightData?.settings?.unit || 'lbs')}
+                    </Text>
+                    <Text style={[styles.weightLabel, { color: themeColors.text.tertiary }]}>GOAL</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.weightProgressBar, { backgroundColor: themeColors.surface.border }]}>
+                  <View
+                    style={[
+                      styles.weightProgressFill,
+                      { width: `${weightProgress.progress}%`, backgroundColor: progressColor },
+                    ]}
+                  />
+                </View>
+
+                <View style={styles.weightStats}>
+                  <Text style={[styles.weightStat, { color: progressColor }]}>
+                    {changeText}
                   </Text>
-                  <Text style={styles.weightLabel}>CURRENT</Text>
-                </View>
-                <View style={styles.weightArrow}>
-                  <Text style={styles.weightArrowText}>→</Text>
-                </View>
-                <View style={styles.weightTarget}>
-                  <Text style={styles.weightValue}>
-                    {formatWeight(weightProgress.targetWeight, weightData?.settings?.unit || 'lbs')}
+                  <Text style={[styles.weightStat, { color: themeColors.text.secondary }]}>
+                    {weightProgress.remaining.toFixed(1)} {weightData?.settings?.unit || 'lbs'} to go
                   </Text>
-                  <Text style={styles.weightLabel}>GOAL</Text>
+                </View>
+
+                <View style={styles.weightCardActions}>
+                  <Pressable onPress={() => setShowWeightEntry(true)} style={[styles.logWeightButton, { backgroundColor: themeColors.accent.primaryDim }]}>
+                    <Scale size={16} color={themeColors.accent.primary} />
+                    <Text style={[styles.logWeightText, { color: themeColors.accent.primary }]}>Log Weight</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setShowWeightHistory(true)} style={[styles.viewHistoryButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+                    <Clock size={16} color={themeColors.text.secondary} />
+                    <Text style={[styles.viewHistoryText, { color: themeColors.text.tertiary }]}>History</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.weightGoalActions}>
+                  <Pressable
+                    onPress={() => {
+                      setTargetWeight(weightData.goal.targetWeight?.toString() || '');
+                      setWeightDirection(weightData.goal.direction || 'lose');
+                      setShowWeightGoal(true);
+                    }}
+                    style={[styles.weightGoalActionButton, { borderColor: themeColors.surface.border }]}
+                  >
+                    <Edit3 size={14} color={themeColors.text.secondary} />
+                    <Text style={[styles.weightGoalActionText, { color: themeColors.text.secondary }]}>Edit Goal</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleDeleteWeightGoal}
+                    style={[styles.weightGoalActionButton, { borderColor: themeColors.surface.border }]}
+                  >
+                    <Trash2 size={14} color={themeColors.error} />
+                    <Text style={[styles.weightGoalActionText, { color: themeColors.error }]}>Delete Goal</Text>
+                  </Pressable>
                 </View>
               </View>
-
-              <View style={styles.weightProgressBar}>
-                <View
-                  style={[
-                    styles.weightProgressFill,
-                    { width: `${weightProgress.progress}%` },
-                    weightProgress.isComplete && styles.weightProgressComplete,
-                  ]}
-                />
-              </View>
-
-              <View style={styles.weightStats}>
-                <Text style={styles.weightStat}>
-                  {weightProgress.changed.toFixed(1)} {weightData?.settings?.unit || 'lbs'} {weightProgress.direction === 'lose' ? 'lost' : 'gained'}
-                </Text>
-                <Text style={styles.weightStat}>
-                  {weightProgress.remaining.toFixed(1)} {weightData?.settings?.unit || 'lbs'} to go
-                </Text>
-              </View>
-
-              <View style={styles.weightCardActions}>
-                <Pressable onPress={() => setShowWeightEntry(true)} style={[styles.logWeightButton, { backgroundColor: themeColors.accent.primaryDim }]}>
-                  <Scale size={16} color={themeColors.accent.primary} />
-                  <Text style={[styles.logWeightText, { color: themeColors.accent.primary }]}>Log Weight</Text>
-                </Pressable>
-                <Pressable onPress={() => setShowWeightHistory(true)} style={[styles.viewHistoryButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
-                  <Clock size={16} color={themeColors.text.secondary} />
-                  <Text style={[styles.viewHistoryText, { color: themeColors.text.tertiary }]}>History</Text>
-                </Pressable>
-              </View>
-            </Pressable>
-          ) : weightData?.entries?.length > 0 ? (
+            );
+          })() : weightData?.entries?.length > 0 ? (
             <Pressable style={[styles.weightCardNoGoal, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]} onPress={() => setShowWeightHistory(true)}>
               <Text style={[styles.currentWeightLabel, { color: themeColors.text.tertiary }]}>Current Weight</Text>
               <Text style={[styles.currentWeightValue, { color: themeColors.text.primary }]}>
@@ -610,9 +778,16 @@ export default function GoalsScreen() {
                   <Plus size={14} color={themeColors.accent.primary} />
                   <Text style={[styles.weightActionText, { color: themeColors.accent.primary }]}>Log</Text>
                 </Pressable>
-                <Pressable onPress={() => setShowWeightGoal(true)} style={[styles.weightActionButton, { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }]}>
+                <Pressable onPress={() => {
+                  // Pre-populate with current goal values
+                  if (weightData?.goal) {
+                    setTargetWeight(weightData.goal.targetWeight?.toString() || '');
+                    setWeightDirection(weightData.goal.direction || 'lose');
+                  }
+                  setShowWeightGoal(true);
+                }} style={[styles.weightActionButton, { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }]}>
                   <Target size={14} color={themeColors.accent.primary} />
-                  <Text style={[styles.weightActionText, { color: themeColors.accent.primary }]}>Set Goal</Text>
+                  <Text style={[styles.weightActionText, { color: themeColors.accent.primary }]}>{weightData?.goal ? 'Edit Goal' : 'Set Goal'}</Text>
                 </Pressable>
                 <Pressable onPress={() => setShowWeightHistory(true)} style={[styles.weightActionButton, { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }]}>
                   <Clock size={14} color={themeColors.accent.primary} />
@@ -628,21 +803,6 @@ export default function GoalsScreen() {
             </Pressable>
           )}
         </View>
-
-        {/* Planned Workouts */}
-        <Pressable
-          style={[styles.programsCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
-          onPress={() => router.push('/planned-workouts')}
-        >
-          <View style={[styles.programsCardIcon, { backgroundColor: themeColors.accent.primaryDim }]}>
-            <Calendar size={20} color={themeColors.accent.primary} strokeWidth={2} />
-          </View>
-          <View style={styles.programsCardInfo}>
-            <Text style={[styles.programsCardTitle, { color: themeColors.text.primary }]}>Planned Workouts</Text>
-            <Text style={[styles.programsCardSubtitle, { color: themeColors.text.tertiary }]}>View your weekly workout schedule</Text>
-          </View>
-          <ChevronRight size={18} color={themeColors.text.tertiary} strokeWidth={2} />
-        </Pressable>
 
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -730,24 +890,7 @@ export default function GoalsScreen() {
                   onSubmitEditing={Keyboard.dismiss}
                 />
 
-                <Text style={styles.presetLabel}>PRESETS</Text>
-                <View style={styles.presets}>
-                  {GOAL_PRESETS.slice(0, 4).map((preset, index) => (
-                    <Pressable
-                      key={index}
-                      style={styles.presetButton}
-                      onPress={() => {
-                        setNewGoalType(preset.type);
-                        setNewGoalTarget(preset.target.toString());
-                        if (preset.workoutType) setNewGoalWorkoutType(preset.workoutType);
-                      }}
-                    >
-                      <Text style={styles.presetText}>{preset.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-
-                <Pressable onPress={handleAddGoal} style={styles.modalButton}>
+                <Pressable onPress={handleAddGoal} style={[styles.modalButton, { marginTop: SPACING.lg }]}>
                   <Text style={styles.modalButtonText}>Add Goal</Text>
                 </Pressable>
               </View>
@@ -1421,6 +1564,87 @@ export default function GoalsScreen() {
           </View>
         </SafeAreaView>
       </Modal>
+
+      {/* Templates Modal */}
+      <Modal
+        visible={showTemplateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTemplateModal(false)}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalOverlay}
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>WEEKLY PLAN TEMPLATES</Text>
+                  <Pressable onPress={() => setShowTemplateModal(false)}>
+                    <X size={24} color={themeColors.text.primary} />
+                  </Pressable>
+                </View>
+
+                {/* Save Current Plan */}
+                {goals?.plannedWorkouts?.length > 0 && (
+                  <View style={styles.templateSaveSection}>
+                    <Text style={[styles.inputLabel, { marginBottom: SPACING.xs }]}>SAVE CURRENT PLAN</Text>
+                    <View style={styles.templateSaveRow}>
+                      <TextInput
+                        style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                        value={templateName}
+                        onChangeText={setTemplateName}
+                        placeholder="Template name"
+                        placeholderTextColor={themeColors.text.tertiary}
+                      />
+                      <Pressable
+                        onPress={handleSaveTemplate}
+                        style={[styles.templateSaveButton, { backgroundColor: themeColors.accent.primary }]}
+                      >
+                        <Save size={18} color={themeColors.text.inverse} strokeWidth={2} />
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+
+                {/* Saved Templates */}
+                <Text style={[styles.inputLabel, { marginTop: SPACING.md }]}>SAVED TEMPLATES</Text>
+                <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+                  {templates.length > 0 ? (
+                    templates.map((template) => (
+                      <View key={template.id} style={[styles.templateItem, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+                        <Pressable
+                          style={styles.templateInfo}
+                          onPress={() => handleApplyTemplate(template)}
+                        >
+                          <Text style={[styles.templateName, { color: themeColors.text.primary }]}>{template.name}</Text>
+                          <Text style={[styles.templateMeta, { color: themeColors.text.tertiary }]}>
+                            {template.workouts.length} workout{template.workouts.length !== 1 ? 's' : ''}
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => handleDeleteTemplate(template.id)}
+                          hitSlop={8}
+                        >
+                          <Trash2 size={16} color={themeColors.text.tertiary} />
+                        </Pressable>
+                      </View>
+                    ))
+                  ) : (
+                    <View style={styles.templateEmpty}>
+                      <BookOpen size={24} color={themeColors.text.tertiary} />
+                      <Text style={[styles.templateEmptyText, { color: themeColors.text.tertiary }]}>
+                        No templates saved yet
+                      </Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -1772,6 +1996,28 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.accent.primary,
   },
+  weightGoalActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+    paddingTop: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surface.border,
+  },
+  weightGoalActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+  },
+  weightGoalActionText: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '600',
+  },
 
   // Modal
   modalOverlay: {
@@ -1785,7 +2031,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     backgroundColor: COLORS.background.secondary,
     borderRadius: RADIUS.xl,
-    padding: SPACING.xl,
+    padding: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.surface.border,
   },
@@ -1793,7 +2039,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.md,
   },
   modalTitle: {
     ...TYPOGRAPHY.label,
@@ -1843,7 +2089,7 @@ const styles = StyleSheet.create({
   presetLabel: {
     ...TYPOGRAPHY.label,
     color: COLORS.text.tertiary,
-    marginTop: SPACING.xl,
+    marginTop: SPACING.md,
     marginBottom: SPACING.sm,
   },
   presets: {
@@ -2503,35 +2749,70 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Programs Card
-  programsCard: {
+  // Plan Actions Row
+  planActionsRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  planActionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface.card,
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
-    borderColor: COLORS.surface.border,
-    padding: SPACING.lg,
-    gap: SPACING.md,
-  },
-  programsCardIcon: {
-    width: 40,
-    height: 40,
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.sm,
     borderRadius: RADIUS.md,
-    backgroundColor: COLORS.accent.primaryDim,
+    borderWidth: 1,
+  },
+  planActionText: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '600',
+  },
+
+  // Template Modal
+  templateSaveSection: {
+    marginBottom: SPACING.md,
+  },
+  templateSaveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  templateSaveButton: {
+    width: 44,
+    height: 44,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  programsCardInfo: {
+  templateItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginBottom: SPACING.sm,
+  },
+  templateInfo: {
     flex: 1,
+    marginRight: SPACING.md,
   },
-  programsCardTitle: {
+  templateName: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.text.primary,
   },
-  programsCardSubtitle: {
+  templateMeta: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
     marginTop: 2,
+  },
+  templateEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xl,
+    gap: SPACING.sm,
+  },
+  templateEmptyText: {
+    ...TYPOGRAPHY.body,
   },
 });

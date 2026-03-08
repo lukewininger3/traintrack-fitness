@@ -1,4 +1,4 @@
-import { ChevronDown, Search, TrendingUp, X, ArrowUp, ArrowDown, Zap, Dumbbell, Trophy, Weight } from 'lucide-react-native';
+import { ChevronDown, Search, TrendingUp, X, ArrowUp, ArrowDown, Zap, Dumbbell, Trophy, Weight, Scale } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import Svg, { Circle, G, Line, Path, Polyline, Text as SvgText } from 'react-native-svg';
 import { EXERCISE_DATABASE } from '../constants/workoutTypes';
 import { loadWorkouts } from '../utils/storage';
+import { loadWeightData } from '../utils/weightStorage';
 import { calculateOneRepMax } from '../utils/personalRecords';
 import { getCurrentWeekStats } from '../utils/weeklyRecap';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
@@ -55,8 +56,12 @@ export default function ProgressScreen() {
     daysThisMonth: 0,
     daysPassed: 0,
     totalWorkoutsThisMonth: 0,
+    lastMonthSamePoint: 0,
   });
   const [weeklyStats, setWeeklyStats] = useState(null);
+  const [weightData, setWeightData] = useState({ entries: [], goalWeight: null });
+  const [weightTooltip, setWeightTooltip] = useState(null);
+  const [isTouchingWeightChart, setIsTouchingWeightChart] = useState(false);
   const scrollViewRef = useRef(null);
 
   useFocusEffect(
@@ -89,15 +94,34 @@ export default function ProgressScreen() {
         return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       }));
 
+      // Calculate last month's active days at the same point in time
+      const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+      const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+      const workoutsLastMonth = (data || []).filter(w => {
+        const workoutDate = new Date(w.date);
+        return workoutDate.getMonth() === lastMonth &&
+               workoutDate.getFullYear() === lastMonthYear &&
+               workoutDate.getDate() <= dayOfMonth; // Only count up to same day
+      });
+      const lastMonthUniqueDays = new Set(workoutsLastMonth.map(w => {
+        const d = new Date(w.date);
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      }));
+
       setConsistencyStats({
         daysThisMonth: uniqueDays.size,
         daysPassed: dayOfMonth,
         totalWorkoutsThisMonth: workoutsThisMonth.length,
+        lastMonthSamePoint: lastMonthUniqueDays.size,
       });
 
       // Load weekly stats
       const weekStats = await getCurrentWeekStats();
       setWeeklyStats(weekStats);
+
+      // Load weight data
+      const weight = await loadWeightData();
+      setWeightData(weight);
 
       // Calculate strength progression
       calculateSessionProgression(data || []);
@@ -306,6 +330,71 @@ export default function ProgressScreen() {
     });
   }, [chartData, chartMetrics]);
 
+  // Weight chart data - last 30 days
+  const weightChartData = useMemo(() => {
+    if (!weightData.entries || weightData.entries.length === 0) return { points: [], metrics: null };
+
+    // Get last 30 days of entries
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const recentEntries = weightData.entries
+      .filter(e => new Date(e.date) >= thirtyDaysAgo)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    if (recentEntries.length === 0) return { points: [], metrics: null };
+
+    const weights = recentEntries.map(e => e.weight);
+    const maxWeight = Math.max(...weights);
+    const minWeight = Math.min(...weights);
+    const range = maxWeight - minWeight;
+    const padding = range < 5 ? 2.5 : range * 0.1;
+
+    const chartWidth = CHART_WIDTH - 90;
+    const chartHeight = 140;
+    const paddingTop = 15;
+    const paddingBottom = 35;
+    const paddingLeft = 40;
+
+    const xScale = recentEntries.length === 1 ? 0 : chartWidth / (recentEntries.length - 1);
+    const yScale = (chartHeight - paddingTop - paddingBottom) / (maxWeight - minWeight + padding * 2);
+
+    const points = recentEntries.map((entry, index) => {
+      const x = recentEntries.length === 1
+        ? paddingLeft + chartWidth / 2
+        : paddingLeft + index * xScale;
+      const y = paddingTop + (chartHeight - paddingTop - paddingBottom) -
+                (entry.weight - minWeight + padding) * yScale;
+      return {
+        x,
+        y,
+        weight: entry.weight,
+        date: entry.date,
+      };
+    });
+
+    // Calculate stats
+    const currentWeight = recentEntries[recentEntries.length - 1].weight;
+    const firstWeight = recentEntries[0].weight;
+    const change = currentWeight - firstWeight;
+
+    return {
+      points,
+      metrics: {
+        chartWidth: chartWidth + paddingLeft + 45,
+        chartHeight,
+        minWeight: minWeight - padding,
+        maxWeight: maxWeight + padding,
+        paddingTop,
+        paddingBottom,
+        paddingLeft,
+        currentWeight,
+        change,
+        goalWeight: weightData.goalWeight,
+      },
+    };
+  }, [weightData]);
+
   const handlePointPress = (point, event) => {
     const { locationX, locationY } = event.nativeEvent;
     setTooltipData({
@@ -510,49 +599,258 @@ export default function ProgressScreen() {
         </Animated.View>
       )}
 
-      {/* Consistency Stats Card */}
-      <Animated.View entering={FadeIn.duration(300)} style={[styles.card, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
-        <View style={styles.consistencyHeader}>
-          <Calendar size={18} color={themeColors.accent.primary} strokeWidth={2.5} />
-          <Text style={[styles.cardTitle, { color: themeColors.text.primary }]}>MONTHLY CONSISTENCY</Text>
+      {/* Monthly Consistency Card */}
+      <Animated.View entering={FadeIn.duration(300).delay(50)} style={[styles.cardCompact, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+        <View style={styles.consistencyHeaderCompact}>
+          <View style={styles.consistencyHeaderLeft}>
+            <Calendar size={16} color={themeColors.accent.primary} strokeWidth={2.5} />
+            <Text style={[styles.cardTitleSmall, { color: themeColors.text.primary }]}>MONTHLY CONSISTENCY</Text>
+          </View>
+          {(() => {
+            const change = consistencyStats.daysThisMonth - consistencyStats.lastMonthSamePoint;
+            const isPositive = change >= 0;
+            return (
+              <View style={[
+                styles.consistencyChangeBadge,
+                { backgroundColor: isPositive ? themeColors.successDim : themeColors.errorDim }
+              ]}>
+                {change !== 0 && (
+                  isPositive ? (
+                    <ArrowUp size={10} color={themeColors.success} strokeWidth={3} />
+                  ) : (
+                    <ArrowDown size={10} color={themeColors.error} strokeWidth={3} />
+                  )
+                )}
+                <Text style={[
+                  styles.consistencyChangeText,
+                  { color: isPositive ? themeColors.success : themeColors.error }
+                ]}>
+                  {change >= 0 ? '+' : ''}{change} vs last month
+                </Text>
+              </View>
+            );
+          })()}
         </View>
-        <Text style={[styles.cardSubtitle, { color: themeColors.text.tertiary }]}>Active days this month so far</Text>
-
-        <View style={styles.consistencyContent}>
-          <View style={styles.consistencyMain}>
-            <Text style={[styles.consistencyPercent, { color: themeColors.accent.primary }]}>{consistencyPercent}%</Text>
-            <Text style={[styles.consistencyLabel, { color: themeColors.text.tertiary }]}>of days active</Text>
-          </View>
-          <View style={[styles.consistencyDivider, { backgroundColor: themeColors.surface.border }]} />
-          <View style={styles.consistencyDetail}>
-            <View style={styles.consistencyRow}>
-              <Text style={[styles.consistencyDetailLabel, { color: themeColors.text.tertiary }]}>Active days</Text>
-              <Text style={[styles.consistencyDetailValue, { color: themeColors.text.primary }]}>{consistencyStats.daysThisMonth}</Text>
-            </View>
-            <View style={styles.consistencyRow}>
-              <Text style={[styles.consistencyDetailLabel, { color: themeColors.text.tertiary }]}>Days passed</Text>
-              <Text style={[styles.consistencyDetailValue, { color: themeColors.text.primary }]}>{consistencyStats.daysPassed}</Text>
-            </View>
-            <View style={styles.consistencyRow}>
-              <Text style={[styles.consistencyDetailLabel, { color: themeColors.text.tertiary }]}>Total workouts</Text>
-              <Text style={[styles.consistencyDetailValue, { color: themeColors.text.primary }]}>{consistencyStats.totalWorkoutsThisMonth}</Text>
-            </View>
-          </View>
+        <View style={styles.consistencyStatsRow}>
+          <Text style={[styles.consistencyMainStat, { color: themeColors.accent.primary }]}>
+            {consistencyStats.daysThisMonth}/{consistencyStats.daysPassed}
+          </Text>
+          <Text style={[styles.consistencyMainLabel, { color: themeColors.text.tertiary }]}>days active</Text>
+          <Text style={[styles.consistencyPercent, { color: themeColors.text.secondary }]}>
+            ({consistencyPercent}%)
+          </Text>
         </View>
-
-        {/* Progress bar */}
-        <View style={styles.progressBarContainer}>
-          <View style={[styles.progressBarTrack, { backgroundColor: themeColors.surface.border }]}>
-            <View style={[styles.progressBarFill, { width: `${Math.min(consistencyPercent, 100)}%`, backgroundColor: themeColors.accent.primary }]} />
-          </View>
+        <View style={[styles.progressBarTrackSmall, { backgroundColor: themeColors.surface.border }]}>
+          <View style={[styles.progressBarFillSmall, { width: `${Math.min(consistencyPercent, 100)}%`, backgroundColor: themeColors.accent.primary }]} />
         </View>
       </Animated.View>
+
+      {/* Weight Progress Card */}
+      {weightChartData.points.length > 0 && (
+        <Animated.View entering={FadeIn.duration(300).delay(50)} style={[styles.card, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+          <View style={styles.weightHeader}>
+            <View style={styles.weightHeaderLeft}>
+              <Scale size={18} color={themeColors.tertiary.primary} strokeWidth={2} />
+              <Text style={[styles.cardTitle, { color: themeColors.text.primary }]}>WEIGHT PROGRESS</Text>
+            </View>
+            {weightChartData.metrics && (
+              <View style={[
+                styles.weightChangeBadge,
+                { backgroundColor: weightChartData.metrics.change <= 0 ? themeColors.successDim : themeColors.errorDim }
+              ]}>
+                {weightChartData.metrics.change !== 0 && (
+                  weightChartData.metrics.change < 0 ? (
+                    <ArrowDown size={12} color={themeColors.success} strokeWidth={3} />
+                  ) : (
+                    <ArrowUp size={12} color={themeColors.error} strokeWidth={3} />
+                  )
+                )}
+                <Text style={[
+                  styles.weightChangeText,
+                  { color: weightChartData.metrics.change <= 0 ? themeColors.success : themeColors.error }
+                ]}>
+                  {weightChartData.metrics.change > 0 ? '+' : ''}{weightChartData.metrics.change.toFixed(1)} lbs
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Current weight display */}
+          {weightChartData.metrics && (
+            <View style={styles.weightCurrentRow}>
+              <Text style={[styles.weightCurrentLabel, { color: themeColors.text.tertiary }]}>Current</Text>
+              <Text style={[styles.weightCurrentValue, { color: themeColors.text.primary }]}>
+                {weightChartData.metrics.currentWeight} lbs
+              </Text>
+              {weightChartData.metrics.goalWeight && (
+                <>
+                  <Text style={[styles.weightGoalDivider, { color: themeColors.text.tertiary }]}>•</Text>
+                  <Text style={[styles.weightGoalLabel, { color: themeColors.text.tertiary }]}>Goal</Text>
+                  <Text style={[styles.weightGoalValue, { color: themeColors.tertiary.primary }]}>
+                    {weightChartData.metrics.goalWeight} lbs
+                  </Text>
+                </>
+              )}
+            </View>
+          )}
+
+          {/* Weight Chart */}
+          <View
+            style={[styles.weightChartWrapper, { backgroundColor: themeColors.background.primary }]}
+            onStartShouldSetResponder={() => {
+              setIsTouchingWeightChart(true);
+              return true;
+            }}
+            onMoveShouldSetResponder={() => true}
+            onResponderGrant={(e) => {
+              const { locationX, locationY } = e.nativeEvent;
+              const closest = weightChartData.points.reduce((prev, curr) => {
+                const prevDist = Math.sqrt(Math.pow(locationX - prev.x, 2) + Math.pow(locationY - prev.y, 2));
+                const currDist = Math.sqrt(Math.pow(locationX - curr.x, 2) + Math.pow(locationY - curr.y, 2));
+                return currDist < prevDist ? curr : prev;
+              });
+              if (closest) setWeightTooltip(closest);
+            }}
+            onResponderMove={(e) => {
+              if (!isTouchingWeightChart) return;
+              const { locationX, locationY } = e.nativeEvent;
+              const closest = weightChartData.points.reduce((prev, curr) => {
+                const prevDist = Math.sqrt(Math.pow(locationX - prev.x, 2) + Math.pow(locationY - prev.y, 2));
+                const currDist = Math.sqrt(Math.pow(locationX - curr.x, 2) + Math.pow(locationY - curr.y, 2));
+                return currDist < prevDist ? curr : prev;
+              });
+              if (closest) setWeightTooltip(closest);
+            }}
+            onResponderRelease={() => {
+              setIsTouchingWeightChart(false);
+              setWeightTooltip(null);
+            }}
+            onResponderTerminate={() => {
+              setIsTouchingWeightChart(false);
+              setWeightTooltip(null);
+            }}
+          >
+            <Svg width={weightChartData.metrics.chartWidth} height={weightChartData.metrics.chartHeight} pointerEvents="none">
+              {/* Grid lines */}
+              {[0, 1, 2].map(i => {
+                const y = weightChartData.metrics.paddingTop +
+                         ((weightChartData.metrics.chartHeight - weightChartData.metrics.paddingTop - weightChartData.metrics.paddingBottom) / 2) * i;
+                return (
+                  <Line
+                    key={`weight-grid-${i}`}
+                    x1={weightChartData.metrics.paddingLeft}
+                    y1={y}
+                    x2={weightChartData.metrics.chartWidth - 45}
+                    y2={y}
+                    stroke={themeColors.surface.border}
+                    strokeWidth="1"
+                    strokeDasharray="4,4"
+                  />
+                );
+              })}
+
+              {/* Y-axis labels */}
+              {[0, 1, 2].map(i => {
+                const weight = weightChartData.metrics.maxWeight -
+                              (weightChartData.metrics.maxWeight - weightChartData.metrics.minWeight) * (i / 2);
+                const y = weightChartData.metrics.paddingTop +
+                         ((weightChartData.metrics.chartHeight - weightChartData.metrics.paddingTop - weightChartData.metrics.paddingBottom) / 2) * i;
+                return (
+                  <SvgText
+                    key={`weight-y-${i}`}
+                    x={weightChartData.metrics.paddingLeft - 10}
+                    y={y + 4}
+                    fontSize="10"
+                    fill={themeColors.text.tertiary}
+                    textAnchor="end"
+                    fontWeight="600"
+                  >
+                    {Math.round(weight)}
+                  </SvgText>
+                );
+              })}
+
+              {/* Line */}
+              {weightChartData.points.length > 1 && (
+                <Polyline
+                  points={weightChartData.points.map(p => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke={themeColors.tertiary.primary}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+
+              {/* Data points */}
+              {weightChartData.points.map((point, index) => (
+                <Circle
+                  key={`weight-point-${index}`}
+                  cx={point.x}
+                  cy={point.y}
+                  r="5"
+                  fill={themeColors.tertiary.primary}
+                  stroke={themeColors.background.primary}
+                  strokeWidth="2"
+                />
+              ))}
+
+              {/* X-axis date labels */}
+              {weightChartData.points.map((point, index) => {
+                // Show first, last, and middle dates
+                const showLabel = index === 0 ||
+                                  index === weightChartData.points.length - 1 ||
+                                  (weightChartData.points.length > 2 && index === Math.floor(weightChartData.points.length / 2));
+                if (!showLabel) return null;
+                const date = new Date(point.date);
+                const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+                return (
+                  <SvgText
+                    key={`weight-x-${index}`}
+                    x={point.x}
+                    y={weightChartData.metrics.chartHeight - 10}
+                    fontSize="10"
+                    fill={themeColors.text.tertiary}
+                    textAnchor="middle"
+                    fontWeight="600"
+                  >
+                    {dateStr}
+                  </SvgText>
+                );
+              })}
+            </Svg>
+
+            {/* Tooltip */}
+            {weightTooltip && (
+              <View
+                style={[
+                  styles.weightTooltip,
+                  {
+                    left: Math.max(10, Math.min(weightTooltip.x - 50, weightChartData.metrics.chartWidth - 110)),
+                    top: weightTooltip.y - 55,
+                    backgroundColor: themeColors.background.secondary,
+                    borderColor: themeColors.tertiary.primary,
+                  }
+                ]}
+              >
+                <Text style={[styles.weightTooltipDate, { color: themeColors.tertiary.primary }]}>
+                  {new Date(weightTooltip.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </Text>
+                <Text style={[styles.weightTooltipValue, { color: themeColors.text.primary }]}>
+                  {weightTooltip.weight} lbs
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <Text style={[styles.hintText, { color: themeColors.text.tertiary }]}>Last 30 days • Touch to see details</Text>
+        </Animated.View>
+      )}
 
       {/* Strength Gains Card */}
       {strengthProgression.topGainers.length > 0 && (
         <Animated.View entering={FadeIn.duration(300).delay(100)} style={[styles.card, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
-          <Text style={[styles.cardTitle, { color: themeColors.text.primary }]}>STRENGTH GAINS</Text>
-          <Text style={[styles.cardSubtitle, { color: themeColors.text.tertiary }]}>Recent weight increases</Text>
+          <Text style={[styles.cardTitle, { color: themeColors.text.primary, marginBottom: SPACING.sm }]}>STRENGTH GAINS</Text>
 
           <View style={styles.gainsList}>
             {strengthProgression.topGainers.map((exercise, idx) => (
@@ -576,8 +874,7 @@ export default function ProgressScreen() {
       {/* Declining Exercises Card */}
       {strengthProgression.declining.length > 0 && (
         <Animated.View entering={FadeIn.duration(300).delay(200)} style={[styles.card, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
-          <Text style={[styles.cardTitle, { color: themeColors.text.primary }]}>NEEDS ATTENTION</Text>
-          <Text style={[styles.cardSubtitle, { color: themeColors.text.tertiary }]}>Weight decreases to monitor</Text>
+          <Text style={[styles.cardTitle, { color: themeColors.text.primary, marginBottom: SPACING.sm }]}>NEEDS ATTENTION</Text>
 
           <View style={styles.gainsList}>
             {strengthProgression.declining.map((exercise, idx) => (
@@ -915,7 +1212,7 @@ export default function ProgressScreen() {
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
-        scrollEnabled={!isTouchingChart}
+        scrollEnabled={!isTouchingChart && !isTouchingWeightChart}
         nestedScrollEnabled={false}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
@@ -1095,19 +1392,31 @@ const styles = StyleSheet.create({
 
   // Analytics View
   analyticsContainer: {
-    gap: SPACING.lg,
+    gap: SPACING.sm,
   },
   card: {
     backgroundColor: COLORS.surface.card,
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.surface.border,
-    padding: SPACING.lg,
+    padding: SPACING.md,
+  },
+  cardCompact: {
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.md,
   },
   cardTitle: {
     ...TYPOGRAPHY.label,
     color: COLORS.text.primary,
-    marginBottom: 4,
+    marginBottom: 2,
+  },
+  cardTitleSmall: {
+    ...TYPOGRAPHY.label,
+    fontSize: 10,
+    color: COLORS.text.primary,
   },
   cardSubtitle: {
     ...TYPOGRAPHY.caption,
@@ -1120,12 +1429,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
   weeklyIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: 'rgba(255, 214, 0, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1136,7 +1445,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   weeklyStatsGrid: {
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
   weeklyStatsRow: {
     flexDirection: 'row',
@@ -1145,39 +1454,39 @@ const styles = StyleSheet.create({
   weeklyStatsRowDivider: {
     height: 1,
     backgroundColor: COLORS.surface.border,
-    marginVertical: SPACING.md,
+    marginVertical: SPACING.sm,
   },
   weeklyStatItem: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.xs,
   },
   weeklyStatValue: {
     ...TYPOGRAPHY.statMedium,
     color: COLORS.text.primary,
-    fontSize: 28,
+    fontSize: 24,
   },
   weeklyStatLabel: {
     ...TYPOGRAPHY.label,
     fontSize: 9,
     color: COLORS.text.tertiary,
-    marginTop: 4,
+    marginTop: 2,
   },
   weeklyStatDivider: {
     width: 1,
-    height: 40,
+    height: 32,
     backgroundColor: COLORS.surface.border,
   },
   exerciseTypeSection: {
     backgroundColor: COLORS.background.elevated,
     borderRadius: RADIUS.md,
-    padding: SPACING.md,
+    padding: SPACING.sm,
   },
   exerciseTypeTitle: {
     ...TYPOGRAPHY.label,
     fontSize: 9,
     color: COLORS.text.tertiary,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   exerciseTypeBar: {
     flexDirection: 'row',
@@ -1204,16 +1513,16 @@ const styles = StyleSheet.create({
   pieChartContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.lg,
+    gap: SPACING.md,
   },
   pieChartLegend: {
     flex: 1,
-    gap: SPACING.xs,
+    gap: 2,
   },
   pieChartLegendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: SPACING.xs,
   },
   pieChartLegendText: {
     ...TYPOGRAPHY.caption,
@@ -1222,7 +1531,7 @@ const styles = StyleSheet.create({
   },
   pieChartLegendCount: {
     ...TYPOGRAPHY.bodyBold,
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.text.primary,
   },
   exerciseTypeLegendItem: {
@@ -1241,56 +1550,142 @@ const styles = StyleSheet.create({
     color: COLORS.text.secondary,
   },
 
-  // Consistency Card
-  consistencyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: 4,
-  },
-  consistencyContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  consistencyMain: {
-    alignItems: 'center',
-    paddingRight: SPACING.lg,
-  },
-  consistencyPercent: {
-    ...TYPOGRAPHY.h1,
-    fontSize: 48,
-    color: COLORS.accent.primary,
-    lineHeight: 52,
-  },
-  consistencyLabel: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.text.tertiary,
-  },
-  consistencyDivider: {
-    width: 1,
-    height: 60,
-    backgroundColor: COLORS.surface.border,
-    marginHorizontal: SPACING.md,
-  },
-  consistencyDetail: {
-    flex: 1,
-    gap: SPACING.sm,
-  },
-  consistencyRow: {
+  // Weight Progress Card
+  weightHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: SPACING.xs,
   },
-  consistencyDetailLabel: {
+  weightHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  weightChangeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.md,
+  },
+  weightChangeText: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '700',
+  },
+  weightCurrentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
+  weightCurrentLabel: {
     ...TYPOGRAPHY.caption,
     color: COLORS.text.tertiary,
   },
-  consistencyDetailValue: {
+  weightCurrentValue: {
     ...TYPOGRAPHY.bodyBold,
+    fontSize: 16,
     color: COLORS.text.primary,
   },
-  progressBarContainer: {
-    marginTop: SPACING.lg,
+  weightGoalDivider: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+    marginHorizontal: SPACING.xs,
+  },
+  weightGoalLabel: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.tertiary,
+  },
+  weightGoalValue: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 14,
+    color: COLORS.tertiary.primary,
+  },
+  weightChartWrapper: {
+    borderRadius: RADIUS.md,
+    padding: SPACING.sm,
+    position: 'relative',
+  },
+  weightTooltip: {
+    position: 'absolute',
+    backgroundColor: COLORS.background.secondary,
+    borderRadius: RADIUS.md,
+    padding: SPACING.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    minWidth: 80,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 1000,
+  },
+  weightTooltipDate: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  weightTooltipValue: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 14,
+  },
+
+  // Consistency Card
+  consistencyHeaderCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  consistencyHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  consistencyChangeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.md,
+  },
+  consistencyChangeText: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  consistencyStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  consistencyMainStat: {
+    ...TYPOGRAPHY.h2,
+    fontSize: 28,
+    color: COLORS.accent.primary,
+  },
+  consistencyMainLabel: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.tertiary,
+  },
+  consistencyPercent: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 14,
+    color: COLORS.text.secondary,
+  },
+  progressBarTrackSmall: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFillSmall: {
+    height: '100%',
+    borderRadius: 3,
   },
   progressBarTrack: {
     height: 6,
@@ -1304,7 +1699,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   gainsList: {
-    gap: SPACING.sm,
+    gap: SPACING.xs,
   },
   gainRow: {
     flexDirection: 'row',
@@ -1312,11 +1707,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: COLORS.background.elevated,
     borderRadius: RADIUS.md,
-    padding: SPACING.md,
+    padding: SPACING.sm,
   },
   gainInfo: {
     flex: 1,
-    marginRight: SPACING.md,
+    marginRight: SPACING.sm,
   },
   gainName: {
     ...TYPOGRAPHY.body,

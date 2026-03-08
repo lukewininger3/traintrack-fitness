@@ -54,6 +54,7 @@ export default function WorkoutBuilderScreen() {
     saveWorkoutData,
     findPreviousSession,
     discardWorkout,
+    flushSave,
   } = useWorkoutForm({ editingWorkoutId, templateId, repeatData, workoutDetails });
 
   // Track previous sessions for each exercise
@@ -81,10 +82,12 @@ export default function WorkoutBuilderScreen() {
     loadPreviousSessions();
   }, [workout.exercises.map(e => e.name).join(',')]);
 
-  // Handle set confirmation - start rest timer and haptic feedback
+  // Handle set confirmation - start rest timer, haptic feedback, and save immediately
   const handleSetConfirmed = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onSetLogged();
+    // Immediately save to prevent data loss on crash
+    flushSave();
   };
 
   const [showExercisePicker, setShowExercisePicker] = useState(false);
