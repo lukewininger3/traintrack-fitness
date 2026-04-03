@@ -929,7 +929,8 @@ export const updateProfileStats = async () => {
       // Get unique weeks with workouts (using Monday as start of week)
       const weeksWithWorkouts = new Set();
       workouts.forEach(w => {
-        const date = new Date(w.date);
+        // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+        const date = new Date(w.date + 'T12:00:00');
         const weekStart = getWeekStart(date);
         weeksWithWorkouts.add(weekStart);
       });

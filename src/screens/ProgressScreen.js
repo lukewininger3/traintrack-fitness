@@ -1,5 +1,6 @@
-import { ChevronDown, Search, TrendingUp, X, ArrowUp, ArrowDown, Zap, Dumbbell, Trophy, Weight, Scale } from 'lucide-react-native';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ChevronDown, TrendingUp, ArrowUp, ArrowDown, Zap, Dumbbell, Trophy, Weight, Scale, Calendar } from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -7,21 +8,17 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
 import Svg, { Circle, G, Line, Path, Polyline, Text as SvgText } from 'react-native-svg';
-import { EXERCISE_DATABASE } from '../constants/workoutTypes';
 import { loadWorkouts } from '../utils/storage';
 import { loadWeightData } from '../utils/weightStorage';
 import { calculateOneRepMax } from '../utils/personalRecords';
 import { getCurrentWeekStats } from '../utils/weeklyRecap';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import { useTheme } from '../contexts/ThemeContext';
-import { Calendar } from 'lucide-react-native';
-import BottomSheet from '../components/ui/BottomSheet';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // Account for content padding (16) + card padding (24) on each side = 80 total
@@ -41,14 +38,12 @@ const formatVolume = (volume) => {
 
 export default function ProgressScreen() {
   const { colors: themeColors } = useTheme();
+  const params = useLocalSearchParams();
   const [workouts, setWorkouts] = useState([]);
   const [exercises, setExercises] = useState({});
   const [selectedExercise, setSelectedExercise] = useState(null);
-  const [showDropdown, setShowDropdown] = useState(false);
   const [tooltipData, setTooltipData] = useState(null);
   const [isTouchingChart, setIsTouchingChart] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeView, setActiveView] = useState('analytics'); // 'analytics' or 'charts'
   const [strengthProgression, setStrengthProgression] = useState({ topGainers: [], declining: [] });
@@ -70,6 +65,23 @@ export default function ProgressScreen() {
     }, [])
   );
 
+  // Handle selected exercise from picker screen
+  useEffect(() => {
+    if (params.selectedChartExercise) {
+      setSelectedExercise(params.selectedChartExercise);
+      setTooltipData(null);
+      // Clear the param to prevent re-triggering
+      router.setParams({ selectedChartExercise: undefined });
+    }
+  }, [params.selectedChartExercise]);
+
+  const openExercisePicker = () => {
+    router.push({
+      pathname: '/exercise-chart-picker',
+      params: { currentExercise: selectedExercise || '' }
+    });
+  };
+
   const loadData = async () => {
     try {
       setIsLoading(true);
@@ -82,15 +94,18 @@ export default function ProgressScreen() {
       const currentYear = now.getFullYear();
       const dayOfMonth = now.getDate();
 
+      // Parse dates with timezone safety (add T12:00:00 to avoid UTC midnight issues)
+      const parseWorkoutDate = (dateStr) => new Date(dateStr + 'T12:00:00');
+
       const workoutsThisMonth = (data || []).filter(w => {
-        const workoutDate = new Date(w.date);
+        const workoutDate = parseWorkoutDate(w.date);
         return workoutDate.getMonth() === currentMonth &&
                workoutDate.getFullYear() === currentYear;
       });
 
       // Count unique workout days this month
       const uniqueDays = new Set(workoutsThisMonth.map(w => {
-        const d = new Date(w.date);
+        const d = parseWorkoutDate(w.date);
         return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       }));
 
@@ -98,13 +113,13 @@ export default function ProgressScreen() {
       const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
       const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
       const workoutsLastMonth = (data || []).filter(w => {
-        const workoutDate = new Date(w.date);
+        const workoutDate = parseWorkoutDate(w.date);
         return workoutDate.getMonth() === lastMonth &&
                workoutDate.getFullYear() === lastMonthYear &&
                workoutDate.getDate() <= dayOfMonth; // Only count up to same day
       });
       const lastMonthUniqueDays = new Set(workoutsLastMonth.map(w => {
-        const d = new Date(w.date);
+        const d = parseWorkoutDate(w.date);
         return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       }));
 
@@ -153,7 +168,7 @@ export default function ProgressScreen() {
 
       Object.keys(exerciseMap).forEach(exerciseName => {
         exerciseMap[exerciseName].sort((a, b) =>
-          new Date(a.date) - new Date(b.date)
+          new Date(a.date + 'T12:00:00') - new Date(b.date + 'T12:00:00')
         );
       });
 
@@ -168,7 +183,7 @@ export default function ProgressScreen() {
 
   const calculateSessionProgression = (workoutsData) => {
     const sortedWorkouts = [...workoutsData].sort((a, b) =>
-      new Date(b.date) - new Date(a.date)
+      new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00')
     );
 
     const exerciseChanges = [];
@@ -224,38 +239,6 @@ export default function ProgressScreen() {
   };
 
   const exerciseList = Object.keys(exercises).sort();
-
-  const filteredExercises = useMemo(() => {
-    let filtered = exerciseList;
-
-    if (selectedCategory) {
-      const categoryExercises = EXERCISE_DATABASE[selectedCategory] || [];
-      filtered = filtered.filter(ex => categoryExercises.includes(ex));
-    }
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(ex =>
-        ex.toLowerCase().includes(query)
-      );
-    }
-
-    return filtered;
-  }, [exerciseList, selectedCategory, searchQuery]);
-
-  const availableCategories = useMemo(() => {
-    // Only show categories that contain exercises the user has actually recorded
-    const categories = new Set();
-    exerciseList.forEach(exercise => {
-      for (const [category, categoryExercises] of Object.entries(EXERCISE_DATABASE)) {
-        if (categoryExercises.includes(exercise)) {
-          categories.add(category);
-          break;
-        }
-      }
-    });
-    return Array.from(categories).sort();
-  }, [exerciseList]);
 
   const chartData = useMemo(() => {
     if (!selectedExercise || !exercises[selectedExercise]) {
@@ -338,9 +321,12 @@ export default function ProgressScreen() {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+    // Parse dates with timezone safety
+    const parseDate = (dateStr) => new Date(dateStr + 'T12:00:00');
+
     const recentEntries = weightData.entries
-      .filter(e => new Date(e.date) >= thirtyDaysAgo)
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
+      .filter(e => parseDate(e.date) >= thirtyDaysAgo)
+      .sort((a, b) => parseDate(a.date) - parseDate(b.date));
 
     if (recentEntries.length === 0) return { points: [], metrics: null };
 
@@ -455,14 +441,6 @@ export default function ProgressScreen() {
   const handleChartPressOut = () => {
     setIsTouchingChart(false);
     setTooltipData(null);
-  };
-
-  const handleExerciseSelect = (exerciseName) => {
-    setSelectedExercise(exerciseName);
-    setShowDropdown(false);
-    setTooltipData(null);
-    setSearchQuery('');
-    setSelectedCategory(null);
   };
 
   // Loading state
@@ -927,7 +905,7 @@ export default function ProgressScreen() {
             <Text style={[styles.label, { color: themeColors.text.secondary }]}>SELECT EXERCISE</Text>
             <Pressable
               style={[styles.dropdown, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
-              onPress={() => setShowDropdown(true)}
+              onPress={openExercisePicker}
             >
               <Text style={[
                 styles.dropdownText,
@@ -1221,125 +1199,6 @@ export default function ProgressScreen() {
           {activeView === 'analytics' ? renderAnalyticsView() : renderChartsView()}
         </View>
       </ScrollView>
-
-      {/* Exercise Picker Bottom Sheet */}
-      <BottomSheet
-        isVisible={showDropdown}
-        onClose={() => {
-          setShowDropdown(false);
-          setSearchQuery('');
-          setSelectedCategory(null);
-        }}
-        height="75%"
-        scrollable={false}
-      >
-        <View style={[styles.modalHeader, { borderBottomColor: themeColors.surface.border }]}>
-          <Text style={[styles.modalTitle, { color: themeColors.text.primary }]}>SELECT EXERCISE</Text>
-          <Pressable
-            onPress={() => {
-              setShowDropdown(false);
-              setSearchQuery('');
-              setSelectedCategory(null);
-            }}
-            style={[styles.modalCloseButton, { backgroundColor: themeColors.surface.card }]}
-          >
-            <X size={20} color={themeColors.text.primary} strokeWidth={2.5} />
-          </Pressable>
-        </View>
-
-        {/* Search Input */}
-        <View style={[styles.searchContainer, { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border }]}>
-          <Search size={18} color={themeColors.text.tertiary} strokeWidth={2} />
-          <TextInput
-            style={[styles.searchInput, { color: themeColors.text.primary }]}
-            placeholder="Search exercises..."
-            placeholderTextColor={themeColors.text.tertiary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery('')} style={styles.clearButton}>
-              <X size={16} color={themeColors.text.tertiary} strokeWidth={2} />
-            </Pressable>
-          )}
-        </View>
-
-        {/* Category Filter */}
-        {availableCategories.length > 0 && (
-          <View style={styles.categoryContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <Pressable
-                style={[
-                  styles.categoryChip,
-                  { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border },
-                  selectedCategory === null && { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }
-                ]}
-                onPress={() => setSelectedCategory(null)}
-              >
-                <Text style={[
-                  styles.categoryChipText,
-                  { color: themeColors.text.secondary },
-                  selectedCategory === null && { color: themeColors.accent.primary }
-                ]}>
-                  All
-                </Text>
-              </Pressable>
-              {availableCategories.map((category) => (
-                <Pressable
-                  key={category}
-                  style={[
-                    styles.categoryChip,
-                    { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border },
-                    selectedCategory === category && { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }
-                  ]}
-                  onPress={() => setSelectedCategory(category)}
-                >
-                  <Text style={[
-                    styles.categoryChipText,
-                    { color: themeColors.text.secondary },
-                    selectedCategory === category && { color: themeColors.accent.primary }
-                  ]}>
-                    {category}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
-          {filteredExercises.length > 0 ? (
-            filteredExercises.map((exerciseName) => (
-              <Pressable
-                key={exerciseName}
-                style={[
-                  styles.modalItem,
-                  { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border },
-                  selectedExercise === exerciseName && { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.surface.borderAccent }
-                ]}
-                onPress={() => handleExerciseSelect(exerciseName)}
-              >
-                <Text style={[
-                  styles.modalItemText,
-                  { color: themeColors.text.primary },
-                  selectedExercise === exerciseName && { color: themeColors.accent.primary }
-                ]}>
-                  {exerciseName}
-                </Text>
-                {selectedExercise === exerciseName && (
-                  <View style={[styles.selectedIndicator, { backgroundColor: themeColors.accent.primary }]} />
-                )}
-              </Pressable>
-            ))
-          ) : (
-            <View style={styles.noResults}>
-              <Text style={[styles.noResultsText, { color: themeColors.text.tertiary }]}>No exercises found</Text>
-            </View>
-          )}
-        </ScrollView>
-      </BottomSheet>
     </View>
   );
 }
@@ -2005,7 +1864,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Exercise Picker Sheet
+  // Exercise Picker Modal
+  exerciseModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  exerciseModalContent: {
+    width: '100%',
+    maxHeight: '75%',
+    minHeight: 400,
+    borderRadius: RADIUS.xl,
+    overflow: 'hidden',
+    flexDirection: 'column',
+  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2019,9 +1893,9 @@ const styles = StyleSheet.create({
     color: COLORS.text.primary,
   },
   modalCloseButton: {
-    width: 36,
-    height: 36,
-    borderRadius: RADIUS.md,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: COLORS.surface.card,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2032,10 +1906,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.background.elevated,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.sm,
     paddingHorizontal: SPACING.md,
     marginHorizontal: SPACING.lg,
-    marginVertical: SPACING.md,
+    marginTop: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.surface.border,
     gap: SPACING.sm,
@@ -2052,8 +1927,8 @@ const styles = StyleSheet.create({
 
   // Categories
   categoryContainer: {
-    marginBottom: SPACING.md,
     paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
   },
   categoryChip: {
     paddingHorizontal: SPACING.md,
@@ -2079,7 +1954,10 @@ const styles = StyleSheet.create({
 
   // Modal List
   modalList: {
-    paddingHorizontal: SPACING.lg,
+    flex: 1,
+    minHeight: 200,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.md,
   },
   modalItem: {
     flexDirection: 'row',

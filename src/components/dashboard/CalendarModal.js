@@ -165,7 +165,8 @@ export default function CalendarModal({ visible, onClose, workouts = [], weekStr
     const firstDay = new Date(calendarYear, calendarMonth, 1);
     const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
     return workouts.filter(w => {
-      const d = new Date(w.date);
+      // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+      const d = new Date(w.date + 'T12:00:00');
       return d >= firstDay && d <= lastDay;
     }).length;
   }, [workouts, calendarMonth, calendarYear]);

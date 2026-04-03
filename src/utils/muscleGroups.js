@@ -221,8 +221,11 @@ export function analyzeMuscleGroupCoverage(workouts, days = 7) {
     };
   });
 
+  // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+  const parseWorkoutDate = (dateStr) => new Date(dateStr + 'T12:00:00');
+
   const recentWorkouts = workouts.filter(w => {
-    const workoutDate = new Date(w.date);
+    const workoutDate = parseWorkoutDate(w.date);
     return workoutDate >= cutoffDate;
   });
 
@@ -231,7 +234,7 @@ export function analyzeMuscleGroupCoverage(workouts, days = 7) {
 
     workout.exercises.forEach(exercise => {
       const muscles = getMuscleGroups(exercise.name);
-      const workoutDate = new Date(workout.date);
+      const workoutDate = parseWorkoutDate(workout.date);
 
       muscles.primary.forEach(muscle => {
         if (muscleData[muscle]) {

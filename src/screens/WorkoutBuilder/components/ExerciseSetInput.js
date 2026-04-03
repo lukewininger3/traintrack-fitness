@@ -3,6 +3,48 @@ import React, { useState, useEffect } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../../theme/design';
 
+// Input validation constraints
+const VALIDATION = {
+  weight: { max: 1500, decimals: 1 },  // Max 1500 lbs
+  reps: { max: 500, decimals: 0 },     // Max 500 reps (integer)
+  distance: { max: 500, decimals: 2 }, // Max 500 miles
+  time: { max: 1440, decimals: 1 },    // Max 24 hours in minutes
+  pace: { max: 60, decimals: 2 },      // Max 60 min/mile pace
+};
+
+/**
+ * Sanitize and validate numeric input
+ * @param {string} value - Raw input value
+ * @param {string} field - Field name for validation rules
+ * @returns {string} Sanitized value
+ */
+const sanitizeInput = (value, field) => {
+  // Remove non-numeric characters except decimal point
+  let sanitized = value.replace(/[^0-9.]/g, '');
+
+  // Ensure only one decimal point
+  const parts = sanitized.split('.');
+  if (parts.length > 2) {
+    sanitized = parts[0] + '.' + parts.slice(1).join('');
+  }
+
+  // Apply max value constraint
+  const config = VALIDATION[field];
+  if (config) {
+    const numValue = parseFloat(sanitized);
+    if (!isNaN(numValue) && numValue > config.max) {
+      sanitized = String(config.max);
+    }
+
+    // Limit decimal places
+    if (parts.length === 2 && parts[1].length > config.decimals) {
+      sanitized = parts[0] + '.' + parts[1].slice(0, config.decimals);
+    }
+  }
+
+  return sanitized;
+};
+
 /**
  * Input fields for a single exercise set
  * @param {number} setNumber - Set number (1-based)
@@ -82,11 +124,12 @@ export default function ExerciseSetInput({
                 <TextInput
                   style={styles.input}
                   value={set.distance}
-                  onChangeText={(text) => onUpdate('distance', text)}
+                  onChangeText={(text) => onUpdate('distance', sanitizeInput(text, 'distance'))}
                   onFocus={onFocus}
                   placeholder="0.0"
                   placeholderTextColor={COLORS.text.tertiary}
                   keyboardType="decimal-pad"
+                  maxLength={6}
                 />
                 <Text style={styles.unitText}>mi</Text>
               </View>
@@ -97,11 +140,12 @@ export default function ExerciseSetInput({
                 <TextInput
                   style={styles.input}
                   value={set.time}
-                  onChangeText={(text) => onUpdate('time', text)}
+                  onChangeText={(text) => onUpdate('time', sanitizeInput(text, 'time'))}
                   onFocus={onFocus}
                   placeholder="0.0"
                   placeholderTextColor={COLORS.text.tertiary}
                   keyboardType="decimal-pad"
+                  maxLength={6}
                 />
                 <Text style={styles.unitText}>min</Text>
               </View>
@@ -112,11 +156,12 @@ export default function ExerciseSetInput({
                 <TextInput
                   style={styles.input}
                   value={set.pace}
-                  onChangeText={(text) => onUpdate('pace', text)}
+                  onChangeText={(text) => onUpdate('pace', sanitizeInput(text, 'pace'))}
                   onFocus={onFocus}
                   placeholder="0.0"
                   placeholderTextColor={COLORS.text.tertiary}
                   keyboardType="decimal-pad"
+                  maxLength={5}
                 />
                 <Text style={styles.unitText}>/mi</Text>
               </View>
@@ -130,11 +175,12 @@ export default function ExerciseSetInput({
                 <TextInput
                   style={styles.input}
                   value={set.weight}
-                  onChangeText={(text) => onUpdate('weight', text)}
+                  onChangeText={(text) => onUpdate('weight', sanitizeInput(text, 'weight'))}
                   onFocus={onFocus}
                   placeholder="0"
                   placeholderTextColor={COLORS.text.tertiary}
                   keyboardType="decimal-pad"
+                  maxLength={6}
                 />
                 <Text style={styles.unitText}>lbs</Text>
               </View>
@@ -144,11 +190,12 @@ export default function ExerciseSetInput({
               <TextInput
                 style={styles.input}
                 value={set.reps}
-                onChangeText={(text) => onUpdate('reps', text)}
+                onChangeText={(text) => onUpdate('reps', sanitizeInput(text, 'reps'))}
                 onFocus={onFocus}
                 placeholder="0"
                 placeholderTextColor={COLORS.text.tertiary}
                 keyboardType="number-pad"
+                maxLength={3}
               />
             </View>
           </>

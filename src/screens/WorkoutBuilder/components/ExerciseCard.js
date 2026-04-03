@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Alert, Image, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
-import { Video, ResizeMode } from 'expo-av';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -199,6 +199,14 @@ export default function ExerciseCard({
   const [pendingFocusSetIndex, setPendingFocusSetIndex] = useState(null);
   const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState(null);
+
+  // Video player for media viewer (expo-video)
+  const videoSource = selectedMedia?.type === 'video' ? selectedMedia.uri : null;
+  const videoPlayer = useVideoPlayer(videoSource, player => {
+    if (player) {
+      player.play();
+    }
+  });
 
   // Refs for weight/distance inputs to enable auto-focus on new sets
   const weightInputRefs = useRef([]);
@@ -715,13 +723,12 @@ export default function ExerciseCard({
             onPress={() => setMediaViewerVisible(false)}
           >
             <View style={[styles.mediaViewerContent, { backgroundColor: themeColors.background.primary }]}>
-              {selectedMedia?.type === 'video' ? (
-                <Video
-                  source={{ uri: selectedMedia.uri }}
+              {selectedMedia?.type === 'video' && videoPlayer ? (
+                <VideoView
+                  player={videoPlayer}
                   style={styles.mediaViewerVideo}
-                  useNativeControls
-                  resizeMode={ResizeMode.CONTAIN}
-                  shouldPlay
+                  contentFit="contain"
+                  nativeControls
                 />
               ) : selectedMedia ? (
                 <Image

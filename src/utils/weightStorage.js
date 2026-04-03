@@ -58,8 +58,9 @@ export const saveWeightData = async (data) => {
  * @param {number} weight - The weight value
  * @param {string} notes - Optional notes
  * @param {Date|string} date - Optional date (defaults to today)
+ * @param {Array} media - Optional array of media objects [{uri, type, id, thumbnail?}]
  */
-export const addWeightEntry = async (weight, notes = '', date = null) => {
+export const addWeightEntry = async (weight, notes = '', date = null, media = []) => {
   try {
     const data = await loadWeightData();
     const entryDate = date ? formatLocalDate(new Date(date)) : formatLocalDate(new Date());
@@ -72,11 +73,16 @@ export const addWeightEntry = async (weight, notes = '', date = null) => {
       date: entryDate,
       weight: parseFloat(weight),
       notes,
+      media: media || [],
       createdAt: new Date().toISOString(),
     };
 
     if (existingIndex >= 0) {
-      // Update existing entry
+      // Update existing entry, preserve existing media if not provided
+      const existingEntry = data.entries[existingIndex];
+      if (!media || media.length === 0) {
+        entry.media = existingEntry.media || [];
+      }
       data.entries[existingIndex] = entry;
     } else {
       // Add new entry

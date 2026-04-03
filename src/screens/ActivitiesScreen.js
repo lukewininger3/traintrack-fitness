@@ -1,6 +1,6 @@
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Activity, Bike, Bookmark, Camera, Dumbbell, Edit2, FileText, LayoutGrid, List, MessageSquare, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react-native';
+import { Activity, Bike, Bookmark, Camera, ClipboardList, Dumbbell, Edit2, FileText, MessageSquare, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, interpolate } from 'react-native-reanimated';
 import {
@@ -15,6 +15,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
@@ -37,8 +38,8 @@ export default function ActivitiesScreen() {
   const [showNewWorkoutSheet, setShowNewWorkoutSheet] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templateName, setTemplateName] = useState('');
-  const [viewMode, setViewMode] = useState('compact'); // 'compact' | 'expanded'
   const [searchQuery, setSearchQuery] = useState('');
+  const [allWorkouts, setAllWorkouts] = useState([]);
   const [showSearch, setShowSearch] = useState(false);
   const lastScrollY = useRef(0);
   const searchHeight = useSharedValue(0);
@@ -69,16 +70,13 @@ export default function ActivitiesScreen() {
     }
   };
 
-  // Handle scroll to hide search
+  // Handle scroll - dismiss keyboard but keep search visible
   const handleScroll = (event) => {
     const currentY = event.nativeEvent.contentOffset.y;
     const scrollingDown = currentY > lastScrollY.current && currentY > 50;
 
     if (scrollingDown && showSearch) {
       Keyboard.dismiss();
-      searchHeight.value = withTiming(0, { duration: 200 });
-      setShowSearch(false);
-      setSearchQuery('');
     }
 
     lastScrollY.current = currentY;
@@ -96,9 +94,12 @@ export default function ActivitiesScreen() {
     }
   }, [isFocused, params.refresh]);
 
+  // Parse workout dates with timezone safety (add T12:00:00 to avoid UTC midnight issues)
+  const parseWorkoutDate = (dateStr) => new Date(dateStr + 'T12:00:00');
+
   // Helper to get week number for a date
   const getWeekNumber = (date) => {
-    const d = new Date(date);
+    const d = parseWorkoutDate(date);
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() - d.getDay()); // Start of week (Sunday)
     return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -106,11 +107,12 @@ export default function ActivitiesScreen() {
 
   const loadData = async () => {
     const data = await loadWorkouts();
-    const sorted = data.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const sorted = data.sort((a, b) => parseWorkoutDate(b.date) - parseWorkoutDate(a.date));
+    setAllWorkouts(sorted);
 
     const grouped = {};
     sorted.forEach((workout, index) => {
-      const date = new Date(workout.date);
+      const date = parseWorkoutDate(workout.date);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const monthName = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' }).toUpperCase();
       const weekKey = getWeekNumber(workout.date);
@@ -130,12 +132,17 @@ export default function ActivitiesScreen() {
     });
 
     const sectionsArray = Object.values(grouped).sort((a, b) => {
-      const dateA = new Date(a.data[0].date);
-      const dateB = new Date(b.data[0].date);
+      const dateA = parseWorkoutDate(a.data[0].date);
+      const dateB = parseWorkoutDate(b.data[0].date);
       return dateB - dateA;
     });
 
     setSections(sectionsArray);
+  };
+
+  const openExerciseHistory = () => {
+    // Navigate to the exercise history screen
+    router.push('/exercise-history');
   };
 
   const getWorkoutIcon = (type) => {
@@ -273,44 +280,13 @@ export default function ActivitiesScreen() {
       <View style={[styles.sectionBadge, { backgroundColor: themeColors.surface.card }]}>
         <Text style={[styles.sectionBadgeText, { color: themeColors.text.tertiary }]}>{data.length}</Text>
       </View>
-      <View style={styles.sectionHeaderSpacer} />
-      <Pressable
-        onPress={toggleSearch}
-        style={[styles.headerButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }, showSearch && { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.accent.primary }]}
-        hitSlop={8}
-      >
-        <Search size={18} color={showSearch ? themeColors.accent.primary : themeColors.text.secondary} strokeWidth={2} />
-      </Pressable>
-      <Pressable
-        style={[styles.headerButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
-        onPress={() => setViewMode(viewMode === 'compact' ? 'expanded' : 'compact')}
-        hitSlop={8}
-      >
-        {viewMode === 'compact' ? (
-          <LayoutGrid size={18} color={themeColors.text.secondary} strokeWidth={2} />
-        ) : (
-          <List size={18} color={themeColors.text.secondary} strokeWidth={2} />
-        )}
-      </Pressable>
     </View>
   );
 
   const renderWorkout = ({ item: workout }) => {
     const Icon = getWorkoutIcon(workout.type);
     const color = getWorkoutColor(workout.type);
-    const isExpanded = viewMode === 'expanded';
-
-    // Calculate workout summary stats
     const exerciseCount = workout.exercises?.length || 0;
-    const totalSets = workout.exercises?.reduce((acc, ex) => acc + (ex.sets?.length || 0), 0) || 0;
-    const totalVolume = workout.exercises?.reduce((acc, ex) => {
-      return acc + (ex.sets || []).reduce((setAcc, set) => {
-        if (set.weight && set.reps) {
-          return setAcc + (set.weight * set.reps);
-        }
-        return setAcc;
-      }, 0);
-    }, 0) || 0;
 
     return (
       <>
@@ -321,13 +297,13 @@ export default function ActivitiesScreen() {
         )}
         <Pressable
           onPress={() => setSelectedWorkout(workout)}
-          style={[styles.workoutCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }, isExpanded && styles.workoutCardExpanded]}
+          style={[styles.workoutCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
           accessibilityLabel={`${workout.name}, ${workout.type}, ${exerciseCount} exercises`}
           accessibilityRole="button"
           accessibilityHint="Opens workout details"
         >
           <View style={[styles.workoutAccent, { backgroundColor: color }]} />
-          <View style={[styles.workoutContent, isExpanded && styles.workoutContentExpanded]}>
+          <View style={styles.workoutContent}>
             <View style={styles.workoutMainRow}>
               <View style={[styles.workoutIconContainer, { backgroundColor: color + '15' }]}>
                 <Icon size={22} color={color} strokeWidth={2.5} />
@@ -359,67 +335,6 @@ export default function ActivitiesScreen() {
                 <Trash2 size={18} color={themeColors.error} strokeWidth={2} />
               </Pressable>
             </View>
-
-            {/* Expanded View - Exercise Summary */}
-            {isExpanded && exerciseCount > 0 && (
-              <View style={[styles.expandedContent, { borderTopColor: themeColors.surface.border }]}>
-                {/* Stats Row */}
-                {totalVolume > 0 && (
-                  <View style={styles.expandedStatsRow}>
-                    <View style={styles.expandedStat}>
-                      <Text style={[styles.expandedStatValue, { color: themeColors.accent.primary }]}>{totalSets}</Text>
-                      <Text style={[styles.expandedStatLabel, { color: themeColors.text.tertiary }]}>sets</Text>
-                    </View>
-                    <View style={[styles.expandedStatDivider, { backgroundColor: themeColors.surface.border }]} />
-                    <View style={styles.expandedStat}>
-                      <Text style={[styles.expandedStatValue, { color: themeColors.accent.primary }]}>
-                        {totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}k` : totalVolume}
-                      </Text>
-                      <Text style={[styles.expandedStatLabel, { color: themeColors.text.tertiary }]}>lbs</Text>
-                    </View>
-                  </View>
-                )}
-
-                {/* Exercise List Preview */}
-                <View style={styles.exercisePreviewList}>
-                  {workout.exercises.slice(0, 4).map((exercise, idx) => {
-                    const sets = exercise.sets || [];
-                    const bestSet = sets.reduce((best, set) => {
-                      if (set.weight && set.reps) {
-                        const volume = set.weight * set.reps;
-                        if (!best || volume > best.volume) {
-                          return { ...set, volume };
-                        }
-                      }
-                      if (set.distance) {
-                        return { distance: set.distance, time: set.time };
-                      }
-                      return best;
-                    }, null);
-
-                    return (
-                      <View key={idx} style={[styles.exercisePreviewItem, { backgroundColor: themeColors.background.elevated }]}>
-                        <Text style={[styles.exercisePreviewName, { color: themeColors.text.primary }]} numberOfLines={1}>
-                          {exercise.name}
-                        </Text>
-                        {bestSet && (
-                          <Text style={[styles.exercisePreviewStats, { color: themeColors.text.secondary }]}>
-                            {bestSet.weight
-                              ? `${bestSet.weight} × ${bestSet.reps}`
-                              : bestSet.distance
-                              ? `${bestSet.distance} mi`
-                              : `${sets.length} sets`}
-                          </Text>
-                        )}
-                      </View>
-                    );
-                  })}
-                  {exerciseCount > 4 && (
-                    <Text style={[styles.moreExercises, { color: themeColors.text.tertiary }]}>+{exerciseCount - 4} more</Text>
-                  )}
-                </View>
-              </View>
-            )}
           </View>
         </Pressable>
       </>
@@ -428,6 +343,27 @@ export default function ActivitiesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background.primary }]}>
+      {/* Fixed Header with Actions */}
+      <View style={[styles.screenHeader, { backgroundColor: themeColors.background.primary }]}>
+        <Text style={[styles.screenHeaderTitle, { color: themeColors.text.primary }]}>ACTIVITIES</Text>
+        <View style={styles.screenHeaderActions}>
+          <Pressable
+            onPress={toggleSearch}
+            style={[styles.headerButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }, showSearch && { backgroundColor: themeColors.accent.primaryDim, borderColor: themeColors.accent.primary }]}
+            hitSlop={8}
+          >
+            <Search size={18} color={showSearch ? themeColors.accent.primary : themeColors.text.secondary} strokeWidth={2} />
+          </Pressable>
+          <Pressable
+            style={[styles.headerButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
+            onPress={openExerciseHistory}
+            hitSlop={8}
+          >
+            <ClipboardList size={18} color={themeColors.text.secondary} strokeWidth={2} />
+          </Pressable>
+        </View>
+      </View>
+
       {/* Animated Search Bar */}
       <Animated.View style={[styles.searchContainerAnimated, searchAnimatedStyle]}>
         <View style={[styles.searchContainer, { backgroundColor: themeColors.background.elevated, borderColor: themeColors.surface.border }]}>
@@ -695,7 +631,7 @@ export default function ActivitiesScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-          </View>
+    </View>
   );
 }
 
@@ -703,6 +639,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background.primary,
+  },
+
+  // Screen Header
+  screenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+  },
+  screenHeaderTitle: {
+    ...TYPOGRAPHY.h3,
+  },
+  screenHeaderActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
   },
 
   // Search
@@ -758,9 +711,6 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     color: COLORS.text.tertiary,
     fontWeight: '700',
-  },
-  sectionHeaderSpacer: {
-    flex: 1,
   },
   headerButton: {
     width: 36,
@@ -1219,5 +1169,274 @@ const styles = StyleSheet.create({
   sheetOptionDescription: {
     ...TYPOGRAPHY.caption,
     color: COLORS.text.tertiary,
+  },
+
+  // Exercise History Modal
+  exerciseHistoryContainer: {
+    flex: 1,
+  },
+  exerciseHistoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.md,
+    borderBottomWidth: 1,
+  },
+  exerciseHistoryTitle: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 18,
+  },
+  exerciseHistoryClose: {
+    padding: SPACING.xs,
+  },
+  exerciseSelectorContainer: {
+    padding: SPACING.lg,
+    paddingBottom: SPACING.sm,
+  },
+  exerciseSelectorLabel: {
+    ...TYPOGRAPHY.label,
+    fontSize: 11,
+    marginBottom: SPACING.sm,
+  },
+  exerciseDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+  },
+  exerciseDropdownText: {
+    ...TYPOGRAPHY.body,
+    flex: 1,
+  },
+  exerciseHistoryContent: {
+    flex: 1,
+    padding: SPACING.lg,
+    paddingTop: 0,
+  },
+  exerciseHistoryEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xl * 2,
+    gap: SPACING.md,
+  },
+  exerciseHistoryEmptyText: {
+    ...TYPOGRAPHY.body,
+    textAlign: 'center',
+  },
+  historyEntry: {
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    marginBottom: SPACING.md,
+    overflow: 'hidden',
+  },
+  historyEntryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: SPACING.md,
+  },
+  historyEntryDate: {
+    ...TYPOGRAPHY.bodyBold,
+  },
+  historyWorkoutName: {
+    ...TYPOGRAPHY.caption,
+    marginTop: 2,
+  },
+  historyEntryTime: {
+    ...TYPOGRAPHY.caption,
+  },
+  historySetsContainer: {
+    paddingHorizontal: SPACING.md,
+  },
+  historySetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+  },
+  historySetNumber: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '600',
+  },
+  historySetData: {
+    ...TYPOGRAPHY.body,
+    fontWeight: '500',
+  },
+  historyNotesContainer: {
+    margin: SPACING.md,
+    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+  },
+  historyNotesLabel: {
+    ...TYPOGRAPHY.label,
+    fontSize: 10,
+    marginBottom: SPACING.xs,
+  },
+  historyNotesText: {
+    ...TYPOGRAPHY.body,
+    fontSize: 13,
+  },
+  historyMediaContainer: {
+    padding: SPACING.md,
+    paddingTop: 0,
+  },
+  historyMediaLabel: {
+    ...TYPOGRAPHY.label,
+    fontSize: 10,
+    marginBottom: SPACING.sm,
+  },
+  historyMediaScroll: {
+    flexDirection: 'row',
+  },
+  historyMediaThumbnail: {
+    width: 70,
+    height: 70,
+    borderRadius: RADIUS.md,
+    marginRight: SPACING.sm,
+    overflow: 'hidden',
+  },
+  historyMediaImage: {
+    width: '100%',
+    height: '100%',
+  },
+  historyMediaPlayOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Exercise Dropdown Modal
+  exerciseDropdownOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  exerciseDropdownContent: {
+    width: '100%',
+    maxHeight: '75%',
+    minHeight: 400,
+    borderRadius: RADIUS.xl,
+    overflow: 'hidden',
+    flexDirection: 'column',
+  },
+  exerciseDropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.lg,
+    borderBottomWidth: 1,
+  },
+  exerciseDropdownTitle: {
+    ...TYPOGRAPHY.label,
+    letterSpacing: 1,
+  },
+  exerciseDropdownCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exerciseSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    padding: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    gap: SPACING.sm,
+  },
+  exerciseSearchInput: {
+    flex: 1,
+    ...TYPOGRAPHY.body,
+    padding: 0,
+  },
+  exerciseSearchClear: {
+    padding: SPACING.xs,
+  },
+  muscleGroupContainer: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+  },
+  muscleGroupChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.lg,
+    marginRight: SPACING.sm,
+    borderWidth: 1,
+  },
+  muscleGroupChipText: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '600',
+  },
+  exerciseDropdownList: {
+    flex: 1,
+    minHeight: 200,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.md,
+  },
+  exerciseDropdownEmptyContainer: {
+    padding: SPACING.xl,
+    alignItems: 'center',
+  },
+  exerciseDropdownEmpty: {
+    ...TYPOGRAPHY.body,
+    textAlign: 'center',
+  },
+  exerciseDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+  },
+  exerciseDropdownItemText: {
+    ...TYPOGRAPHY.body,
+    flex: 1,
+  },
+  exerciseSelectedIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: SPACING.sm,
+  },
+
+  // Media Viewer
+  mediaViewerOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.95)',
+  },
+  mediaViewerImage: {
+    width: '90%',
+    height: '70%',
+    resizeMode: 'contain',
+  },
+  mediaViewerVideo: {
+    width: '90%',
+    height: '70%',
+  },
+  mediaViewerClose: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    padding: SPACING.md,
   },
 });

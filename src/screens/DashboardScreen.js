@@ -1,8 +1,9 @@
-import { Calendar, Check, ChevronLeft, ChevronRight, ChevronRight as ArrowRight, Dumbbell, Activity, Bike, Waves, Flame, Play, RotateCcw, Scale, Target, X } from 'lucide-react-native';
+import { Calendar, Camera, Check, ChevronLeft, ChevronRight, ChevronRight as ArrowRight, ClipboardList, Dumbbell, Activity, Bike, Waves, Flame, Play, RotateCcw, Scale, Target, Trash2, X } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Dimensions,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -12,16 +13,18 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   TouchableWithoutFeedback,
   View
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { getStreakInfo } from '../utils/calculations';
 import { getTodayString, loadWorkouts, loadInProgressWorkout, clearInProgressWorkout } from '../utils/storage';
 import { loadWeeklyGoals, getWeekStart, getWeekEnd, getDateFromDayOfWeek } from '../utils/goalsStorage';
-import { loadWeightData, addWeightEntry } from '../utils/weightStorage';
+import { loadWeightData, addWeightEntry, deleteWeightEntry } from '../utils/weightStorage';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -43,7 +46,13 @@ export default function DashboardScreen({ navigation }) {
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [hasLoggedWeightToday, setHasLoggedWeightToday] = useState(false);
   const [weightInput, setWeightInput] = useState('');
+  const [weightNotes, setWeightNotes] = useState('');
+  const [weightMedia, setWeightMedia] = useState([]);
+  const [weightDate, setWeightDate] = useState(new Date());
   const [isSubmittingWeight, setIsSubmittingWeight] = useState(false);
+  const [showWeightHistory, setShowWeightHistory] = useState(false);
+  const [weightData, setWeightData] = useState({ entries: [], goal: null, settings: { unit: 'lbs' } });
+  const [weightMediaViewer, setWeightMediaViewer] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -84,10 +93,11 @@ export default function DashboardScreen({ navigation }) {
     const savedWorkout = await loadInProgressWorkout();
     setInProgressWorkout(savedWorkout);
 
-    // Check if weight has been logged today
-    const weightData = await loadWeightData();
+    // Load weight data
+    const weightDataResult = await loadWeightData();
+    setWeightData(weightDataResult);
     const today = getTodayString();
-    const hasTodayWeight = weightData.entries.some(e => e.date === today);
+    const hasTodayWeight = weightDataResult.entries.some(e => e.date === today);
     setHasLoggedWeightToday(hasTodayWeight);
   };
 
@@ -100,17 +110,131 @@ export default function DashboardScreen({ navigation }) {
     }
 
     setIsSubmittingWeight(true);
-    const result = await addWeightEntry(weight);
+    const result = await addWeightEntry(weight, weightNotes, weightDate, weightMedia);
     setIsSubmittingWeight(false);
 
     if (result.success) {
       setShowWeightModal(false);
       setHasLoggedWeightToday(true);
       setWeightInput('');
+      setWeightNotes('');
+      setWeightMedia([]);
+      setWeightDate(new Date());
+      // Reload weight data
+      const newWeightData = await loadWeightData();
+      setWeightData(newWeightData);
     } else {
       Alert.alert('Error', 'Failed to save weight. Please try again.');
     }
   };
+
+  // Add photo to weight entry
+  const handleAddWeightPhoto = async () => {
+    Alert.alert(
+      'Add Photo',
+      'Choose an option',
+      [
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission Required', 'Camera permission is needed to take photos.');
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.[0]) {
+              const asset = result.assets[0];
+              setWeightMedia(prev => [...prev, {
+                uri: asset.uri,
+                type: 'image',
+                id: Date.now().toString(),
+              }]);
+            }
+          },
+        },
+        {
+          text: 'Choose from Library',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission Required', 'Photo library permission is needed to select photos.');
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.[0]) {
+              const asset = result.assets[0];
+              setWeightMedia(prev => [...prev, {
+                uri: asset.uri,
+                type: 'image',
+                id: Date.now().toString(),
+              }]);
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleRemoveWeightPhoto = (mediaId) => {
+    setWeightMedia(prev => prev.filter(m => m.id !== mediaId));
+  };
+
+  const handleDeleteWeightEntry = async (entryId) => {
+    Alert.alert(
+      'Delete Entry',
+      'Are you sure you want to delete this weight entry?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteWeightEntry(entryId);
+            const newWeightData = await loadWeightData();
+            setWeightData(newWeightData);
+            // Check if we need to update today's status
+            const today = getTodayString();
+            const hasTodayWeight = newWeightData.entries.some(e => e.date === today);
+            setHasLoggedWeightToday(hasTodayWeight);
+          },
+        },
+      ]
+    );
+  };
+
+  // Format date for weight entry display
+  const formatWeightDate = (dateStr) => {
+    // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+    const date = new Date(dateStr + 'T12:00:00');
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const entryDate = new Date(date);
+    entryDate.setHours(12, 0, 0, 0);
+
+    if (entryDate.getTime() === today.getTime()) return 'Today';
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (entryDate.getTime() === yesterday.getTime()) return 'Yesterday';
+
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  // Check if weight date is today (for navigation)
+  const isWeightDateToday = (() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const compare = new Date(weightDate);
+    compare.setHours(0, 0, 0, 0);
+    return compare >= today;
+  })();
 
   // Calculate stats for the viewed calendar month
   const viewedMonthStats = useMemo(() => {
@@ -141,13 +265,16 @@ export default function DashboardScreen({ navigation }) {
     const prevMonthComparisonDay = Math.min(comparisonDay, prevMonthDays);
     const prevMonthComparisonDate = new Date(calendarYear, calendarMonth - 1, prevMonthComparisonDay);
 
+    // Parse workout dates with timezone safety (add T12:00:00 to avoid UTC midnight issues)
+    const parseWorkoutDate = (dateStr) => new Date(dateStr + 'T12:00:00');
+
     const viewedMonthWorkouts = workouts.filter(w => {
-      const workoutDate = new Date(w.date);
+      const workoutDate = parseWorkoutDate(w.date);
       return workoutDate >= firstDayViewedMonth && workoutDate <= comparisonDateViewedMonth;
     });
 
     const prevMonthWorkouts = workouts.filter(w => {
-      const workoutDate = new Date(w.date);
+      const workoutDate = parseWorkoutDate(w.date);
       return workoutDate >= prevMonthFirst && workoutDate <= prevMonthComparisonDate;
     });
 
@@ -185,16 +312,15 @@ export default function DashboardScreen({ navigation }) {
     return 'Workouts';
   };
 
-  // Calculate progress for a goal based on this week's completed workouts
-  const getGoalProgress = (goal) => {
+  // Memoize this week's workouts for goal progress calculations
+  const thisWeekWorkouts = useMemo(() => {
     const weekStartStr = getWeekStart();
     const weekEndStr = getWeekEnd(weekStartStr);
+    return workouts.filter(w => w.date >= weekStartStr && w.date <= weekEndStr);
+  }, [workouts]);
 
-    // Filter workouts for this week using string comparison (YYYY-MM-DD format)
-    const thisWeekWorkouts = workouts.filter(w => {
-      return w.date >= weekStartStr && w.date <= weekEndStr;
-    });
-
+  // Calculate progress for a goal based on this week's completed workouts
+  const getGoalProgress = useCallback((goal) => {
     if (goal.type === 'count') {
       return thisWeekWorkouts.length;
     } else if (goal.type === 'type_count') {
@@ -204,7 +330,7 @@ export default function DashboardScreen({ navigation }) {
       return uniqueDays.size;
     }
     return 0;
-  };
+  }, [thisWeekWorkouts]);
 
   // Start a planned workout - navigate to workout builder with planned data
   const startPlannedWorkout = (plannedWorkout) => {
@@ -338,7 +464,8 @@ export default function DashboardScreen({ navigation }) {
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const dayWorkouts = workouts.filter(w => w.date === dateStr);
-      const workoutTypes = getWorkoutTypesForDate(dateStr);
+      // Get unique workout types directly from filtered workouts (avoids duplicate filter)
+      const workoutTypes = [...new Set(dayWorkouts.map(w => w.type))];
 
       week.push({
         day,
@@ -554,17 +681,78 @@ export default function DashboardScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Log Weight Button - shows when no weight logged today */}
-        {!hasLoggedWeightToday && (
-          <Pressable
-            style={[styles.logWeightButton, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
-            onPress={() => setShowWeightModal(true)}
-          >
-            <Scale size={18} color={themeColors.tertiary.primary} strokeWidth={2} />
-            <Text style={[styles.logWeightText, { color: themeColors.text.primary }]}>Log Weight</Text>
-            <ArrowRight size={16} color={themeColors.text.tertiary} strokeWidth={2} />
-          </Pressable>
-        )}
+        {/* Weight Tracking Card */}
+        <View style={[styles.weightCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+          <View style={styles.weightCardHeader}>
+            <View style={styles.weightCardTitleRow}>
+              <Scale size={18} color={themeColors.accent.primary} strokeWidth={2} />
+              <Text style={[styles.weightCardTitle, { color: themeColors.text.primary }]}>Weight</Text>
+            </View>
+            <Pressable onPress={() => setShowWeightHistory(true)} hitSlop={8}>
+              <ClipboardList size={20} color={themeColors.text.tertiary} strokeWidth={2} />
+            </Pressable>
+          </View>
+
+          {weightData.entries.length > 0 ? (
+            <View style={styles.weightCardContent}>
+              <Text style={[styles.weightCardValue, { color: themeColors.text.primary }]}>
+                {weightData.entries[0].weight.toFixed(1)}
+              </Text>
+              <Text style={[styles.weightCardUnit, { color: themeColors.text.tertiary }]}>
+                {weightData.settings?.unit || 'lbs'}
+              </Text>
+              {weightData.entries.length > 1 && (() => {
+                const weightChange = weightData.entries[0].weight - weightData.entries[1].weight;
+                const goalDirection = weightData.goal?.direction;
+                // Determine if this change is positive based on goal
+                // - If losing weight: decrease is good
+                // - If gaining weight: increase is good
+                // - If no goal or maintaining: show neutral (use accent color)
+                const isPositiveChange = goalDirection === 'lose'
+                  ? weightChange < 0
+                  : goalDirection === 'gain'
+                    ? weightChange > 0
+                    : null; // No goal = neutral
+
+                const bgColor = isPositiveChange === null
+                  ? themeColors.accent.primaryDim
+                  : isPositiveChange
+                    ? themeColors.successDim
+                    : themeColors.errorDim;
+
+                const textColor = isPositiveChange === null
+                  ? themeColors.accent.primary
+                  : isPositiveChange
+                    ? themeColors.success
+                    : themeColors.error;
+
+                return (
+                  <View style={[styles.weightCardChange, { backgroundColor: bgColor }]}>
+                    <Text style={[styles.weightCardChangeText, { color: textColor }]}>
+                      {weightChange > 0 ? '+' : ''}{weightChange.toFixed(1)}
+                    </Text>
+                  </View>
+                );
+              })()}
+            </View>
+          ) : (
+            <Text style={[styles.weightCardEmpty, { color: themeColors.text.tertiary }]}>No entries yet</Text>
+          )}
+
+          {!hasLoggedWeightToday && (
+            <Pressable
+              style={[styles.weightCardButton, { backgroundColor: themeColors.accent.primaryDim }]}
+              onPress={() => {
+                setWeightDate(new Date());
+                setShowWeightModal(true);
+              }}
+            >
+              <Text style={[styles.weightCardButtonText, { color: themeColors.accent.primary }]}>
+                Log Weight
+              </Text>
+            </Pressable>
+          )}
+        </View>
 
         {/* Weekly Goals Progress */}
         {weeklyGoals.length > 0 && (
@@ -621,19 +809,29 @@ export default function DashboardScreen({ navigation }) {
 
         {/* Continue Workout Card - shows when there's an unsaved workout */}
         {inProgressWorkout && (
-          <View style={[styles.continueWorkoutCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
+          <View style={[
+            styles.continueWorkoutCard,
+            { backgroundColor: themeColors.surface.card, borderColor: inProgressWorkout.isStale ? themeColors.warning : themeColors.surface.border }
+          ]}>
             <View style={styles.continueWorkoutHeader}>
-              <View style={[styles.continueWorkoutIcon, { backgroundColor: themeColors.background.elevated }]}>
-                <RotateCcw size={18} color={themeColors.text.secondary} strokeWidth={2.5} />
+              <View style={[styles.continueWorkoutIcon, { backgroundColor: inProgressWorkout.isStale ? themeColors.warningDim : themeColors.background.elevated }]}>
+                <RotateCcw size={18} color={inProgressWorkout.isStale ? themeColors.warning : themeColors.text.secondary} strokeWidth={2.5} />
               </View>
               <View style={styles.continueWorkoutInfo}>
-                <Text style={[styles.continueWorkoutTitle, { color: themeColors.text.secondary }]}>CONTINUE WORKOUT</Text>
+                <Text style={[styles.continueWorkoutTitle, { color: inProgressWorkout.isStale ? themeColors.warning : themeColors.text.secondary }]}>
+                  {inProgressWorkout.isStale ? 'UNSAVED WORKOUT' : 'CONTINUE WORKOUT'}
+                </Text>
                 <Text style={[styles.continueWorkoutSubtitle, { color: themeColors.text.secondary }]}>
                   {inProgressWorkout.workout?.name || 'Untitled workout'}
                   {inProgressWorkout.workout?.exercises?.length > 0 &&
                     ` • ${inProgressWorkout.workout.exercises.length} exercise${inProgressWorkout.workout.exercises.length !== 1 ? 's' : ''}`
                   }
                 </Text>
+                {inProgressWorkout.isStale && (
+                  <Text style={[styles.continueWorkoutStaleText, { color: themeColors.warning }]}>
+                    Saved {inProgressWorkout.hoursSinceSave}h ago - recover or discard
+                  </Text>
+                )}
               </View>
               <Pressable
                 onPress={discardInProgressWorkout}
@@ -644,7 +842,7 @@ export default function DashboardScreen({ navigation }) {
               </Pressable>
             </View>
             <Pressable style={[styles.continueButton, { backgroundColor: themeColors.accent.primary }]} onPress={continueWorkout}>
-              <Text style={[styles.continueButtonText, { color: themeColors.text.inverse }]}>Continue</Text>
+              <Text style={[styles.continueButtonText, { color: themeColors.text.inverse }]}>{inProgressWorkout.isStale ? 'Recover' : 'Continue'}</Text>
               <ArrowRight size={16} color={themeColors.text.inverse} strokeWidth={2.5} />
             </Pressable>
           </View>
@@ -776,7 +974,7 @@ export default function DashboardScreen({ navigation }) {
             style={styles.weightModalOverlay}
           >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <View style={[styles.weightModalContent, { backgroundColor: themeColors.background.secondary }]}>
+              <ScrollView style={[styles.weightModalContent, { backgroundColor: themeColors.background.secondary }]} showsVerticalScrollIndicator={false}>
                 <View style={styles.weightModalHeader}>
                   <Text style={[styles.weightModalTitle, { color: themeColors.text.primary }]}>Log Weight</Text>
                   <Pressable onPress={() => setShowWeightModal(false)}>
@@ -784,9 +982,38 @@ export default function DashboardScreen({ navigation }) {
                   </Pressable>
                 </View>
 
-                <Text style={[styles.weightModalDate, { color: themeColors.text.tertiary }]}>
-                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                </Text>
+                {/* Date Selector */}
+                <View style={styles.weightDateSelector}>
+                  <Pressable
+                    style={styles.weightDateArrow}
+                    onPress={() => {
+                      const newDate = new Date(weightDate);
+                      newDate.setDate(newDate.getDate() - 1);
+                      setWeightDate(newDate);
+                    }}
+                  >
+                    <ChevronLeft size={20} color={themeColors.text.secondary} />
+                  </Pressable>
+                  <View style={styles.weightDateCenter}>
+                    <Calendar size={16} color={themeColors.accent.primary} strokeWidth={2} />
+                    <Text style={[styles.weightDateText, { color: themeColors.text.primary }]}>
+                      {weightDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={[styles.weightDateArrow, isWeightDateToday && { opacity: 0.3 }]}
+                    onPress={() => {
+                      if (!isWeightDateToday) {
+                        const newDate = new Date(weightDate);
+                        newDate.setDate(newDate.getDate() + 1);
+                        setWeightDate(newDate);
+                      }
+                    }}
+                    disabled={isWeightDateToday}
+                  >
+                    <ChevronRight size={20} color={themeColors.text.secondary} />
+                  </Pressable>
+                </View>
 
                 <View style={styles.weightModalInputRow}>
                   <TextInput
@@ -796,9 +1023,41 @@ export default function DashboardScreen({ navigation }) {
                     value={weightInput}
                     onChangeText={setWeightInput}
                     keyboardType="decimal-pad"
-                    autoFocus
                   />
-                  <Text style={[styles.weightModalUnit, { color: themeColors.text.secondary }]}>lbs</Text>
+                  <Text style={[styles.weightModalUnit, { color: themeColors.text.secondary }]}>{weightData.settings?.unit || 'lbs'}</Text>
+                </View>
+
+                {/* Notes Input */}
+                <Text style={[styles.weightModalLabel, { color: themeColors.text.tertiary }]}>NOTES (OPTIONAL)</Text>
+                <TextInput
+                  style={[styles.weightModalNotesInput, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border, color: themeColors.text.primary }]}
+                  placeholder="How are you feeling?"
+                  placeholderTextColor={themeColors.text.tertiary}
+                  value={weightNotes}
+                  onChangeText={setWeightNotes}
+                  multiline
+                  numberOfLines={2}
+                />
+
+                {/* Photo Section */}
+                <Text style={[styles.weightModalLabel, { color: themeColors.text.tertiary }]}>PHOTO (OPTIONAL)</Text>
+                <View style={styles.weightPhotoContainer}>
+                  {weightMedia.map((media) => (
+                    <Pressable
+                      key={media.id}
+                      onLongPress={() => handleRemoveWeightPhoto(media.id)}
+                      onPress={() => setWeightMediaViewer(media)}
+                      style={styles.weightPhotoThumbnail}
+                    >
+                      <Image source={{ uri: media.uri }} style={styles.weightPhotoImage} />
+                    </Pressable>
+                  ))}
+                  <Pressable
+                    onPress={handleAddWeightPhoto}
+                    style={[styles.weightPhotoAdd, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
+                  >
+                    <Camera size={24} color={themeColors.text.tertiary} strokeWidth={2} />
+                  </Pressable>
                 </View>
 
                 <View style={styles.weightModalButtons}>
@@ -807,6 +1066,8 @@ export default function DashboardScreen({ navigation }) {
                     onPress={() => {
                       setShowWeightModal(false);
                       setWeightInput('');
+                      setWeightNotes('');
+                      setWeightMedia([]);
                     }}
                   >
                     <Text style={[styles.weightModalCancelText, { color: themeColors.text.secondary }]}>Cancel</Text>
@@ -820,10 +1081,132 @@ export default function DashboardScreen({ navigation }) {
                     <Text style={[styles.weightModalSaveText, { color: themeColors.text.inverse }]}>Save</Text>
                   </Pressable>
                 </View>
-              </View>
+              </ScrollView>
             </TouchableWithoutFeedback>
           </KeyboardAvoidingView>
         </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Weight History Modal */}
+      <Modal
+        visible={showWeightHistory}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowWeightHistory(false)}
+      >
+        <View style={[styles.weightHistoryContainer, { backgroundColor: themeColors.background.primary }]}>
+          <View style={[styles.weightHistoryHeader, { borderBottomColor: themeColors.surface.border }]}>
+            <Text style={[styles.weightHistoryTitle, { color: themeColors.text.primary }]}>Weight History</Text>
+            <TouchableOpacity onPress={() => setShowWeightHistory(false)} style={styles.weightHistoryClose}>
+              <X size={24} color={themeColors.text.primary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.weightHistoryContent} showsVerticalScrollIndicator={false}>
+            {weightData.entries.length === 0 ? (
+              <View style={styles.weightHistoryEmpty}>
+                <Scale size={48} color={themeColors.text.tertiary} strokeWidth={1.5} />
+                <Text style={[styles.weightHistoryEmptyText, { color: themeColors.text.tertiary }]}>
+                  No weight entries yet
+                </Text>
+              </View>
+            ) : (
+              weightData.entries.map((entry, index) => (
+                <TouchableOpacity
+                  key={entry.id}
+                  style={[styles.weightHistoryEntry, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
+                  onPress={() => {
+                    if (entry.media && entry.media.length > 0) {
+                      setWeightMediaViewer(entry.media[0]);
+                    }
+                  }}
+                  activeOpacity={entry.media && entry.media.length > 0 ? 0.7 : 1}
+                >
+                  <View style={styles.weightHistoryEntryRow}>
+                    <View style={styles.weightHistoryEntryLeft}>
+                      <Text style={[styles.weightHistoryEntryDate, { color: themeColors.text.primary }]}>
+                        {formatWeightDate(entry.date)}
+                      </Text>
+                      <Text style={[styles.weightHistoryEntryFullDate, { color: themeColors.text.tertiary }]}>
+                        {new Date(entry.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </Text>
+                    </View>
+                    <View style={styles.weightHistoryEntryCenter}>
+                      <Text style={[styles.weightHistoryEntryValue, { color: themeColors.text.primary }]}>
+                        {entry.weight.toFixed(1)}
+                      </Text>
+                      <Text style={[styles.weightHistoryEntryUnit, { color: themeColors.text.tertiary }]}>
+                        {weightData.settings?.unit || 'lbs'}
+                      </Text>
+                      {index < weightData.entries.length - 1 && (
+                        <View style={[
+                          styles.weightHistoryChangeBadge,
+                          { backgroundColor: (entry.weight - weightData.entries[index + 1].weight) <= 0 ? themeColors.successDim : themeColors.errorDim }
+                        ]}>
+                          <Text style={[
+                            styles.weightHistoryChangeText,
+                            { color: (entry.weight - weightData.entries[index + 1].weight) <= 0 ? themeColors.success : themeColors.error }
+                          ]}>
+                            {(entry.weight - weightData.entries[index + 1].weight) > 0 ? '+' : ''}
+                            {(entry.weight - weightData.entries[index + 1].weight).toFixed(1)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.weightHistoryEntryActions}>
+                      {entry.media && entry.media.length > 0 && (
+                        <View style={[styles.weightHistoryPhotoIndicator, { backgroundColor: themeColors.accent.primaryDim }]}>
+                          <Camera size={14} color={themeColors.accent.primary} strokeWidth={2} />
+                        </View>
+                      )}
+                      <TouchableOpacity
+                        onPress={() => handleDeleteWeightEntry(entry.id)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Trash2 size={16} color={themeColors.text.tertiary} strokeWidth={2} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {entry.notes ? (
+                    <View style={[styles.weightHistoryNotes, { backgroundColor: themeColors.background.elevated }]}>
+                      <Text style={[styles.weightHistoryNotesText, { color: themeColors.text.secondary }]}>
+                        {entry.notes}
+                      </Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
+
+          {/* Weight Media Viewer Modal - inside weight history modal */}
+          <Modal
+            visible={!!weightMediaViewer}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setWeightMediaViewer(null)}
+          >
+            <TouchableOpacity
+              style={styles.weightMediaViewerOverlay}
+              activeOpacity={1}
+              onPress={() => setWeightMediaViewer(null)}
+            >
+              {weightMediaViewer && (
+                <Image
+                  source={{ uri: weightMediaViewer.uri }}
+                  style={styles.weightMediaViewerImage}
+                />
+              )}
+              <TouchableOpacity
+                style={styles.weightMediaViewerClose}
+                onPress={() => setWeightMediaViewer(null)}
+              >
+                <X size={28} color="#fff" />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </Modal>
+        </View>
       </Modal>
     </ScrollView>
   );
@@ -1294,6 +1677,11 @@ const styles = StyleSheet.create({
     color: COLORS.text.secondary,
     marginTop: 2,
   },
+  continueWorkoutStaleText: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 11,
+    marginTop: 4,
+  },
   discardButton: {
     width: 32,
     height: 32,
@@ -1474,5 +1862,246 @@ const styles = StyleSheet.create({
   weightModalSaveText: {
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.text.inverse,
+  },
+
+  // Weight Card
+  weightCard: {
+    backgroundColor: COLORS.surface.card,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
+  },
+  weightCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  weightCardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  weightCardTitle: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.text.primary,
+  },
+  weightCardContent: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: SPACING.xs,
+    marginBottom: SPACING.md,
+  },
+  weightCardValue: {
+    ...TYPOGRAPHY.h1,
+    fontSize: 36,
+    color: COLORS.text.primary,
+  },
+  weightCardUnit: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.text.tertiary,
+  },
+  weightCardChange: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+    marginLeft: SPACING.sm,
+  },
+  weightCardChangeText: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '600',
+  },
+  weightCardEmpty: {
+    ...TYPOGRAPHY.body,
+    marginBottom: SPACING.md,
+  },
+  weightCardButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+  },
+  weightCardButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 14,
+  },
+
+  // Weight Modal Enhancements
+  weightDateSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
+    gap: SPACING.md,
+  },
+  weightDateArrow: {
+    padding: SPACING.xs,
+  },
+  weightDateCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  weightDateText: {
+    ...TYPOGRAPHY.body,
+    fontWeight: '500',
+  },
+  weightModalLabel: {
+    ...TYPOGRAPHY.label,
+    fontSize: 11,
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  weightModalNotesInput: {
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    padding: SPACING.sm,
+    ...TYPOGRAPHY.body,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  weightPhotoContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  weightPhotoThumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+  },
+  weightPhotoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  weightPhotoAdd: {
+    width: 60,
+    height: 60,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Weight History Modal
+  weightHistoryContainer: {
+    flex: 1,
+  },
+  weightHistoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+  },
+  weightHistoryTitle: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 18,
+  },
+  weightHistoryClose: {
+    padding: SPACING.xs,
+  },
+  weightHistoryContent: {
+    flex: 1,
+    padding: SPACING.lg,
+  },
+  weightHistoryEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xl * 2,
+    gap: SPACING.md,
+  },
+  weightHistoryEmptyText: {
+    ...TYPOGRAPHY.body,
+  },
+  weightHistoryEntry: {
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    marginBottom: SPACING.sm,
+    padding: SPACING.md,
+  },
+  weightHistoryEntryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  weightHistoryEntryLeft: {
+    flex: 1,
+  },
+  weightHistoryEntryDate: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 14,
+  },
+  weightHistoryEntryFullDate: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  weightHistoryEntryCenter: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginRight: SPACING.md,
+  },
+  weightHistoryEntryValue: {
+    ...TYPOGRAPHY.h4,
+    fontWeight: '700',
+  },
+  weightHistoryEntryUnit: {
+    ...TYPOGRAPHY.caption,
+  },
+  weightHistoryChangeBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+    marginLeft: SPACING.xs,
+  },
+  weightHistoryChangeText: {
+    ...TYPOGRAPHY.caption,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  weightHistoryEntryActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  weightHistoryPhotoIndicator: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weightHistoryNotes: {
+    marginTop: SPACING.sm,
+    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+  },
+  weightHistoryNotesText: {
+    ...TYPOGRAPHY.body,
+    fontSize: 13,
+  },
+  weightMediaViewerOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.95)',
+  },
+  weightMediaViewerImage: {
+    width: '90%',
+    height: '70%',
+    resizeMode: 'contain',
+  },
+  weightMediaViewerClose: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    padding: SPACING.md,
   },
 });

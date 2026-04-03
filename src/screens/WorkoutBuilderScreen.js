@@ -68,6 +68,7 @@ export default function WorkoutBuilderScreen() {
     const loadPreviousSessions = async () => {
       const sessions = {};
       for (const exercise of workout.exercises) {
+        if (!isMountedRef.current) return; // Check mounted before each async call
         if (!previousSessions[exercise.name]) {
           const prevSession = await findPreviousSession(exercise.name);
           if (prevSession) {
@@ -75,7 +76,7 @@ export default function WorkoutBuilderScreen() {
           }
         }
       }
-      if (Object.keys(sessions).length > 0) {
+      if (isMountedRef.current && Object.keys(sessions).length > 0) {
         setPreviousSessions(prev => ({ ...prev, ...sessions }));
       }
     };

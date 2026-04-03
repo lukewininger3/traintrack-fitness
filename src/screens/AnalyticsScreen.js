@@ -79,18 +79,21 @@ export default function AnalyticsScreen() {
     const lastMonthFirst = new Date(currentYear, currentMonth - 1, 1);
     const lastMonthLast = new Date(currentYear, currentMonth, 0);
 
+    // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+    const parseWorkoutDate = (dateStr) => new Date(dateStr + 'T12:00:00');
+
     const thisMonthWorkouts = data.filter(w => {
-      const workoutDate = new Date(w.date);
+      const workoutDate = parseWorkoutDate(w.date);
       return workoutDate >= firstDayThisMonth && workoutDate <= lastDayThisMonth;
     });
 
     const lastMonthWorkouts = data.filter(w => {
-      const workoutDate = new Date(w.date);
+      const workoutDate = parseWorkoutDate(w.date);
       return workoutDate >= lastMonthFirst && workoutDate <= lastMonthLast;
     });
 
     const lastMonthSameDayCount = lastMonthWorkouts.filter(w => {
-      const workoutDate = new Date(w.date);
+      const workoutDate = parseWorkoutDate(w.date);
       return workoutDate.getDate() <= currentDay;
     }).length;
 
@@ -145,7 +148,7 @@ export default function AnalyticsScreen() {
 
   const calculateSessionProgression = (workouts) => {
     const sortedWorkouts = [...workouts].sort((a, b) =>
-      new Date(b.date) - new Date(a.date)
+      new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00')
     );
 
     const exerciseChanges = [];

@@ -28,7 +28,8 @@ export default function MiniWeekStrip({ workouts = [], today = new Date() }) {
 
     // Find workout for this day
     const dayWorkout = workouts.find(w => {
-      const workoutDate = new Date(w.date);
+      // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+      const workoutDate = new Date(w.date + 'T12:00:00');
       return workoutDate.toDateString() === dayDate.toDateString();
     });
 

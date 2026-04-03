@@ -91,6 +91,18 @@ function RootLayoutNav() {
         name="generate-workout"
         options={{ animation: 'slide_from_bottom' }}
       />
+      <Stack.Screen
+        name="exercise-history"
+        options={{ animation: 'slide_from_bottom' }}
+      />
+      <Stack.Screen
+        name="exercise-history-detail"
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="exercise-chart-picker"
+        options={{ animation: 'slide_from_bottom' }}
+      />
     </Stack>
   );
 }

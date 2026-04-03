@@ -559,18 +559,31 @@ export function useWorkoutForm({ editingWorkoutId, templateId, repeatData, worko
     }
   }, [workout, isEditing, editingWorkoutId, isCardioWorkoutType, isSaving]);
 
-  // Find previous session for an exercise
+  // Find previous session for an exercise (excludes today to avoid showing incomplete data)
   const findPreviousSession = useCallback(async (exerciseName) => {
     const allWorkouts = await loadWorkouts({ skipBackgroundRefresh: true });
-    const sorted = allWorkouts.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Get today's date string in YYYY-MM-DD format for comparison
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    // Sort by date (newest first) with timezone-safe parsing
+    const sorted = allWorkouts.sort((a, b) =>
+      new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00')
+    );
 
     for (const w of sorted) {
+      // Skip today's workouts to avoid showing incomplete auto-saved data
+      if (w.date === todayStr) continue;
+      // Skip the current workout if editing
       if (isEditing && w.id === parseInt(editingWorkoutId)) continue;
+
       const exercise = w.exercises?.find(e => e.name === exerciseName);
-      if (exercise) {
+      if (exercise && exercise.sets?.some(s => s.reps > 0 || s.weight > 0 || s.distance > 0 || s.time > 0)) {
+        // Only return if the exercise has at least one set with actual data
         return {
           date: w.date,
-          sets: exercise.sets,
+          sets: exercise.sets.filter(s => s.reps > 0 || s.weight > 0 || s.distance > 0 || s.time > 0),
           notes: exercise.notes || '',
           workoutName: w.name
         };

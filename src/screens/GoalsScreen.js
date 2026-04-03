@@ -1,7 +1,8 @@
-import { Activity, BookOpen, Calendar, Check, ChevronLeft, ChevronRight, Clock, Copy, Dumbbell, Edit3, Plus, Save, Scale, Search, Target, Trash2, X } from 'lucide-react-native';
+import { Activity, BookOpen, Calendar, Camera, Check, ChevronLeft, ChevronRight, Clock, Copy, Dumbbell, Edit3, Image, Plus, Save, Scale, Search, Target, Trash2, X } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Image as RNImage,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -15,6 +16,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -77,6 +79,9 @@ export default function GoalsScreen() {
   const [plannedExercises, setPlannedExercises] = useState([]);
   const [weightEntry, setWeightEntry] = useState('');
   const [weightEntryDate, setWeightEntryDate] = useState(new Date());
+  const [weightEntryNotes, setWeightEntryNotes] = useState('');
+  const [weightEntryMedia, setWeightEntryMedia] = useState([]);
+  const [showWeightMediaViewer, setShowWeightMediaViewer] = useState(null);
   const [targetWeight, setTargetWeight] = useState('');
   const [weightDirection, setWeightDirection] = useState('lose');
 
@@ -424,11 +429,71 @@ export default function GoalsScreen() {
       return;
     }
 
-    await addWeightEntry(parseFloat(weightEntry), '', weightEntryDate);
+    await addWeightEntry(parseFloat(weightEntry), weightEntryNotes, weightEntryDate, weightEntryMedia);
     await loadData();
     setShowWeightEntry(false);
     setWeightEntry('');
     setWeightEntryDate(new Date());
+    setWeightEntryNotes('');
+    setWeightEntryMedia([]);
+  };
+
+  const handleAddWeightMedia = async () => {
+    Alert.alert(
+      'Add Photo',
+      'Choose an option',
+      [
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission Required', 'Camera permission is needed to take photos.');
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.[0]) {
+              const asset = result.assets[0];
+              setWeightEntryMedia(prev => [...prev, {
+                uri: asset.uri,
+                type: 'image',
+                id: Date.now().toString(),
+              }]);
+            }
+          },
+        },
+        {
+          text: 'Choose from Library',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission Required', 'Photo library permission is needed to select photos.');
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.[0]) {
+              const asset = result.assets[0];
+              setWeightEntryMedia(prev => [...prev, {
+                uri: asset.uri,
+                type: 'image',
+                id: Date.now().toString(),
+              }]);
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleRemoveWeightMedia = (mediaId) => {
+    setWeightEntryMedia(prev => prev.filter(m => m.id !== mediaId));
   };
 
   const handleSetWeightGoal = async () => {
@@ -1374,6 +1439,37 @@ export default function GoalsScreen() {
                   onSubmitEditing={Keyboard.dismiss}
                 />
 
+                <Text style={styles.inputLabel}>NOTES (OPTIONAL)</Text>
+                <TextInput
+                  style={[styles.input, { height: 60, textAlignVertical: 'top' }]}
+                  value={weightEntryNotes}
+                  onChangeText={setWeightEntryNotes}
+                  placeholder="How are you feeling today?"
+                  placeholderTextColor={themeColors.text.tertiary}
+                  multiline
+                  numberOfLines={2}
+                />
+
+                <Text style={styles.inputLabel}>PHOTO (OPTIONAL)</Text>
+                <View style={styles.weightMediaContainer}>
+                  {weightEntryMedia.map((media) => (
+                    <Pressable
+                      key={media.id}
+                      onLongPress={() => handleRemoveWeightMedia(media.id)}
+                      onPress={() => setShowWeightMediaViewer(media)}
+                      style={styles.weightMediaThumbnail}
+                    >
+                      <RNImage source={{ uri: media.uri }} style={styles.weightMediaImage} />
+                    </Pressable>
+                  ))}
+                  <Pressable
+                    onPress={handleAddWeightMedia}
+                    style={styles.addWeightMediaButton}
+                  >
+                    <Camera size={24} color={themeColors.text.secondary} strokeWidth={2} />
+                  </Pressable>
+                </View>
+
                 <Pressable onPress={handleLogWeight} style={styles.modalButton}>
                   <Text style={styles.modalButtonText}>Log Weight</Text>
                 </Pressable>
@@ -1488,56 +1584,75 @@ export default function GoalsScreen() {
 
                 return (
                   <View key={entry.id} style={styles.historyItem}>
-                    <View style={styles.historyItemLeft}>
-                      <Text style={styles.historyDate}>
-                        {new Date(entry.date + 'T12:00:00').toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </Text>
-                      {entry.notes && (
-                        <Text style={styles.historyNotes} numberOfLines={1}>
-                          {entry.notes}
+                    <View style={styles.historyItemMain}>
+                      <View style={styles.historyItemLeft}>
+                        <Text style={styles.historyDate}>
+                          {new Date(entry.date + 'T12:00:00').toLocaleDateString('en-US', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
                         </Text>
-                      )}
-                    </View>
-                    <View style={styles.historyItemRight}>
-                      <Text style={styles.historyWeight}>
-                        {formatWeight(entry.weight, weightData?.settings?.unit || 'lbs')}
-                      </Text>
-                      {change !== 0 && (
-                        <Text style={[
-                          styles.historyChange,
-                          change < 0 ? styles.historyChangeDown : styles.historyChangeUp
-                        ]}>
-                          {change > 0 ? '+' : ''}{change.toFixed(1)}
+                        {entry.notes && (
+                          <Text style={styles.historyNotes} numberOfLines={1}>
+                            {entry.notes}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={styles.historyItemRight}>
+                        <Text style={styles.historyWeight}>
+                          {formatWeight(entry.weight, weightData?.settings?.unit || 'lbs')}
                         </Text>
-                      )}
-                    </View>
-                    <Pressable
-                      onPress={() => {
-                        Alert.alert(
-                          'Delete Entry',
-                          'Are you sure you want to delete this weight entry?',
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            {
-                              text: 'Delete',
-                              style: 'destructive',
-                              onPress: async () => {
-                                await deleteWeightEntry(entry.id);
-                                await loadData();
+                        {change !== 0 && (
+                          <Text style={[
+                            styles.historyChange,
+                            change < 0 ? styles.historyChangeDown : styles.historyChangeUp
+                          ]}>
+                            {change > 0 ? '+' : ''}{change.toFixed(1)}
+                          </Text>
+                        )}
+                      </View>
+                      <Pressable
+                        onPress={() => {
+                          Alert.alert(
+                            'Delete Entry',
+                            'Are you sure you want to delete this weight entry?',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Delete',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  await deleteWeightEntry(entry.id);
+                                  await loadData();
+                                }
                               }
-                            }
-                          ]
-                        );
-                      }}
-                      style={styles.historyDelete}
-                      hitSlop={12}
-                    >
-                      <Trash2 size={16} color={themeColors.text.tertiary} />
-                    </Pressable>
+                            ]
+                          );
+                        }}
+                        style={styles.historyDelete}
+                        hitSlop={12}
+                      >
+                        <Trash2 size={16} color={themeColors.text.tertiary} />
+                      </Pressable>
+                    </View>
+                    {entry.media && entry.media.length > 0 && (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.historyMediaRow}
+                      >
+                        {entry.media.map((media) => (
+                          <Pressable
+                            key={media.id}
+                            onPress={() => setShowWeightMediaViewer(media)}
+                            style={styles.historyMediaThumb}
+                          >
+                            <RNImage source={{ uri: media.uri }} style={styles.historyMediaImage} />
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    )}
                   </View>
                 );
               })
@@ -1644,6 +1759,32 @@ export default function GoalsScreen() {
             </TouchableWithoutFeedback>
           </KeyboardAvoidingView>
         </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Weight Media Viewer Modal */}
+      <Modal
+        visible={!!showWeightMediaViewer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowWeightMediaViewer(null)}
+      >
+        <Pressable
+          style={styles.weightMediaViewerOverlay}
+          onPress={() => setShowWeightMediaViewer(null)}
+        >
+          {showWeightMediaViewer && (
+            <RNImage
+              source={{ uri: showWeightMediaViewer.uri }}
+              style={styles.weightMediaViewerImage}
+            />
+          )}
+          <Pressable
+            style={styles.weightMediaViewerClose}
+            onPress={() => setShowWeightMediaViewer(null)}
+          >
+            <X size={28} color="#fff" />
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -2272,14 +2413,31 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   historyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: COLORS.surface.card,
     borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.surface.border,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
+  },
+  historyItemMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  historyMediaRow: {
+    marginTop: SPACING.sm,
+    flexDirection: 'row',
+  },
+  historyMediaThumb: {
+    width: 50,
+    height: 50,
+    borderRadius: RADIUS.sm,
+    overflow: 'hidden',
+    marginRight: SPACING.xs,
+  },
+  historyMediaImage: {
+    width: '100%',
+    height: '100%',
   },
   historyItemLeft: {
     flex: 1,
@@ -2814,5 +2972,50 @@ const styles = StyleSheet.create({
   },
   templateEmptyText: {
     ...TYPOGRAPHY.body,
+  },
+
+  // Weight Media
+  weightMediaContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+  },
+  weightMediaThumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+  },
+  weightMediaImage: {
+    width: '100%',
+    height: '100%',
+  },
+  addWeightMediaButton: {
+    width: 60,
+    height: 60,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surface.card,
+    borderWidth: 1,
+    borderColor: COLORS.surface.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weightMediaViewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  weightMediaViewerImage: {
+    width: '90%',
+    height: '70%',
+    resizeMode: 'contain',
+  },
+  weightMediaViewerClose: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    padding: SPACING.md,
   },
 });

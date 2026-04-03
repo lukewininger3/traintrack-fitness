@@ -163,11 +163,6 @@ export const AuthProvider = ({ children }) => {
         migrateGoalsToCloud().catch(() => {
           // Goals migration error
         });
-
-        // TESTING: Clear onboarding status to show walkthrough on every sign-in
-        // TODO: Remove this when done testing - onboarding should only show for new users
-        await AsyncStorage.removeItem('@traintrack_onboarding');
-        setOnboardingCompleted(false);
       }
 
       return { data, error: null };

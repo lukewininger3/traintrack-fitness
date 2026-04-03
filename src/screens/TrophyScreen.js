@@ -200,7 +200,8 @@ export default function TrophyScreen() {
 
     const weekSet = new Set();
     workouts.forEach(w => {
-      const date = new Date(w.date);
+      // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+      const date = new Date(w.date + 'T12:00:00');
       const weekNumber = getISOWeek(date);
       const year = date.getFullYear();
       weekSet.add(`${year}-W${weekNumber}`);

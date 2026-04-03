@@ -171,18 +171,22 @@ const syncToCloud = async (workouts) => {
       }
     }
 
-    // Update existing workouts (parallel updates for speed)
+    // Update existing workouts (parallel updates with error tracking)
     if (toUpsert.length > 0) {
-      await Promise.all(toUpsert.map(workout =>
+      const results = await Promise.allSettled(toUpsert.map(workout =>
         supabase
           .from('workouts')
           .update(workout)
           .eq('user_id', workout.user_id)
           .eq('workout_id', workout.workout_id)
-          .then(({ error }) => {
-            if (error) console.error('Update failed:', workout.workout_id, error);
-          })
       ));
+
+      const failed = results.filter((r, i) =>
+        r.status === 'rejected' || r.value?.error
+      );
+      if (failed.length > 0) {
+        console.error(`${failed.length} workout updates failed`);
+      }
     }
 
     // Delete workouts that are no longer in local list
@@ -425,6 +429,7 @@ export const saveInProgressWorkout = async (workoutData) => {
 /**
  * Load workout-in-progress state
  * Returns null if no in-progress workout exists
+ * Returns workout with isStale flag if older than 24 hours (allowing user to recover)
  */
 export const loadInProgressWorkout = async () => {
   try {
@@ -437,13 +442,16 @@ export const loadInProgressWorkout = async () => {
     const now = new Date();
     const hoursSinceSave = (now - savedAt) / (1000 * 60 * 60);
 
+    // Instead of silently deleting, flag as stale and let caller decide
     if (hoursSinceSave > 24) {
-      // Workout is too old, clear it
-      await clearInProgressWorkout();
-      return null;
+      return {
+        ...parsed,
+        isStale: true,
+        hoursSinceSave: Math.round(hoursSinceSave)
+      };
     }
 
-    return parsed;
+    return { ...parsed, isStale: false };
   } catch (error) {
     console.warn('Failed to load in-progress workout:', error);
     return null;

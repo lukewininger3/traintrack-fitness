@@ -23,10 +23,15 @@ export const getTodayString = () => {
 
 /**
  * Parse a YYYY-MM-DD string as local date (avoiding timezone issues)
+ * This is the preferred method over adding 'T12:00:00' to date strings.
+ * Using new Date(year, month, day) creates a date in local timezone at midnight,
+ * which is consistent across all timezones.
+ *
  * @param {string} dateString - Date string in YYYY-MM-DD format
- * @returns {Date} Date object in local timezone
+ * @returns {Date} Date object in local timezone at midnight
  */
-const parseLocalDate = (dateString) => {
+export const parseLocalDate = (dateString) => {
+  if (!dateString) return new Date();
   const [year, month, day] = dateString.split('-').map(Number);
   return new Date(year, month - 1, day);
 };
