@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Calendar, Camera, ChevronRight, Database, Dumbbell, Eye, EyeOff, LogOut, Mail, Moon, Settings, Sun, Trash2, Trophy, User as UserIcon, Users } from 'lucide-react-native';
+import { Calendar, Camera, ChevronRight, Dumbbell, Eye, EyeOff, LogOut, Mail, Moon, Settings, Sun, Trash2, Trophy, User as UserIcon, Users } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { clearAllPersonalRecords, getPRStats } from '../../src/utils/personalRecords';
 import {
@@ -22,7 +22,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../../src/config/supabase';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import { initializeSampleData } from '../../src/utils/initSampleData';
 import { clearLocalWorkouts } from '../../src/utils/storage';
 import { uploadProfilePicture } from '../../src/utils/socialStorage';
 import { formatDateLong } from '../../src/utils/dateFormatter';
@@ -32,7 +31,7 @@ export default function ProfileScreen() {
   const { user, profile, refreshProfile, signOut } = useAuth();
   const { isDark, colors: COLORS, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
-  const [loadingSample, setLoadingSample] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [prStats, setPRStats] = useState<{ totalPRs: number; recentPRs: number } | null>(null);
   const [shareWorkouts, setShareWorkouts] = useState(true);
   const [updatingShare, setUpdatingShare] = useState(false);
@@ -41,6 +40,9 @@ export default function ProfileScreen() {
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
+  const [showDisplayNameModal, setShowDisplayNameModal] = useState(false);
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [isUpdatingDisplayName, setIsUpdatingDisplayName] = useState(false);
 
   useEffect(() => {
     loadPRStats();
@@ -164,6 +166,49 @@ export default function ProfileScreen() {
     setShowUsernameModal(true);
   };
 
+  const handleEditDisplayName = () => {
+    setNewDisplayName(profile?.display_name || '');
+    setShowDisplayNameModal(true);
+  };
+
+  const handleUpdateDisplayName = async () => {
+    const trimmedName = newDisplayName.trim();
+
+    if (!trimmedName) {
+      Alert.alert('Error', 'Please enter a display name');
+      return;
+    }
+
+    if (trimmedName.length > 30) {
+      Alert.alert('Error', 'Display name must be 30 characters or less');
+      return;
+    }
+
+    if (trimmedName === profile?.display_name) {
+      setShowDisplayNameModal(false);
+      return;
+    }
+
+    setIsUpdatingDisplayName(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ display_name: trimmedName })
+        .eq('id', (user as any)?.id);
+
+      if (error) throw error;
+
+      await refreshProfile();
+      setShowDisplayNameModal(false);
+      Alert.alert('Success', 'Display name updated successfully!');
+    } catch (error) {
+      console.error('Error updating display name:', error);
+      Alert.alert('Error', 'Failed to update display name. Please try again.');
+    } finally {
+      setIsUpdatingDisplayName(false);
+    }
+  };
+
   const handleUpdateUsername = async () => {
     const trimmedUsername = newUsername.trim().toLowerCase();
 
@@ -237,7 +282,7 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              setLoadingSample(true);
+              setIsClearing(true);
               // Clear cloud workouts
               const { error: cloudError } = await supabase
                 .from('workouts')
@@ -255,11 +300,11 @@ export default function ProfileScreen() {
               setPRStats({ totalPRs: 0, recentPRs: 0 });
 
               Alert.alert('Success', 'All data cleared! Restart the app to see changes.');
-              setLoadingSample(false);
+              setIsClearing(false);
             } catch (error) {
               console.error('Clear error:', error);
               Alert.alert('Error', 'Failed to clear data');
-              setLoadingSample(false);
+              setIsClearing(false);
             }
           },
         },
@@ -283,29 +328,6 @@ export default function ProfileScreen() {
             } catch (error) {
               Alert.alert('Error', 'Failed to sign out');
             }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleLoadSampleData = async () => {
-    Alert.alert(
-      'Load Sample Data',
-      'This will create sample workouts for testing. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Load Sample Data',
-          onPress: async () => {
-            setLoadingSample(true);
-            try {
-              await initializeSampleData();
-              Alert.alert('Success', 'Sample data loaded successfully!');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to load sample data');
-            }
-            setLoadingSample(false);
           },
         },
       ]
@@ -379,6 +401,19 @@ export default function ProfileScreen() {
               <Text style={[styles.infoLabel, { color: COLORS.text.tertiary }]}>USERNAME</Text>
               <Text style={[styles.infoValue, { color: COLORS.text.primary }]}>
                 @{profile?.username || 'Set username'}
+              </Text>
+            </View>
+            <ChevronRight size={18} color={COLORS.text.tertiary} strokeWidth={2} />
+          </Pressable>
+
+          <Pressable style={styles.infoRow} onPress={handleEditDisplayName}>
+            <View style={[styles.infoIcon, { backgroundColor: COLORS.accent.primaryDim }]}>
+              <UserIcon size={18} color={COLORS.accent.primary} strokeWidth={2} />
+            </View>
+            <View style={styles.infoContent}>
+              <Text style={[styles.infoLabel, { color: COLORS.text.tertiary }]}>DISPLAY NAME</Text>
+              <Text style={[styles.infoValue, { color: COLORS.text.primary }]}>
+                {profile?.display_name || 'Set display name'}
               </Text>
             </View>
             <ChevronRight size={18} color={COLORS.text.tertiary} strokeWidth={2} />
@@ -512,23 +547,15 @@ export default function ProfileScreen() {
         {/* Developer Settings */}
         <View style={[styles.card, { backgroundColor: COLORS.surface.card, borderColor: COLORS.surface.border }]}>
           <View style={[styles.cardHeader, { borderBottomColor: COLORS.surface.border }]}>
-            <Text style={[styles.cardTitle, { color: COLORS.text.secondary }]}>DEVELOPER</Text>
+            <Text style={[styles.cardTitle, { color: COLORS.text.secondary }]}>SETTINGS</Text>
           </View>
 
-          <Pressable
-            style={styles.settingRow}
-            onPress={handleLoadSampleData}
-            disabled={loadingSample}
-          >
-            <View style={[styles.settingIcon, { backgroundColor: COLORS.warningDim }]}>
-              <Database size={18} color={COLORS.warning} strokeWidth={2} />
+          <Pressable style={styles.settingRow} onPress={() => router.push('/settings' as any)}>
+            <View style={[styles.settingIcon, { backgroundColor: COLORS.accent.primaryDim }]}>
+              <Settings size={18} color={COLORS.accent.primary} strokeWidth={2} />
             </View>
-            <Text style={[styles.settingText, { color: COLORS.text.primary }]}>Load Sample Data</Text>
-            {loadingSample ? (
-              <ActivityIndicator size="small" color={COLORS.warning} />
-            ) : (
-              <ChevronRight size={18} color={COLORS.text.tertiary} strokeWidth={2} />
-            )}
+            <Text style={[styles.settingText, { color: COLORS.text.primary }]}>App Settings</Text>
+            <ChevronRight size={18} color={COLORS.text.tertiary} strokeWidth={2} />
           </Pressable>
 
           <View style={[styles.divider, { backgroundColor: COLORS.surface.border }]} />
@@ -536,29 +563,17 @@ export default function ProfileScreen() {
           <Pressable
             style={styles.settingRow}
             onPress={handleClearAllData}
-            disabled={loadingSample}
+            disabled={isClearing}
           >
             <View style={[styles.settingIcon, { backgroundColor: COLORS.errorDim }]}>
               <Trash2 size={18} color={COLORS.error} strokeWidth={2} />
             </View>
             <Text style={[styles.settingText, { color: COLORS.error }]}>Clear All Data</Text>
-            {loadingSample ? (
+            {isClearing ? (
               <ActivityIndicator size="small" color={COLORS.error} />
             ) : (
               <ChevronRight size={18} color={COLORS.text.tertiary} strokeWidth={2} />
             )}
-          </Pressable>
-
-          <View style={[styles.divider, { backgroundColor: COLORS.surface.border }]} />
-
-          <Pressable style={[styles.settingRow, { opacity: 0.5 }]} disabled>
-            <View style={[styles.settingIcon, { backgroundColor: COLORS.surface.cardHover }]}>
-              <Settings size={18} color={COLORS.text.tertiary} strokeWidth={2} />
-            </View>
-            <Text style={[styles.settingText, { color: COLORS.text.primary }]}>App Preferences</Text>
-            <View style={[styles.comingSoonBadge, { backgroundColor: COLORS.surface.cardHover }]}>
-              <Text style={[styles.comingSoonText, { color: COLORS.text.tertiary }]}>SOON</Text>
-            </View>
           </Pressable>
         </View>
 
@@ -622,6 +637,60 @@ export default function ProfileScreen() {
                 disabled={isUpdatingUsername}
               >
                 {isUpdatingUsername ? (
+                  <ActivityIndicator size="small" color={COLORS.text.inverse} />
+                ) : (
+                  <Text style={[styles.modalSaveText, { color: COLORS.text.inverse }]}>Save</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Display Name Edit Modal */}
+      <Modal
+        visible={showDisplayNameModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDisplayNameModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { backgroundColor: COLORS.background.secondary }]}>
+            <Text style={[styles.modalTitle, { color: COLORS.text.primary }]}>Change Display Name</Text>
+            <Text style={[styles.modalSubtitle, { color: COLORS.text.secondary }]}>
+              This is how you'll appear to friends
+            </Text>
+            <View style={[styles.usernameInputContainer, { backgroundColor: COLORS.surface.card, borderColor: COLORS.surface.border }]}>
+              <TextInput
+                style={[styles.displayNameInput, { color: COLORS.text.primary }]}
+                value={newDisplayName}
+                onChangeText={setNewDisplayName}
+                placeholder="Your Name"
+                placeholderTextColor={COLORS.text.tertiary}
+                maxLength={30}
+                autoFocus
+              />
+            </View>
+            <Text style={[styles.usernameHint, { color: COLORS.text.tertiary }]}>
+              Up to 30 characters
+            </Text>
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalCancelButton, { backgroundColor: COLORS.surface.card }]}
+                onPress={() => setShowDisplayNameModal(false)}
+                disabled={isUpdatingDisplayName}
+              >
+                <Text style={[styles.modalCancelText, { color: COLORS.text.secondary }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalSaveButton, { backgroundColor: COLORS.accent.primary }]}
+                onPress={handleUpdateDisplayName}
+                disabled={isUpdatingDisplayName}
+              >
+                {isUpdatingDisplayName ? (
                   <ActivityIndicator size="small" color={COLORS.text.inverse} />
                 ) : (
                   <Text style={[styles.modalSaveText, { color: COLORS.text.inverse }]}>Save</Text>
@@ -906,6 +975,13 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     fontSize: 16,
     paddingVertical: SPACING.md,
+  },
+  displayNameInput: {
+    flex: 1,
+    ...TYPOGRAPHY.body,
+    fontSize: 16,
+    paddingVertical: SPACING.md,
+    paddingLeft: SPACING.sm,
   },
   usernameHint: {
     ...TYPOGRAPHY.caption,

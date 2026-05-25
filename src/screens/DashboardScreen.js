@@ -23,6 +23,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { getStreakInfo } from '../utils/calculations';
 import { getTodayString, loadWorkouts, loadInProgressWorkout, clearInProgressWorkout } from '../utils/storage';
+import { getRelativeDateLabel } from '../utils/dateFormatter';
 import { loadWeeklyGoals, getWeekStart, getWeekEnd, getDateFromDayOfWeek } from '../utils/goalsStorage';
 import { loadWeightData, addWeightEntry, deleteWeightEntry } from '../utils/weightStorage';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
@@ -109,13 +110,28 @@ export default function DashboardScreen({ navigation }) {
       return;
     }
 
+    // Validate reasonable weight range (supports lbs and kg)
+    // Range: 20-1500 covers extreme cases in both units
+    if (weight < 20 || weight > 1500) {
+      Alert.alert(
+        'Check Your Entry',
+        `${weight} ${weightData.settings?.unit || 'lbs'} seems unusual. Please verify and try again.`
+      );
+      return;
+    }
+
     setIsSubmittingWeight(true);
     const result = await addWeightEntry(weight, weightNotes, weightDate, weightMedia);
     setIsSubmittingWeight(false);
 
     if (result.success) {
       setShowWeightModal(false);
-      setHasLoggedWeightToday(true);
+      // Only set hasLoggedWeightToday if the logged date is actually today
+      const today = getTodayString();
+      const loggedDateStr = `${weightDate.getFullYear()}-${String(weightDate.getMonth() + 1).padStart(2, '0')}-${String(weightDate.getDate()).padStart(2, '0')}`;
+      if (loggedDateStr === today) {
+        setHasLoggedWeightToday(true);
+      }
       setWeightInput('');
       setWeightNotes('');
       setWeightMedia([]);
@@ -210,22 +226,8 @@ export default function DashboardScreen({ navigation }) {
     );
   };
 
-  // Format date for weight entry display
-  const formatWeightDate = (dateStr) => {
-    // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
-    const date = new Date(dateStr + 'T12:00:00');
-    const today = new Date();
-    today.setHours(12, 0, 0, 0);
-    const entryDate = new Date(date);
-    entryDate.setHours(12, 0, 0, 0);
-
-    if (entryDate.getTime() === today.getTime()) return 'Today';
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (entryDate.getTime() === yesterday.getTime()) return 'Yesterday';
-
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+  // Format date for weight entry display (uses centralized utility)
+  const formatWeightDate = (dateStr) => getRelativeDateLabel(dateStr);
 
   // Check if weight date is today (for navigation)
   const isWeightDateToday = (() => {
@@ -586,6 +588,9 @@ export default function DashboardScreen({ navigation }) {
                           styles.dayButton,
                           !day && styles.dayInvisible,
                         ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={day ? `${day.day}, ${day.hasWorkout ? 'has workout' : 'no workout'}${day.isToday ? ', today' : ''}` : undefined}
+                        accessibilityHint={day?.hasWorkout ? 'Double tap to view workouts' : undefined}
                       >
                         <View style={[
                           styles.dayInner,
@@ -971,7 +976,7 @@ export default function DashboardScreen({ navigation }) {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.weightModalOverlay}
+            style={[styles.weightModalOverlay, { backgroundColor: themeColors.overlay.medium }]}
           >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <ScrollView style={[styles.weightModalContent, { backgroundColor: themeColors.background.secondary }]} showsVerticalScrollIndicator={false}>
@@ -1188,7 +1193,7 @@ export default function DashboardScreen({ navigation }) {
             onRequestClose={() => setWeightMediaViewer(null)}
           >
             <TouchableOpacity
-              style={styles.weightMediaViewerOverlay}
+              style={[styles.weightMediaViewerOverlay, { backgroundColor: themeColors.overlay.heavy }]}
               activeOpacity={1}
               onPress={() => setWeightMediaViewer(null)}
             >
@@ -1788,7 +1793,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     padding: SPACING.xl,
   },
   weightModalContent: {
@@ -2091,7 +2095,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.95)',
   },
   weightMediaViewerImage: {
     width: '90%',

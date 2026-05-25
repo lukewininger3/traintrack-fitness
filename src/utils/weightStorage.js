@@ -1,6 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../config/supabase';
+import { parseLocalDate } from './dateFormatter';
 
 const WEIGHT_STORAGE_KEY = '@traintrack_weight_data';
+
+// Helper to get current user
+const getCurrentUser = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+};
 
 /**
  * Format date to YYYY-MM-DD in local timezone
@@ -27,13 +35,20 @@ const createDefaultWeightData = () => ({
 });
 
 /**
- * Load all weight data
+ * Load all weight data - local first, then background cloud refresh
  */
 export const loadWeightData = async () => {
   try {
-    const data = await AsyncStorage.getItem(WEIGHT_STORAGE_KEY);
-    if (!data) return createDefaultWeightData();
-    return JSON.parse(data);
+    // Load local data immediately
+    const localData = await AsyncStorage.getItem(WEIGHT_STORAGE_KEY);
+    const data = localData ? JSON.parse(localData) : createDefaultWeightData();
+
+    // Trigger background cloud refresh (non-blocking)
+    refreshWeightDataFromCloud().catch(err => {
+      console.warn('Background weight sync failed:', err?.message);
+    });
+
+    return data;
   } catch (error) {
     console.error('Error loading weight data:', error);
     return createDefaultWeightData();
@@ -41,11 +56,31 @@ export const loadWeightData = async () => {
 };
 
 /**
- * Save weight data
+ * Load weight data from local storage only (no cloud refresh)
+ */
+const loadLocalWeightData = async () => {
+  try {
+    const data = await AsyncStorage.getItem(WEIGHT_STORAGE_KEY);
+    return data ? JSON.parse(data) : createDefaultWeightData();
+  } catch (error) {
+    console.warn('Error loading local weight data:', error?.message);
+    return createDefaultWeightData();
+  }
+};
+
+/**
+ * Save weight data - local first, then background cloud sync
  */
 export const saveWeightData = async (data) => {
   try {
+    // Save locally first (instant)
     await AsyncStorage.setItem(WEIGHT_STORAGE_KEY, JSON.stringify(data));
+
+    // Sync to cloud in background (non-blocking)
+    syncWeightDataToCloud(data).catch(err => {
+      console.warn('Weight cloud sync failed:', err?.message);
+    });
+
     return { success: true };
   } catch (error) {
     console.error('Error saving weight data:', error);
@@ -62,7 +97,7 @@ export const saveWeightData = async (data) => {
  */
 export const addWeightEntry = async (weight, notes = '', date = null, media = []) => {
   try {
-    const data = await loadWeightData();
+    const data = await loadLocalWeightData();
     const entryDate = date ? formatLocalDate(new Date(date)) : formatLocalDate(new Date());
 
     // Check if entry for this date already exists
@@ -90,7 +125,8 @@ export const addWeightEntry = async (weight, notes = '', date = null, media = []
     }
 
     // Sort entries by date (newest first)
-    data.entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+    data.entries.sort((a, b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'));
 
     await saveWeightData(data);
     return { success: true, entry };
@@ -105,7 +141,7 @@ export const addWeightEntry = async (weight, notes = '', date = null, media = []
  */
 export const deleteWeightEntry = async (entryId) => {
   try {
-    const data = await loadWeightData();
+    const data = await loadLocalWeightData();
     data.entries = data.entries.filter(e => e.id !== entryId);
     await saveWeightData(data);
     return { success: true };
@@ -120,7 +156,7 @@ export const deleteWeightEntry = async (entryId) => {
  */
 export const setWeightGoal = async (targetWeight, direction = 'lose') => {
   try {
-    const data = await loadWeightData();
+    const data = await loadLocalWeightData();
 
     // Get current weight (most recent entry)
     const currentWeight = data.entries.length > 0 ? data.entries[0].weight : null;
@@ -147,7 +183,7 @@ export const setWeightGoal = async (targetWeight, direction = 'lose') => {
  */
 export const clearWeightGoal = async () => {
   try {
-    const data = await loadWeightData();
+    const data = await loadLocalWeightData();
     data.goal = null;
     await saveWeightData(data);
     return { success: true };
@@ -162,7 +198,7 @@ export const clearWeightGoal = async () => {
  */
 export const updateWeightSettings = async (settings) => {
   try {
-    const data = await loadWeightData();
+    const data = await loadLocalWeightData();
     data.settings = { ...data.settings, ...settings };
     await saveWeightData(data);
     return { success: true };
@@ -297,7 +333,8 @@ export const calculateWeightChange = (entries, days = 7) => {
   return {
     change: newest.weight - oldest.weight,
     percentage: ((newest.weight - oldest.weight) / oldest.weight) * 100,
-    days: Math.round((new Date(newest.date) - new Date(oldest.date)) / (1000 * 60 * 60 * 24)),
+    // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+    days: Math.round((new Date(newest.date + 'T12:00:00') - new Date(oldest.date + 'T12:00:00')) / (1000 * 60 * 60 * 24)),
   };
 };
 
@@ -310,13 +347,15 @@ export const getConsecutiveDaysLogged = async () => {
     if (data.entries.length === 0) return 0;
 
     // Sort by date descending
-    const sorted = [...data.entries].sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+    const parseDate = (dateStr) => new Date(dateStr + 'T12:00:00');
+    const sorted = [...data.entries].sort((a, b) => parseDate(b.date) - parseDate(a.date));
 
     let consecutive = 1;
-    let currentDate = new Date(sorted[0].date);
+    let currentDate = parseDate(sorted[0].date);
 
     for (let i = 1; i < sorted.length; i++) {
-      const entryDate = new Date(sorted[i].date);
+      const entryDate = parseDate(sorted[i].date);
       const diffDays = Math.round((currentDate - entryDate) / (1000 * 60 * 60 * 24));
 
       if (diffDays === 1) {
@@ -368,4 +407,229 @@ export const convertWeight = (weight, fromUnit, toUnit) => {
   if (fromUnit === 'lbs' && toUnit === 'kg') return weight * 0.453592;
   if (fromUnit === 'kg' && toUnit === 'lbs') return weight * 2.20462;
   return weight;
+};
+
+// ============================================
+// CLOUD SYNC FUNCTIONS
+// ============================================
+
+/**
+ * Sync weight data to cloud (background operation)
+ */
+const syncWeightDataToCloud = async (data) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return; // Not logged in, skip cloud sync
+
+    // Sync weight entries
+    if (data.entries && data.entries.length > 0) {
+      // Get existing cloud entries
+      const { data: cloudEntries } = await supabase
+        .from('weight_entries')
+        .select('entry_id')
+        .eq('user_id', user.id);
+
+      const cloudIds = new Set((cloudEntries || []).map(e => String(e.entry_id)));
+      const localIds = new Set(data.entries.map(e => String(e.id)));
+
+      // Prepare entries for upsert
+      const entriesToUpsert = data.entries.map(entry => ({
+        user_id: user.id,
+        entry_id: entry.id,
+        date: entry.date,
+        weight: entry.weight,
+        notes: entry.notes || null,
+        media: entry.media || [],
+        created_at: entry.createdAt || new Date().toISOString(),
+      }));
+
+      // Upsert all entries
+      if (entriesToUpsert.length > 0) {
+        const { error: upsertError } = await supabase
+          .from('weight_entries')
+          .upsert(entriesToUpsert, {
+            onConflict: 'user_id,entry_id',
+          });
+
+        if (upsertError) {
+          console.warn('Weight entries upsert error:', upsertError?.message);
+        }
+      }
+
+      // Delete entries that no longer exist locally
+      const idsToDelete = [...cloudIds].filter(id => !localIds.has(id));
+      if (idsToDelete.length > 0) {
+        await supabase
+          .from('weight_entries')
+          .delete()
+          .eq('user_id', user.id)
+          .in('entry_id', idsToDelete);
+      }
+    }
+
+    // Sync weight settings and goal
+    const settingsData = {
+      user_id: user.id,
+      unit: data.settings?.unit || 'lbs',
+      reminder_enabled: data.settings?.reminderEnabled || false,
+      reminder_time: data.settings?.reminderTime || '08:00',
+      goal_target_weight: data.goal?.targetWeight || null,
+      goal_start_weight: data.goal?.startWeight || null,
+      goal_start_date: data.goal?.startDate || null,
+      goal_direction: data.goal?.direction || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error: settingsError } = await supabase
+      .from('weight_settings')
+      .upsert(settingsData, {
+        onConflict: 'user_id',
+      });
+
+    if (settingsError) {
+      console.warn('Weight settings sync error:', settingsError?.message);
+    }
+  } catch (error) {
+    console.warn('Weight cloud sync error:', error?.message);
+  }
+};
+
+/**
+ * Refresh weight data from cloud (background operation)
+ */
+const refreshWeightDataFromCloud = async () => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return; // Not logged in, skip
+
+    // Load current local data
+    const localData = await loadLocalWeightData();
+
+    // Fetch entries from cloud
+    const { data: cloudEntries, error: entriesError } = await supabase
+      .from('weight_entries')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false });
+
+    if (entriesError) {
+      console.warn('Error fetching cloud weight entries:', entriesError?.message);
+      return;
+    }
+
+    // Fetch settings from cloud
+    const { data: cloudSettings } = await supabase
+      .from('weight_settings')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    // Merge cloud data with local
+    if (cloudEntries && cloudEntries.length > 0) {
+      // Create a map of cloud entries by ID
+      const cloudEntryMap = new Map();
+      cloudEntries.forEach(e => {
+        cloudEntryMap.set(String(e.entry_id), {
+          id: e.entry_id,
+          date: e.date,
+          weight: e.weight,
+          notes: e.notes || '',
+          media: e.media || [],
+          createdAt: e.created_at,
+        });
+      });
+
+      // Merge: prefer cloud data for existing entries, keep local-only entries
+      const localEntryMap = new Map();
+      localData.entries.forEach(e => localEntryMap.set(String(e.id), e));
+
+      // Combine both sets
+      const mergedEntries = [];
+      const seenIds = new Set();
+
+      // Add all cloud entries first
+      cloudEntryMap.forEach((entry, id) => {
+        mergedEntries.push(entry);
+        seenIds.add(id);
+      });
+
+      // Add local entries that aren't in cloud (these will sync next time)
+      localEntryMap.forEach((entry, id) => {
+        if (!seenIds.has(id)) {
+          mergedEntries.push(entry);
+        }
+      });
+
+      // Sort by date descending
+      mergedEntries.sort((a, b) => {
+        const dateA = parseLocalDate(a.date);
+        const dateB = parseLocalDate(b.date);
+        return dateB - dateA;
+      });
+
+      localData.entries = mergedEntries;
+    }
+
+    // Update settings from cloud if available
+    if (cloudSettings) {
+      localData.settings = {
+        unit: cloudSettings.unit || 'lbs',
+        reminderEnabled: cloudSettings.reminder_enabled || false,
+        reminderTime: cloudSettings.reminder_time || '08:00',
+      };
+
+      // Update goal from cloud if available
+      if (cloudSettings.goal_target_weight) {
+        localData.goal = {
+          targetWeight: cloudSettings.goal_target_weight,
+          startWeight: cloudSettings.goal_start_weight,
+          startDate: cloudSettings.goal_start_date,
+          targetDate: null,
+          direction: cloudSettings.goal_direction || 'lose',
+          createdAt: cloudSettings.updated_at,
+        };
+      }
+    }
+
+    // Save merged data locally
+    await AsyncStorage.setItem(WEIGHT_STORAGE_KEY, JSON.stringify(localData));
+  } catch (error) {
+    console.warn('Weight cloud refresh error:', error?.message);
+  }
+};
+
+/**
+ * Migrate existing local weight data to cloud (call after login)
+ */
+export const migrateWeightDataToCloud = async () => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return;
+
+    const localData = await loadLocalWeightData();
+
+    // Only migrate if there's local data
+    if (localData.entries.length === 0 && !localData.goal) {
+      return;
+    }
+
+    // Check if user already has data in cloud
+    const { data: existingEntries } = await supabase
+      .from('weight_entries')
+      .select('entry_id')
+      .eq('user_id', user.id)
+      .limit(1);
+
+    // If user already has cloud data, just sync (don't duplicate)
+    if (existingEntries && existingEntries.length > 0) {
+      // Already has cloud data, trigger a refresh instead
+      await refreshWeightDataFromCloud();
+      return;
+    }
+
+    // Migrate local data to cloud
+    await syncWeightDataToCloud(localData);
+  } catch (error) {
+    console.warn('Weight data migration error:', error?.message);
+  }
 };

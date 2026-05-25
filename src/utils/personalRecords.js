@@ -256,7 +256,8 @@ export async function getPRHistory(exerciseName) {
   const records = await loadPersonalRecords();
   return records
     .filter(pr => pr.exercise === exerciseName)
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+    .sort((a, b) => new Date(a.date + 'T12:00:00') - new Date(b.date + 'T12:00:00'));
 }
 
 /**
@@ -463,7 +464,8 @@ export async function getPRStats() {
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const recentPRs = records.filter(pr => new Date(pr.date) >= thirtyDaysAgo).length;
+  // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+  const recentPRs = records.filter(pr => new Date(pr.date + 'T12:00:00') >= thirtyDaysAgo).length;
 
   const topExercise = records.reduce((best, current) =>
     current.weight > (best?.weight || 0) ? current : best

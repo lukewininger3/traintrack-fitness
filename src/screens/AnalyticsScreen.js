@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, TrendingUp, Dumbbell, Activity, Award, ArrowUp, ArrowDown, Zap, Target, Clock, BarChart3 } from 'lucide-react-native';
 import { loadWorkouts } from '../utils/storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -18,8 +19,10 @@ import {
   analyzeMuscleGroupCoverage,
   getRecoveryStatus,
 } from '../utils/muscleGroups';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function AnalyticsScreen() {
+  const { colors } = useTheme();
   const [workouts, setWorkouts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState('month');
@@ -241,7 +244,8 @@ export default function AnalyticsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.content}>
         {/* Strength Progression - Hero Card */}
         {(strengthProgression.topGainers.length > 0 || strengthProgression.declining.length > 0) && (
@@ -337,7 +341,7 @@ export default function AnalyticsScreen() {
         </View>
 
         {/* Top Exercises */}
-        <View style={styles.card}>
+        <View style={[styles.card, { marginTop: SPACING.lg }]}>
           <View style={styles.cardHeader}>
             <View style={styles.cardIconContainer}>
               <Dumbbell size={20} color={COLORS.secondary.primary} strokeWidth={2.5} />
@@ -527,14 +531,18 @@ export default function AnalyticsScreen() {
           </View>
         </View>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: COLORS.background.primary,
+  },
+  container: {
+    flex: 1,
   },
   content: {
     padding: SPACING.lg,

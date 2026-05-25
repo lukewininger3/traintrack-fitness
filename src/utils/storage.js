@@ -37,7 +37,8 @@ const getUserSharePreference = async (userId) => {
 
     if (error) return true; // Default to sharing if we can't check
     return data?.share_workouts !== false; // Default to true
-  } catch {
+  } catch (error) {
+    console.warn('Failed to check share preference:', error?.message);
     return true;
   }
 };
@@ -312,15 +313,25 @@ const refreshFromCloud = async () => {
     }
 
     if (data && data.length > 0) {
-      const workouts = data.map(w => ({
-        id: typeof w.workout_id === 'string' ? parseInt(w.workout_id, 10) : w.workout_id,
-        name: w.name,
-        type: w.type,
-        date: w.date,
-        time: w.time,
-        notes: w.notes,
-        exercises: w.exercises || []
-      }));
+      // Validate and transform cloud data
+      const workouts = data
+        .filter(w => {
+          // Basic validation - must have required fields
+          if (!w.workout_id || !w.date) {
+            console.warn('Skipping invalid workout from cloud:', w);
+            return false;
+          }
+          return true;
+        })
+        .map(w => ({
+          id: typeof w.workout_id === 'string' ? parseInt(w.workout_id, 10) : w.workout_id,
+          name: w.name || 'Untitled Workout',
+          type: w.type || 'Strength',
+          date: w.date,
+          time: w.time || null,
+          notes: w.notes || null,
+          exercises: Array.isArray(w.exercises) ? w.exercises : []
+        }));
 
       // Update local cache
       await AsyncStorage.setItem(STORAGE_KEYS.WORKOUTS, JSON.stringify(workouts));
@@ -339,6 +350,7 @@ const loadFromLocalCache = async () => {
     const data = await AsyncStorage.getItem(STORAGE_KEYS.WORKOUTS);
     return data ? JSON.parse(data) : [];
   } catch (error) {
+    console.warn('Failed to load from local cache:', error?.message);
     return [];
   }
 };
@@ -383,11 +395,11 @@ export const migrateLocalToCloud = async () => {
         .insert(workoutsToMigrate);
 
       if (error) {
-        // Error migrating workouts
+        console.warn('Error migrating workouts to cloud:', error?.message);
       }
     }
   } catch (error) {
-    // Error during migration
+    console.warn('Migration failed:', error?.message);
   }
 };
 
@@ -397,7 +409,7 @@ export const clearLocalWorkouts = async () => {
   try {
     await AsyncStorage.removeItem(STORAGE_KEYS.WORKOUTS);
   } catch (error) {
-    // Error clearing local workouts
+    console.warn('Failed to clear local workouts:', error?.message);
   }
 };
 

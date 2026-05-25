@@ -8,6 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
+        "APP_VARIANT": "development",
         "EXPO_PUBLIC_SUPABASE_URL": "https://dnxccimdoqfeqyphbbmm.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGNjaW1kb3FmZXF5cGhiYm1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5NjAwNjgsImV4cCI6MjA4MjUzNjA2OH0.N-0Fh3B-KNnREt5B_BNpz5LCAT7vBIAAUAO9z1_8XOI"
       }
@@ -21,6 +22,10 @@
     },
     "production": {
       "autoIncrement": true,
+      "distribution": "store",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://dnxccimdoqfeqyphbbmm.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGNjaW1kb3FmZXF5cGhiYm1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5NjAwNjgsImV4cCI6MjA4MjUzNjA2OH0.N-0Fh3B-KNnREt5B_BNpz5LCAT7vBIAAUAO9z1_8XOI"
@@ -28,6 +33,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "${APPLE_ID}",
+        "ascAppId": "${ASC_APP_ID}",
+        "appleTeamId": "${APPLE_TEAM_ID}"
+      }
+    }
   }
 }

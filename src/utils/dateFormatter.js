@@ -77,3 +77,50 @@ export const formatDateLong = (dateString) => {
     day: 'numeric'
   });
 };
+
+/**
+ * Get relative date label (Today, Yesterday, or formatted date)
+ * @param {string} dateString - Date string in YYYY-MM-DD format
+ * @returns {string} 'Today', 'Yesterday', or formatted date
+ */
+export const getRelativeDateLabel = (dateString) => {
+  if (!dateString) return '';
+
+  const date = parseLocalDate(dateString);
+  if (isNaN(date.getTime())) return '';
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const compareDate = new Date(date);
+  compareDate.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.round((today - compareDate) / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+/**
+ * Check if two date strings represent the same day
+ * @param {string} dateStr1 - First date string (YYYY-MM-DD)
+ * @param {string} dateStr2 - Second date string (YYYY-MM-DD)
+ * @returns {boolean} True if same day
+ */
+export const isSameDay = (dateStr1, dateStr2) => {
+  return dateStr1 === dateStr2;
+};
+
+/**
+ * Get week number key for grouping (Sunday-based weeks)
+ * @param {string} dateString - Date string in YYYY-MM-DD format
+ * @returns {string} Week key in format 'YYYY-M-D' (start of week)
+ */
+export const getWeekKey = (dateString) => {
+  const d = parseLocalDate(dateString);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay()); // Start of week (Sunday)
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+};

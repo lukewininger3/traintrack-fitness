@@ -107,7 +107,7 @@ export default function ExerciseHistoryDetailScreen() {
               <View style={styles.historyEntryHeader}>
                 <View>
                   <Text style={[styles.historyEntryDate, { color: themeColors.text.primary }]}>
-                    {new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                    {new Date(entry.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                   </Text>
                   {entry.workoutName && (
                     <Text style={[styles.historyWorkoutName, { color: themeColors.text.secondary }]}>

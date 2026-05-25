@@ -882,7 +882,7 @@ export default function GoalsScreen() {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalOverlay}
+            style={[styles.modalOverlay, { backgroundColor: themeColors.overlay.heavy }]}
           >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View style={styles.modalContent}>
@@ -1279,7 +1279,7 @@ export default function GoalsScreen() {
         onRequestClose={() => setShowWorkoutDetail(null)}
       >
         <TouchableWithoutFeedback onPress={() => setShowWorkoutDetail(null)}>
-          <View style={styles.modalOverlay}>
+          <View style={[styles.modalOverlay, { backgroundColor: themeColors.overlay.heavy }]}>
             <TouchableWithoutFeedback>
               <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
@@ -1382,7 +1382,7 @@ export default function GoalsScreen() {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalOverlay}
+            style={[styles.modalOverlay, { backgroundColor: themeColors.overlay.heavy }]}
           >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View style={styles.modalContent}>
@@ -1501,7 +1501,7 @@ export default function GoalsScreen() {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalOverlay}
+            style={[styles.modalOverlay, { backgroundColor: themeColors.overlay.heavy }]}
           >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View style={styles.modalContent}>
@@ -1690,7 +1690,7 @@ export default function GoalsScreen() {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalOverlay}
+            style={[styles.modalOverlay, { backgroundColor: themeColors.overlay.heavy }]}
           >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View style={[styles.modalContent, { maxHeight: '80%' }]}>
@@ -1769,7 +1769,7 @@ export default function GoalsScreen() {
         onRequestClose={() => setShowWeightMediaViewer(null)}
       >
         <Pressable
-          style={styles.weightMediaViewerOverlay}
+          style={[styles.weightMediaViewerOverlay, { backgroundColor: themeColors.overlay.heavy }]}
           onPress={() => setShowWeightMediaViewer(null)}
         >
           {showWeightMediaViewer && (
@@ -2163,7 +2163,6 @@ const styles = StyleSheet.create({
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -3003,7 +3002,6 @@ const styles = StyleSheet.create({
   },
   weightMediaViewerOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',
   },

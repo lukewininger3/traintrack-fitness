@@ -27,6 +27,7 @@ import { exerciseExists, loadCustomExercises, saveCustomExercise } from '../util
 import { saveAsTemplate } from '../utils/workoutTemplates';
 import { TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import { useTheme } from '../contexts/ThemeContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import RestTimerButton from '../components/RestTimer';
 import TempoGuide from '../components/TempoGuide';
 import { useTimer } from '../contexts/TimerContext';
@@ -37,6 +38,7 @@ import Confetti from '../components/Confetti';
 
 export default function WorkoutBuilderScreen() {
   const { colors: themeColors } = useTheme();
+  const { sendPRCelebration } = useNotifications();
   const params = useLocalSearchParams();
   const editingWorkoutId = params?.workoutId;
   const templateId = params?.templateId;
@@ -309,6 +311,9 @@ export default function WorkoutBuilderScreen() {
         // Show celebration modal
         setNewPRs(result.achievedPRs);
         setShowPRCelebration(true);
+        // Send push notification for the first PR (most significant)
+        const firstPR = result.achievedPRs[0];
+        sendPRCelebration(firstPR.exercise, firstPR.weight, firstPR.reps);
         // Trigger animation after modal renders
         setTimeout(() => {
           if (isMountedRef.current) triggerPRCelebration();

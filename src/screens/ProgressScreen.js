@@ -10,6 +10,7 @@ import {
   Text,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
 import Svg, { Circle, G, Line, Path, Polyline, Text as SvgText } from 'react-native-svg';
@@ -1150,7 +1151,7 @@ export default function ProgressScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: themeColors.background.primary }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background.primary }]} edges={['top']}>
       {/* View Toggle */}
       <View style={[styles.toggleContainer, { backgroundColor: themeColors.background.primary }]}>
         <View style={[styles.toggleWrapper, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
@@ -1199,7 +1200,7 @@ export default function ProgressScreen() {
           {activeView === 'analytics' ? renderAnalyticsView() : renderChartsView()}
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

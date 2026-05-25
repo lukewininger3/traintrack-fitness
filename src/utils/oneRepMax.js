@@ -71,7 +71,8 @@ export async function getOneRepMaxHistory(exerciseName, workouts) {
     }
   }
 
-  history.sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+  history.sort((a, b) => new Date(a.date + 'T12:00:00') - new Date(b.date + 'T12:00:00'));
   return history;
 }
 

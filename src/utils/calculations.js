@@ -110,9 +110,10 @@ export const getStreakInfo = (workouts) => {
 
 export const getWorkoutsByMonth = (workouts) => {
   const grouped = {};
-  
+
   workouts.forEach(workout => {
-    const date = new Date(workout.date);
+    // Add T12:00:00 to avoid timezone issues when parsing YYYY-MM-DD format
+    const date = new Date(workout.date + 'T12:00:00');
     const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     const monthLabel = date.toLocaleString('default', { month: 'long', year: 'numeric' });
     

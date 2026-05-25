@@ -22,7 +22,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { loadWorkouts, saveWorkouts } from '../utils/storage';
 import { deleteSharedWorkoutByWorkoutId } from '../utils/socialStorage';
-import { formatDateShort } from '../utils/dateFormatter';
+import { formatDateShort, parseLocalDate, getWeekKey } from '../utils/dateFormatter';
 import { saveAsTemplate } from '../utils/workoutTemplates';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS, SHADOWS } from '../theme/design';
 import { useTheme } from '../contexts/ThemeContext';
@@ -94,16 +94,11 @@ export default function ActivitiesScreen() {
     }
   }, [isFocused, params.refresh]);
 
-  // Parse workout dates with timezone safety (add T12:00:00 to avoid UTC midnight issues)
-  const parseWorkoutDate = (dateStr) => new Date(dateStr + 'T12:00:00');
+  // Use centralized date parsing (avoids timezone issues)
+  const parseWorkoutDate = (dateStr) => parseLocalDate(dateStr);
 
-  // Helper to get week number for a date
-  const getWeekNumber = (date) => {
-    const d = parseWorkoutDate(date);
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() - d.getDay()); // Start of week (Sunday)
-    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-  };
+  // Use centralized week key helper
+  const getWeekNumber = (dateStr) => getWeekKey(dateStr);
 
   const loadData = async () => {
     const data = await loadWorkouts();
@@ -248,12 +243,13 @@ export default function ActivitiesScreen() {
 
   const repeatWorkout = (workout) => {
     // Clone the workout data for a new workout
+    const exercises = workout.exercises || [];
     const workoutData = JSON.stringify({
       name: workout.name,
       type: workout.type,
-      exercises: workout.exercises.map(ex => ({
+      exercises: exercises.map(ex => ({
         name: ex.name,
-        sets: ex.sets.map(set => ({
+        sets: (ex.sets || []).map(set => ({
           weight: set.weight || 0,
           reps: set.reps || 0,
           distance: set.distance || 0,
@@ -591,7 +587,7 @@ export default function ActivitiesScreen() {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.templateModalOverlay}
+            style={[styles.templateModalOverlay, { backgroundColor: themeColors.overlay.medium }]}
           >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View style={[styles.templateModalContent, { backgroundColor: themeColors.background.secondary }]}>
@@ -1008,7 +1004,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     padding: SPACING.xl,
   },
   templateModalContent: {

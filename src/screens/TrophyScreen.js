@@ -26,8 +26,10 @@ import {
   StyleSheet,
   Text,
   View,
-  Pressable
+  Pressable,
+  Modal
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -515,7 +517,9 @@ export default function TrophyScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: themeColors.background.primary }]} showsVerticalScrollIndicator={false}>
+    <>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background.primary }]} edges={['top']}>
+        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.content}>
         {/* Hero Stats */}
         <Animated.View
@@ -648,78 +652,91 @@ export default function TrophyScreen() {
         </View>
       </View>
 
+    </ScrollView>
+    </SafeAreaView>
+
       {/* Badge Detail Modal */}
-      {selectedBadge && (
+      <Modal
+        visible={!!selectedBadge}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedBadge(null)}
+      >
         <View style={styles.modal}>
           <Pressable style={[styles.modalOverlay, { backgroundColor: themeColors.overlay.heavy }]} onPress={() => setSelectedBadge(null)} />
-          <View style={[styles.modalContent, { backgroundColor: themeColors.background.secondary }]}>
-            <View style={[styles.modalHandle, { backgroundColor: themeColors.surface.border }]} />
+          {selectedBadge && (
+            <View style={[styles.modalContent, { backgroundColor: themeColors.background.secondary }]}>
+              <View style={[styles.modalHandle, { backgroundColor: themeColors.surface.border }]} />
 
-            {(() => {
-              const tierColor = TIER_COLORS[selectedBadge.tier];
-              const Icon = selectedBadge.Icon;
-              return (
-                <>
-                  <View style={[
-                    styles.modalIconContainer,
-                    { backgroundColor: selectedBadge.earned ? tierColor.dim : themeColors.surface.card }
-                  ]}>
-                    {selectedBadge.earned ? (
-                      <Icon size={56} color={tierColor.primary} strokeWidth={2} />
-                    ) : (
-                      <Lock size={48} color={themeColors.text.tertiary} strokeWidth={2} />
-                    )}
-                  </View>
-
-                  <Text style={[styles.modalTitle, { color: themeColors.text.primary }]}>{selectedBadge.title}</Text>
-
-                  <View style={[
-                    styles.modalTierPill,
-                    { backgroundColor: selectedBadge.earned ? tierColor.dim : themeColors.surface.card }
-                  ]}>
-                    <Text style={[
-                      styles.modalTierText,
-                      { color: selectedBadge.earned ? tierColor.primary : themeColors.text.tertiary }
+              {(() => {
+                const tierColor = TIER_COLORS[selectedBadge.tier];
+                const Icon = selectedBadge.Icon;
+                return (
+                  <>
+                    <View style={[
+                      styles.modalIconContainer,
+                      { backgroundColor: selectedBadge.earned ? tierColor.dim : themeColors.surface.card }
                     ]}>
-                      {selectedBadge.tier.toUpperCase()}
-                    </Text>
-                  </View>
+                      {selectedBadge.earned ? (
+                        <Icon size={56} color={tierColor.primary} strokeWidth={2} />
+                      ) : (
+                        <Lock size={48} color={themeColors.text.tertiary} strokeWidth={2} />
+                      )}
+                    </View>
 
-                  <Text style={[styles.modalDescription, { color: themeColors.text.secondary }]}>{selectedBadge.description}</Text>
+                    <Text style={[styles.modalTitle, { color: themeColors.text.primary }]}>{selectedBadge.title}</Text>
 
-                  <View style={[
-                    styles.statusPill,
-                    selectedBadge.earned
-                      ? { backgroundColor: themeColors.successDim }
-                      : { backgroundColor: themeColors.surface.card }
-                  ]}>
-                    {selectedBadge.earned ? (
-                      <>
-                        <CheckCircle size={18} color={themeColors.success} strokeWidth={2.5} />
-                        <Text style={[styles.statusTextUnlocked, { color: themeColors.success }]}>UNLOCKED</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Lock size={18} color={themeColors.text.tertiary} strokeWidth={2.5} />
-                        <Text style={[styles.statusTextLocked, { color: themeColors.text.tertiary }]}>
-                          {selectedBadge.progress !== null
-                            ? `${selectedBadge.progress}/${selectedBadge.threshold}`
-                            : 'LOCKED'}
-                        </Text>
-                      </>
-                    )}
-                  </View>
-                </>
-              );
-            })()}
-          </View>
+                    <View style={[
+                      styles.modalTierPill,
+                      { backgroundColor: selectedBadge.earned ? tierColor.dim : themeColors.surface.card }
+                    ]}>
+                      <Text style={[
+                        styles.modalTierText,
+                        { color: selectedBadge.earned ? tierColor.primary : themeColors.text.tertiary }
+                      ]}>
+                        {selectedBadge.tier.toUpperCase()}
+                      </Text>
+                    </View>
+
+                    <Text style={[styles.modalDescription, { color: themeColors.text.secondary }]}>{selectedBadge.description}</Text>
+
+                    <View style={[
+                      styles.statusPill,
+                      selectedBadge.earned
+                        ? { backgroundColor: themeColors.successDim }
+                        : { backgroundColor: themeColors.surface.card }
+                    ]}>
+                      {selectedBadge.earned ? (
+                        <>
+                          <CheckCircle size={18} color={themeColors.success} strokeWidth={2.5} />
+                          <Text style={[styles.statusTextUnlocked, { color: themeColors.success }]}>UNLOCKED</Text>
+                        </>
+                      ) : (
+                        <>
+                          <Lock size={18} color={themeColors.text.tertiary} strokeWidth={2.5} />
+                          <Text style={[styles.statusTextLocked, { color: themeColors.text.tertiary }]}>
+                            {selectedBadge.progress !== null
+                              ? `${selectedBadge.progress}/${selectedBadge.threshold}`
+                              : 'LOCKED'}
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  </>
+                );
+              })()}
+            </View>
+          )}
         </View>
-      )}
-    </ScrollView>
+      </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
   },

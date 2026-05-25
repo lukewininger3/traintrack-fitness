@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../config/supabase';
 
@@ -25,6 +25,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const profileFetchRef = useRef({ userId: null, inProgress: false });
 
   // Check if user needs to set up username
   const needsUsername = user && !profileLoading && !profile?.username;
@@ -43,12 +44,19 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Fetch user profile from database
-  const fetchProfile = useCallback(async (userId) => {
+  const fetchProfile = useCallback(async (userId, forceRefresh = false) => {
     if (!userId) {
       setProfile(null);
       setProfileLoading(false);
       return null;
     }
+
+    // Prevent duplicate fetches for the same user (race condition fix)
+    if (!forceRefresh && profileFetchRef.current.inProgress && profileFetchRef.current.userId === userId) {
+      return null;
+    }
+
+    profileFetchRef.current = { userId, inProgress: true };
 
     try {
       setProfileLoading(true);
@@ -66,6 +74,7 @@ export const AuthProvider = ({ children }) => {
         // Profile doesn't exist yet
         setProfile(null);
         setProfileLoading(false);
+        profileFetchRef.current.inProgress = false;
         return null;
       }
 
@@ -73,24 +82,27 @@ export const AuthProvider = ({ children }) => {
         console.error('Error fetching profile:', error);
         setProfile(null);
         setProfileLoading(false);
+        profileFetchRef.current.inProgress = false;
         return null;
       }
 
       setProfile(data);
       setProfileLoading(false);
+      profileFetchRef.current.inProgress = false;
       return data;
     } catch (error) {
       console.error('Error fetching profile:', error);
       setProfile(null);
       setProfileLoading(false);
+      profileFetchRef.current.inProgress = false;
       return null;
     }
   }, [loadOnboardingStatus]);
 
-  // Public method to refresh profile
+  // Public method to refresh profile (forces a new fetch)
   const refreshProfile = useCallback(async () => {
     if (user?.id) {
-      return await fetchProfile(user.id);
+      return await fetchProfile(user.id, true);
     }
     return null;
   }, [user?.id, fetchProfile]);
@@ -155,13 +167,17 @@ export const AuthProvider = ({ children }) => {
         // Import the migration functions
         const { migrateLocalToCloud } = await import('../utils/storage');
         const { migrateGoalsToCloud } = await import('../utils/goalsStorage');
+        const { migrateWeightDataToCloud } = await import('../utils/weightStorage');
 
-        // Run migrations in background (don't wait)
-        migrateLocalToCloud().catch(() => {
-          // Workout migration error
+        // Run migrations in background (don't wait, but log errors)
+        migrateLocalToCloud().catch((err) => {
+          console.warn('Workout migration failed:', err?.message || 'Unknown error');
         });
-        migrateGoalsToCloud().catch(() => {
-          // Goals migration error
+        migrateGoalsToCloud().catch((err) => {
+          console.warn('Goals migration failed:', err?.message || 'Unknown error');
+        });
+        migrateWeightDataToCloud().catch((err) => {
+          console.warn('Weight data migration failed:', err?.message || 'Unknown error');
         });
       }
 
@@ -183,10 +199,10 @@ export const AuthProvider = ({ children }) => {
 
   const resetPassword = async (email) => {
     try {
-      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'yourapp://reset-password',
-      });
-      
+      // Don't specify redirectTo - Supabase will use its default web-based reset flow
+      // User will reset password in browser, then can log in with new password in app
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email);
+
       if (error) throw error;
       return { data, error: null };
     } catch (error) {

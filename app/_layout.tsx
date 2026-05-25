@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
 import { TimerProvider } from '../src/contexts/TimerContext';
 import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
+import { NotificationProvider } from '../src/contexts/NotificationContext';
 import ErrorBoundary from '../src/components/ErrorBoundary';
 
 function RootLayoutNav() {
@@ -103,6 +104,18 @@ function RootLayoutNav() {
         name="exercise-chart-picker"
         options={{ animation: 'slide_from_bottom' }}
       />
+      <Stack.Screen
+        name="settings"
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="privacy-policy"
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="terms-of-service"
+        options={{ animation: 'slide_from_right' }}
+      />
     </Stack>
   );
 }
@@ -113,9 +126,11 @@ export default function RootLayout() {
       <ErrorBoundary fallbackMessage="The app encountered an error. Please restart the app.">
         <ThemeProvider>
           <AuthProvider>
-            <TimerProvider>
-              <RootLayoutNav />
-            </TimerProvider>
+            <NotificationProvider>
+              <TimerProvider>
+                <RootLayoutNav />
+              </TimerProvider>
+            </NotificationProvider>
           </AuthProvider>
         </ThemeProvider>
       </ErrorBoundary>
