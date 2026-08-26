@@ -28,7 +28,6 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: getUniqueIdentifier(),
-      buildNumber: '2',
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         UIBackgroundModes: ['remote-notification'],

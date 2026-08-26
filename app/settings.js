@@ -33,6 +33,7 @@ import {
   Smartphone,
   Check,
 } from 'lucide-react-native';
+import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 
 import { useTheme } from '../src/contexts/ThemeContext';
@@ -223,8 +224,11 @@ export default function SettingsScreen() {
     Alert.alert('Restore Purchases', 'No previous purchases found.', [{ text: 'OK' }]);
   };
 
-  const appVersion = Constants.expoConfig?.version || '1.0.0';
-  const buildNumber = Constants.expoConfig?.ios?.buildNumber || '1';
+  // Read from the native binary, not the manifest: EAS remote versioning
+  // assigns the build number at build time, so app config values are stale.
+  const appVersion =
+    Application.nativeApplicationVersion || Constants.expoConfig?.version || '1.0.0';
+  const buildNumber = Application.nativeBuildVersion || '\u2014';
 
   const hours = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
   const minutes = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
