@@ -1,7 +1,10 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../config/supabase';
+import { clearBlockedCache } from '../utils/moderation';
+import { ensureLocalDataBelongsTo } from '../utils/accountData';
 
+/** @type {import('react').Context<any>} */
 export const AuthContext = createContext({
   user: null,
   session: null,
@@ -63,6 +66,10 @@ export const AuthProvider = ({ children }) => {
 
       // Start onboarding check in parallel (non-blocking)
       loadOnboardingStatus();
+
+      // Never show (or sync) another account's cached data. Runs while the
+      // loading screen is still up.
+      await ensureLocalDataBelongsTo(userId);
 
       const { data, error } = await supabase
         .from('profiles')
@@ -126,6 +133,8 @@ export const AuthProvider = ({ children }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      // Block list belongs to the previous user
+      clearBlockedCache();
       // Fetch profile on auth change
       if (session?.user) {
         fetchProfile(session.user.id);
@@ -162,8 +171,11 @@ export const AuthProvider = ({ children }) => {
 
       if (error) throw error;
 
-      // Migrate local data to cloud after successful login
+      // Migrate local data to cloud after successful login. The local cache is
+      // first cleared if it belongs to a different account.
       if (data?.user) {
+        await ensureLocalDataBelongsTo(data.user.id);
+
         // Import the migration functions
         const { migrateLocalToCloud } = await import('../utils/storage');
         const { migrateGoalsToCloud } = await import('../utils/goalsStorage');

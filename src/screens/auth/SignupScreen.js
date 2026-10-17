@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Lock, Mail, UserPlus } from 'lucide-react-native';
+import { Check, Lock, Mail, UserPlus } from 'lucide-react-native';
 import { useState } from 'react';
 import {
     ActivityIndicator,
@@ -23,6 +23,7 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const { signUp } = useAuth();
 
   const handleSignup = async () => {
@@ -44,6 +45,11 @@ export default function SignupScreen() {
 
     if (password !== confirmPassword) {
       Alert.alert('Password Mismatch', 'Passwords do not match');
+      return;
+    }
+
+    if (!agreedToTerms) {
+      Alert.alert('Terms Required', 'Please agree to the Terms of Service and Privacy Policy to create an account.');
       return;
     }
 
@@ -138,8 +144,27 @@ export default function SignupScreen() {
             />
           </View>
 
+          <View style={styles.termsRow}>
+            <Pressable
+              onPress={() => setAgreedToTerms(v => !v)}
+              hitSlop={8}
+              style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: agreedToTerms }}
+            >
+              {agreedToTerms && <Check size={14} color={COLORS.text.inverse} strokeWidth={3} />}
+            </Pressable>
+            <Text style={styles.termsText}>
+              I agree to the{' '}
+              <Text style={styles.termsLink} onPress={() => router.push('/terms-of-service')}>Terms of Service</Text>
+              {' '}and{' '}
+              <Text style={styles.termsLink} onPress={() => router.push('/privacy-policy')}>Privacy Policy</Text>
+              . I understand there is no tolerance for objectionable content or abusive behavior.
+            </Text>
+          </View>
+
           <Pressable 
-            style={[styles.signupButton, loading && styles.signupButtonDisabled]}
+            style={[styles.signupButton, (loading || !agreedToTerms) && styles.signupButtonDisabled]}
             onPress={handleSignup}
             disabled={loading}
           >
@@ -212,6 +237,36 @@ const styles = StyleSheet.create({
     color: COLORS.text.primary,
     fontSize: 16,
     paddingVertical: 16,
+  },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: COLORS.surface.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: COLORS.accent.primary,
+    borderColor: COLORS.accent.primary,
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.text.secondary,
+  },
+  termsLink: {
+    color: COLORS.accent.primary,
+    fontWeight: '600',
   },
   signupButton: {
     backgroundColor: COLORS.accent.primary,

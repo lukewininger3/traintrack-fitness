@@ -196,7 +196,7 @@ export default function PersonalRecordsScreen() {
             </View>
             <Text style={styles.emptyTitle}>No Results</Text>
             <Text style={styles.emptySubtitle}>
-              No exercises match "{searchQuery}"
+              No exercises match &ldquo;{searchQuery}&rdquo;
             </Text>
           </View>
         )}

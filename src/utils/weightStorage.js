@@ -497,7 +497,7 @@ const syncWeightDataToCloud = async (data) => {
 /**
  * Refresh weight data from cloud (background operation)
  */
-const refreshWeightDataFromCloud = async () => {
+export const refreshWeightDataFromCloud = async () => {
   try {
     const user = await getCurrentUser();
     if (!user) return; // Not logged in, skip

@@ -34,7 +34,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ViewShot from 'react-native-view-shot';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import { useTheme } from '../contexts/ThemeContext';
-import { likeWorkout, addComment, getComments } from '../utils/socialStorage';
+import { likeWorkout, addComment, getComments, deleteComment } from '../utils/socialStorage';
+import { showCommentActions, confirmBlock } from '../utils/moderation';
+import { useAuth } from '../contexts/AuthContext';
 import { saveTemplate } from '../utils/workoutTemplates';
 
 // Social colors
@@ -61,6 +63,7 @@ const getWorkoutIcon = (type) => {
 
 export default function FriendWorkoutDetailScreen() {
   const { colors: themeColors } = useTheme();
+  const { user: currentUser } = useAuth();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const viewShotRef = useRef(null);
@@ -147,13 +150,28 @@ export default function FriendWorkoutDetailScreen() {
         setComments(prev => [...prev, { ...result.comment, timeAgo: 'Just now' }]);
         setNewComment('');
       } else {
-        Alert.alert('Error', 'Failed to post comment');
+        Alert.alert('Error', result.error || 'Failed to post comment');
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to post comment');
     }
     setIsSendingComment(false);
   };
+
+  const handleCommentLongPress = (comment) => {
+    showCommentActions({
+      comment,
+      currentUserId: currentUser?.id,
+      deleteComment,
+      onDeleted: (id) => setComments(prev => prev.filter(c => c.id !== id)),
+      onBlocked: (blockedId) => setComments(prev => prev.filter(c => c.user?.id !== blockedId)),
+    });
+  };
+
+  // Blocking the workout's author leaves nothing to show here
+  const handleAuthorBlocked = () => router.back();
+
+  const isOwnWorkout = activity?.friend?.id && activity.friend.id === currentUser?.id;
 
   const handleShare = async () => {
     if (!viewShotRef.current) return;
@@ -294,6 +312,17 @@ export default function FriendWorkoutDetailScreen() {
                 <Text style={[styles.menuItemText, { color: themeColors.text.primary }]}>Save as Template</Text>
               </Pressable>
             )}
+            {!isOwnWorkout && activity.friend?.id && (
+              <Pressable
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  confirmBlock({ userId: activity.friend.id, userName: activity.friend.name, onBlocked: handleAuthorBlocked });
+                }}
+              >
+                <Text style={[styles.menuItemText, { color: themeColors.error }]}>Block {activity.friend.name || 'User'}</Text>
+              </Pressable>
+            )}
           </View>
         </Pressable>
       )}
@@ -415,7 +444,12 @@ export default function FriendWorkoutDetailScreen() {
             {comments.length > 0 && (
               <View style={styles.commentsList}>
                 {comments.map((comment, idx) => (
-                  <View key={comment.id || idx} style={styles.commentItem}>
+                  <Pressable
+                    key={comment.id || idx}
+                    style={styles.commentItem}
+                    onLongPress={() => handleCommentLongPress(comment)}
+                    delayLongPress={350}
+                  >
                     <View style={[styles.commentAvatar, { backgroundColor: themeColors.accent.primaryDim }]}>
                       {comment.user?.profilePicture ? (
                         <Image
@@ -433,8 +467,11 @@ export default function FriendWorkoutDetailScreen() {
                       </View>
                       <Text style={[styles.commentText, { color: themeColors.text.secondary }]}>{comment.text}</Text>
                     </View>
-                  </View>
+                  </Pressable>
                 ))}
+                <Text style={[styles.commentHint, { color: themeColors.text.tertiary }]}>
+                  Press and hold a comment to report, block, or delete it.
+                </Text>
               </View>
             )}
             {isLoadingComments && (
@@ -518,6 +555,11 @@ export default function FriendWorkoutDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  commentHint: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: SPACING.sm,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background.primary,

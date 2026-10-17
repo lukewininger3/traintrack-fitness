@@ -33,90 +33,99 @@ export default function PrivacyPolicyScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={[styles.lastUpdated, { color: colors.text.tertiary }]}>
-          Last updated: January 2025
+          Last updated: October 16, 2026
         </Text>
 
-        <Section title="1. Information We Collect" colors={colors}>
+        <Section title="Information We Collect" colors={colors}>
           <Paragraph colors={colors}>
-            TrainTrack collects information you provide directly to us, including:
+            TrainTrack collects the information you provide when you use the app:
           </Paragraph>
-          <BulletPoint colors={colors}>Account information (email, username)</BulletPoint>
-          <BulletPoint colors={colors}>Workout data (exercises, weights, reps, dates)</BulletPoint>
-          <BulletPoint colors={colors}>Body metrics (weight entries, progress photos)</BulletPoint>
-          <BulletPoint colors={colors}>Goals and preferences</BulletPoint>
-        </Section>
-
-        <Section title="2. How We Use Your Information" colors={colors}>
-          <Paragraph colors={colors}>
-            We use the information we collect to:
-          </Paragraph>
-          <BulletPoint colors={colors}>Provide and maintain the TrainTrack service</BulletPoint>
-          <BulletPoint colors={colors}>Sync your data across devices</BulletPoint>
-          <BulletPoint colors={colors}>Send you notifications and reminders (with your consent)</BulletPoint>
-          <BulletPoint colors={colors}>Improve and personalize your experience</BulletPoint>
-          <BulletPoint colors={colors}>Respond to your comments and questions</BulletPoint>
-        </Section>
-
-        <Section title="3. Data Storage and Security" colors={colors}>
-          <Paragraph colors={colors}>
-            Your workout data is stored locally on your device and, if you create an account,
-            securely synced to our cloud servers powered by Supabase. We implement
-            industry-standard security measures to protect your personal information.
-          </Paragraph>
-          <Paragraph colors={colors}>
-            Progress photos are stored locally on your device and are never uploaded to our
-            servers unless you explicitly choose to share them.
+          <BulletPoint colors={colors}>Account information: email address, username, and display name</BulletPoint>
+          <BulletPoint colors={colors}>Profile picture, if you choose to upload one</BulletPoint>
+          <BulletPoint colors={colors}>Workout data: exercises, sets, weights, reps, durations, and dates</BulletPoint>
+          <BulletPoint colors={colors}>Body metrics: weight entries and notes</BulletPoint>
+          <BulletPoint colors={colors}>Goals, templates, custom exercises, and personal records</BulletPoint>
+          <BulletPoint colors={colors}>Social activity: friends, friend requests, shared workouts, likes, and comments</BulletPoint>
+          <BulletPoint colors={colors}>Reports and blocks you make, and feedback you send (with your app version and device type)</BulletPoint>
+          <Paragraph colors={colors} style={{ marginTop: SPACING.md }}>
+            We do not use advertising, analytics, or tracking services, and we do not collect
+            your location.
           </Paragraph>
         </Section>
 
-        <Section title="4. Data Sharing" colors={colors}>
-          <Paragraph colors={colors}>
-            We do not sell your personal information. We may share your information only in
-            the following circumstances:
-          </Paragraph>
-          <BulletPoint colors={colors}>With your consent (e.g., sharing workouts with friends)</BulletPoint>
-          <BulletPoint colors={colors}>To comply with legal obligations</BulletPoint>
-          <BulletPoint colors={colors}>To protect our rights and prevent fraud</BulletPoint>
+        <Section title="How We Use Your Information" colors={colors}>
+          <BulletPoint colors={colors}>Provide the TrainTrack service and sync your data across devices</BulletPoint>
+          <BulletPoint colors={colors}>Show your shared workouts and profile to your friends</BulletPoint>
+          <BulletPoint colors={colors}>Send reminders you turn on (these are scheduled on your device)</BulletPoint>
+          <BulletPoint colors={colors}>Review reports and keep the community safe</BulletPoint>
+          <BulletPoint colors={colors}>Respond to your feedback and improve the app</BulletPoint>
         </Section>
 
-        <Section title="5. Your Rights" colors={colors}>
-          <Paragraph colors={colors}>
-            You have the right to:
-          </Paragraph>
-          <BulletPoint colors={colors}>Access your personal data</BulletPoint>
-          <BulletPoint colors={colors}>Export your workout data</BulletPoint>
-          <BulletPoint colors={colors}>Delete your account and associated data</BulletPoint>
-          <BulletPoint colors={colors}>Opt out of notifications at any time</BulletPoint>
+        <Section title="What Other Users Can See" colors={colors}>
+          <BulletPoint colors={colors}>
+            Signed-in users can find you by username and see your display name, profile picture,
+            week streak, and total workout count.
+          </BulletPoint>
+          <BulletPoint colors={colors}>
+            Only your friends can see workouts you share and comments on them. You can turn off
+            workout sharing in your profile.
+          </BulletPoint>
+          <BulletPoint colors={colors}>
+            Your email address, weight entries, and unshared workouts are never visible to other users.
+          </BulletPoint>
         </Section>
 
-        <Section title="6. Third-Party Services" colors={colors}>
+        <Section title="Data Storage and Security" colors={colors}>
           <Paragraph colors={colors}>
-            TrainTrack may integrate with third-party services such as Apple Health and
-            Google Fit. When you connect these services, their respective privacy policies apply
-            to the data shared with them.
+            Your data is stored on your device and in our cloud database, hosted by Supabase.
+            Data is encrypted in transit, and access is restricted so users can only read data
+            they are permitted to see.
+          </Paragraph>
+          <Paragraph colors={colors} style={{ marginTop: SPACING.md }}>
+            Progress photos attached to weight entries stay on your device and are not uploaded.
+            Profile pictures are uploaded so your friends can see them.
           </Paragraph>
         </Section>
 
-        <Section title="7. Children's Privacy" colors={colors}>
+        <Section title="Information Sharing" colors={colors}>
+          <Paragraph colors={colors}>
+            We do not sell or rent your personal information. We share it only:
+          </Paragraph>
+          <BulletPoint colors={colors}>With other users, as described above</BulletPoint>
+          <BulletPoint colors={colors}>With Supabase, which stores data on our behalf</BulletPoint>
+          <BulletPoint colors={colors}>When required by law, or to protect the safety of our users</BulletPoint>
+        </Section>
+
+        <Section title="Your Choices and Rights" colors={colors}>
+          <BulletPoint colors={colors}>Export your data from Settings &gt; Export Workout Data</BulletPoint>
+          <BulletPoint colors={colors}>Edit your username, display name, and profile picture at any time</BulletPoint>
+          <BulletPoint colors={colors}>Turn notifications on or off in Settings</BulletPoint>
+          <BulletPoint colors={colors}>Block users and manage blocked users in Settings</BulletPoint>
+          <BulletPoint colors={colors}>
+            Permanently delete your account and all associated data from Settings &gt; Delete
+            Account. Deletion takes effect immediately and cannot be undone.
+          </BulletPoint>
+        </Section>
+
+        <Section title="Children's Privacy" colors={colors}>
           <Paragraph colors={colors}>
             TrainTrack is not intended for children under 13 years of age. We do not knowingly
-            collect personal information from children under 13.
+            collect personal information from children under 13. If you believe a child has
+            created an account, please email traintrack.app.support@gmail.com and we will delete it.
           </Paragraph>
         </Section>
 
-        <Section title="8. Changes to This Policy" colors={colors}>
+        <Section title="Changes to This Policy" colors={colors}>
           <Paragraph colors={colors}>
-            We may update this privacy policy from time to time. We will notify you of any
-            changes by posting the new policy on this page and updating the "Last updated" date.
+            We may update this privacy policy from time to time. We will post the updated policy
+            in the app and update the &ldquo;Last updated&rdquo; date above.
           </Paragraph>
         </Section>
 
-        <Section title="9. Contact Us" colors={colors}>
+        <Section title="Contact Us" colors={colors}>
           <Paragraph colors={colors}>
-            If you have any questions about this Privacy Policy, please contact us at:
-          </Paragraph>
-          <Paragraph colors={colors} style={{ marginTop: SPACING.sm }}>
-            support@traintrackfitness.com
+            Questions or requests about your privacy? Email traintrack.app.support@gmail.com, or
+            use Settings &gt; Send Feedback in the app and choose &ldquo;Account / Privacy&rdquo;.
           </Paragraph>
         </Section>
 

@@ -93,6 +93,7 @@ const SetInputField = React.forwardRef(({ value, onChangeText, placeholder, unit
     </View>
   );
 });
+SetInputField.displayName = 'SetInputField';
 
 // Animated checkmark for set confirmation
 const ConfirmButton = ({ isConfirmed, canConfirm, onConfirm, themeColors }) => {

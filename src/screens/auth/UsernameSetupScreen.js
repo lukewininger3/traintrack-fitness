@@ -1,11 +1,13 @@
 import { router } from 'expo-router';
 import { AtSign, Check, Loader, User, X } from 'lucide-react-native';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,6 +17,7 @@ import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../config/supabase';
+import { containsObjectionableContent } from '../../utils/moderation';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../../theme/design';
 
 export default function UsernameSetupScreen() {
@@ -26,6 +29,7 @@ export default function UsernameSetupScreen() {
   const [isAvailable, setIsAvailable] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const displayNameRef = useRef(null);
 
   // Generate suggested username from email
   useEffect(() => {
@@ -102,6 +106,11 @@ export default function UsernameSetupScreen() {
       return;
     }
 
+    if (containsObjectionableContent(username) || containsObjectionableContent(displayName)) {
+      setError('Please choose a name without offensive language');
+      return;
+    }
+
     setIsSaving(true);
     setError('');
 
@@ -128,7 +137,8 @@ export default function UsernameSetupScreen() {
       router.replace('/(tabs)');
     } catch (err) {
       console.error('Error saving profile:', err);
-      setError(err.message || 'Failed to save profile');
+      // Unique violation: taken by a profile this user can't see (e.g. someone who blocked them)
+      setError(err.code === '23505' ? 'Username already taken' : (err.message || 'Failed to save profile'));
     } finally {
       setIsSaving(false);
     }
@@ -141,7 +151,12 @@ export default function UsernameSetupScreen() {
       style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        showsVerticalScrollIndicator={false}
+      >
         <Animated.View
           entering={FadeInDown.delay(100).springify().damping(15)}
           style={styles.header}
@@ -177,6 +192,8 @@ export default function UsernameSetupScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 maxLength={20}
+                returnKeyType="next"
+                onSubmitEditing={() => displayNameRef.current?.focus()}
               />
               {isChecking ? (
                 <Loader size={18} color={COLORS.text.tertiary} strokeWidth={2} />
@@ -204,12 +221,15 @@ export default function UsernameSetupScreen() {
                 style={styles.input}
                 placeholder="Your Name"
                 placeholderTextColor={COLORS.text.tertiary}
+                ref={displayNameRef}
                 value={displayName}
                 onChangeText={setDisplayName}
                 maxLength={30}
+                returnKeyType="done"
+                onSubmitEditing={() => (canSave ? handleSave() : Keyboard.dismiss())}
               />
             </View>
-            <Text style={styles.hintText}>This is how you'll appear to friends</Text>
+            <Text style={styles.hintText}>This is how you&apos;ll appear to friends</Text>
           </View>
         </Animated.View>
 
@@ -233,7 +253,7 @@ export default function UsernameSetupScreen() {
             You can change your display name later in settings
           </Text>
         </Animated.View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -244,7 +264,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background.primary,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
+    paddingVertical: SPACING.lg,
     paddingHorizontal: SPACING.xl,
     justifyContent: 'center',
   },

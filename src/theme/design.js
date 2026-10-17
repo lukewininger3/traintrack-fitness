@@ -250,6 +250,7 @@ export const LIGHT_COLORS = {
 // Default to dark theme - this will be overridden by ThemeContext
 export let COLORS = DARK_COLORS;
 
+/** @type {Record<string, import('react-native').TextStyle>} */
 export const TYPOGRAPHY = {
   // Display - Bold, condensed (athletic feel)
   display: {
@@ -342,6 +343,7 @@ export const SPACING = {
   xl: 32,
   xxl: 48,
   xxxl: 64,
+  screenPadding: 20,
 };
 
 export const RADIUS = {

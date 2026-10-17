@@ -230,7 +230,7 @@ export default function LoginScreen() {
 
             <Text style={styles.modalTitle}>Reset Password</Text>
             <Text style={styles.modalSubtitle}>
-              Enter your email address and we'll send you a link to reset your password.
+              Enter your email address and we&apos;ll send you a link to reset your password.
             </Text>
 
             <View style={styles.modalInputContainer}>

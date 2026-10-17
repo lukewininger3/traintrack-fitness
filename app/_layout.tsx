@@ -8,6 +8,9 @@ import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
 import { NotificationProvider } from '../src/contexts/NotificationContext';
 import ErrorBoundary from '../src/components/ErrorBoundary';
 
+// Screens a signed-out user can open (linked from the signup screen)
+const PUBLIC_ROUTES = ['privacy-policy', 'terms-of-service', 'feedback'];
+
 function RootLayoutNav() {
   const { user, loading, profileLoading, needsUsername, needsOnboarding } = useAuth();
   const { colors } = useTheme();
@@ -21,8 +24,9 @@ function RootLayoutNav() {
     const inAuthGroup = segments[0] === 'auth';
     const onUsernameSetup = segments[1] === 'username-setup';
     const onOnboarding = segments[0] === 'onboarding';
+    const onPublicRoute = PUBLIC_ROUTES.includes(segments[0]);
 
-    if (!user && !inAuthGroup) {
+    if (!user && !inAuthGroup && !onPublicRoute) {
       // User not logged in and trying to access app - redirect to login
       router.replace('/auth/login' as any);
     } else if (user && needsUsername && !onUsernameSetup) {
@@ -114,6 +118,14 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="terms-of-service"
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="feedback"
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="blocked-users"
         options={{ animation: 'slide_from_right' }}
       />
     </Stack>

@@ -33,7 +33,7 @@ export default function TermsOfServiceScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={[styles.lastUpdated, { color: colors.text.tertiary }]}>
-          Last updated: January 2025
+          Last updated: October 16, 2026
         </Text>
 
         <Paragraph colors={colors}>
@@ -50,15 +50,15 @@ export default function TermsOfServiceScreen() {
 
         <Section title="2. Description of Service" colors={colors}>
           <Paragraph colors={colors}>
-            TrainTrack is a fitness tracking application that allows you to log workouts, track
-            progress, set goals, and optionally connect with friends. The service may include
-            both free and premium subscription features.
+            TrainTrack is a free fitness tracking application that allows you to log workouts,
+            track progress, set goals, and optionally connect with friends.
           </Paragraph>
         </Section>
 
         <Section title="3. User Accounts" colors={colors}>
           <Paragraph colors={colors}>
-            To access certain features, you may need to create an account. You are responsible for:
+            To use TrainTrack, you need to create an account. You must be at least 13 years old.
+            You are responsible for:
           </Paragraph>
           <BulletPoint colors={colors}>Maintaining the confidentiality of your account credentials</BulletPoint>
           <BulletPoint colors={colors}>All activities that occur under your account</BulletPoint>
@@ -66,32 +66,29 @@ export default function TermsOfServiceScreen() {
           <BulletPoint colors={colors}>Notifying us of any unauthorized use of your account</BulletPoint>
         </Section>
 
-        <Section title="4. Subscriptions and Payments" colors={colors}>
+        <Section title="4. Community Guidelines" colors={colors}>
           <Paragraph colors={colors}>
-            TrainTrack may offer subscription plans with additional features. By purchasing a
-            subscription:
+            TrainTrack has zero tolerance for objectionable content or abusive users. You agree
+            not to post usernames, display names, profile pictures, or comments
+            that:
           </Paragraph>
-          <BulletPoint colors={colors}>
-            You authorize us to charge your payment method on a recurring basis
-          </BulletPoint>
-          <BulletPoint colors={colors}>
-            Subscriptions automatically renew unless cancelled before the renewal date
-          </BulletPoint>
-          <BulletPoint colors={colors}>
-            Refunds are handled according to Apple App Store or Google Play Store policies
-          </BulletPoint>
-          <BulletPoint colors={colors}>
-            Prices may change with reasonable notice to subscribers
-          </BulletPoint>
+          <BulletPoint colors={colors}>Harass, bully, threaten, or intimidate anyone</BulletPoint>
+          <BulletPoint colors={colors}>Contain hate speech or discriminate based on race, ethnicity, religion, gender, sexual orientation, disability, or any other characteristic</BulletPoint>
+          <BulletPoint colors={colors}>Are sexually explicit, violent, or otherwise offensive</BulletPoint>
+          <BulletPoint colors={colors}>Are spam, scams, or impersonate another person</BulletPoint>
+          <Paragraph colors={colors} style={{ marginTop: SPACING.md }}>
+            You can report any user or comment, and block any user, from within
+            the app. We review reports within 24 hours and will remove offending content and
+            suspend or permanently ban users who violate these guidelines.
+          </Paragraph>
         </Section>
 
         <Section title="5. Acceptable Use" colors={colors}>
           <Paragraph colors={colors}>
-            You agree not to:
+            You also agree not to:
           </Paragraph>
           <BulletPoint colors={colors}>Use the service for any illegal purpose</BulletPoint>
-          <BulletPoint colors={colors}>Harass, abuse, or harm other users</BulletPoint>
-          <BulletPoint colors={colors}>Attempt to access other users' accounts or data</BulletPoint>
+          <BulletPoint colors={colors}>Attempt to access other users&apos; accounts or data</BulletPoint>
           <BulletPoint colors={colors}>Interfere with or disrupt the service</BulletPoint>
           <BulletPoint colors={colors}>Upload malicious content or code</BulletPoint>
           <BulletPoint colors={colors}>Violate any applicable laws or regulations</BulletPoint>
@@ -135,9 +132,8 @@ export default function TermsOfServiceScreen() {
 
         <Section title="9. Termination" colors={colors}>
           <Paragraph colors={colors}>
-            We may terminate or suspend your account at any time for violations of these terms
-            or for any other reason at our sole discretion. You may delete your account at any
-            time through the app settings.
+            We may terminate or suspend your account at any time for violations of these terms.
+            You may permanently delete your account at any time from Settings &gt; Delete Account.
           </Paragraph>
         </Section>
 
@@ -164,12 +160,10 @@ export default function TermsOfServiceScreen() {
           </Paragraph>
         </Section>
 
-        <Section title="13. Contact Information" colors={colors}>
+        <Section title="13. Contact" colors={colors}>
           <Paragraph colors={colors}>
-            For questions about these Terms of Service, please contact us at:
-          </Paragraph>
-          <Paragraph colors={colors} style={{ marginTop: SPACING.sm }}>
-            support@traintrackfitness.com
+            For questions about these Terms of Service, email traintrack.app.support@gmail.com or use
+            Settings &gt; Send Feedback in the app.
           </Paragraph>
         </Section>
 

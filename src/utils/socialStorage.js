@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase';
+import { containsObjectionableContent, getBlockedUserIds } from './moderation';
 
 // Get current user helper
 const getCurrentUser = async () => {
@@ -80,6 +81,10 @@ export const createProfile = async () => {
  */
 export const updateProfile = async (updates) => {
   try {
+    if (containsObjectionableContent(updates?.username) || containsObjectionableContent(updates?.display_name)) {
+      return { success: false, error: 'Please choose a name without offensive language.' };
+    }
+
     const user = await getCurrentUser();
     if (!user) return { success: false, error: 'Not logged in' };
 
@@ -140,8 +145,9 @@ export const searchUsers = async (query) => {
       .limit(10);
 
     if (error) throw error;
+    const blocked = await getBlockedUserIds();
     // Map to include profilePicture
-    return (data || []).map(user => ({
+    return (data || []).filter(u => !blocked.has(u.id)).map(user => ({
       ...user,
       profilePicture: user.avatar_url || null,
     }));
@@ -215,7 +221,7 @@ export const getPendingRequests = async () => {
     if (!user) return [];
 
     // Get requests first
-    const { data: requests, error } = await supabase
+    let { data: requests, error } = await supabase
       .from('friend_requests')
       .select('id, from_user_id, created_at')
       .eq('to_user_id', user.id)
@@ -228,7 +234,9 @@ export const getPendingRequests = async () => {
       return [];
     }
     if (error) throw error;
-    if (!requests || requests.length === 0) return [];
+    const blocked = await getBlockedUserIds();
+    requests = (requests || []).filter(r => !blocked.has(r.from_user_id));
+    if (requests.length === 0) return [];
 
     // Get profiles for the senders (including avatar_url for profile pictures)
     const senderIds = requests.map(r => r.from_user_id);
@@ -547,7 +555,9 @@ export const getActivityFeed = async (limit = 20) => {
 
     if (!friendships || friendships.length === 0) return [];
 
-    const friendIds = friendships.map(f => f.friend_id);
+    const blocked = await getBlockedUserIds();
+    const friendIds = friendships.map(f => f.friend_id).filter(id => !blocked.has(id));
+    if (friendIds.length === 0) return [];
 
     // Get shared workouts from friends
     const { data: workouts, error } = await supabase
@@ -1017,6 +1027,10 @@ export const addComment = async (sharedWorkoutId, text) => {
     const user = await getCurrentUser();
     if (!user) return { success: false, error: 'Not logged in' };
 
+    if (containsObjectionableContent(text)) {
+      return { success: false, error: 'Your comment contains language that isn\'t allowed. Please revise it.' };
+    }
+
     const { data, error } = await supabase
       .from('workout_comments')
       .insert({
@@ -1057,14 +1071,16 @@ export const addComment = async (sharedWorkoutId, text) => {
  */
 export const getComments = async (sharedWorkoutId) => {
   try {
-    const { data: comments, error } = await supabase
+    let { data: comments, error } = await supabase
       .from('workout_comments')
       .select('id, text, created_at, user_id')
       .eq('shared_workout_id', sharedWorkoutId)
       .order('created_at', { ascending: true });
 
     if (error) throw error;
-    if (!comments || comments.length === 0) return [];
+    const blocked = await getBlockedUserIds();
+    comments = (comments || []).filter(c => !blocked.has(c.user_id));
+    if (comments.length === 0) return [];
 
     // Get profiles for commenters (including avatar_url for profile pictures)
     const userIds = [...new Set(comments.map(c => c.user_id))];

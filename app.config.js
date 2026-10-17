@@ -26,14 +26,12 @@ export default {
     userInterfaceStyle: 'dark',
     newArchEnabled: true,
     ios: {
-      supportsTablet: true,
+      supportsTablet: false,
       bundleIdentifier: getUniqueIdentifier(),
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
-        UIBackgroundModes: ['remote-notification'],
-        NSCameraUsageDescription: 'TrainTrack uses the camera for progress photos.',
-        NSPhotoLibraryUsageDescription: 'TrainTrack accesses photos for progress tracking.',
-        NSMotionUsageDescription: 'TrainTrack uses motion data to track your workouts.',
+        NSCameraUsageDescription: 'TrainTrack uses the camera to take your profile picture and progress photos.',
+        NSPhotoLibraryUsageDescription: 'TrainTrack lets you choose a profile picture and progress photos from your library.',
       },
       privacyManifests: {
         NSPrivacyAccessedAPITypes: [
@@ -69,11 +67,12 @@ export default {
         'expo-splash-screen',
         {
           image: './assets/images/splash-icon.png',
-          imageWidth: 200,
+          imageWidth: 240,
           resizeMode: 'contain',
-          backgroundColor: '#ffffff',
+          // App UI is dark-only, so match its background in both system modes
+          backgroundColor: '#0A0A0A',
           dark: {
-            backgroundColor: '#000000',
+            backgroundColor: '#0A0A0A',
           },
         },
       ],

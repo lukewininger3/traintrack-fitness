@@ -290,7 +290,7 @@ export const loadWorkouts = async (options = {}) => {
 };
 
 // Background cloud refresh - updates local cache for next load
-const refreshFromCloud = async () => {
+export const refreshFromCloud = async () => {
   try {
     const user = await getCurrentUser();
     if (!user) {

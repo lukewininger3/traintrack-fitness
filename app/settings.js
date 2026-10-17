@@ -29,7 +29,8 @@ import {
   Download,
   Trash2,
   ChevronRight,
-  CreditCard,
+  MessageSquare,
+  UserX,
   Smartphone,
   Check,
 } from 'lucide-react-native';
@@ -158,53 +159,38 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleClearData = () => {
+  const handleDeleteAccount = () => {
     if (isDeleting) return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
-    const isLoggedIn = !!user;
-    const message = isLoggedIn
-      ? 'This will permanently delete all your workout data, weight logs, goals, and settings from this device AND your cloud account. This action cannot be undone.'
-      : 'This will permanently delete all your workout data, weight logs, goals, and settings from this device. This action cannot be undone.';
-
     Alert.alert(
-      'Delete All Data',
-      message,
+      'Delete Account',
+      'This permanently deletes your account, workouts, weight logs, goals, friends, comments, and profile picture. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete Everything',
+          text: 'Delete Account',
           style: 'destructive',
           onPress: () => {
             // Second confirmation for safety
             Alert.alert(
               'Are you absolutely sure?',
-              'This will delete ALL your fitness data permanently. There is no way to recover it.',
+              'Your account and all of its data will be permanently deleted.',
               [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                  text: 'Yes, Delete All',
+                  text: 'Yes, Delete My Account',
                   style: 'destructive',
                   onPress: async () => {
                     setIsDeleting(true);
                     try {
-                      if (isLoggedIn) {
-                        const result = await deleteAccount();
-                        if (result.success) {
-                          Alert.alert('Account Deleted', 'All your data has been permanently deleted.');
-                          router.replace('/');
-                        } else {
-                          Alert.alert('Error', 'Failed to delete some data. Please try again.');
-                        }
+                      const result = await deleteAccount();
+                      if (result.success) {
+                        // Signing out sends the user back to the login screen
+                        Alert.alert('Account Deleted', 'Your account and data have been permanently deleted.');
                       } else {
-                        const result = await clearAllLocalData();
-                        if (result.success) {
-                          Alert.alert('Data Cleared', 'All local data has been deleted.');
-                          router.replace('/');
-                        } else {
-                          Alert.alert('Error', 'Failed to clear data. Please try again.');
-                        }
+                        Alert.alert('Error', 'We could not delete your account. Please check your connection and try again.');
                       }
                     } finally {
                       setIsDeleting(false);
@@ -219,9 +205,36 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleRestorePurchases = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert('Restore Purchases', 'No previous purchases found.', [{ text: 'OK' }]);
+  const handleClearLocalData = () => {
+    if (isDeleting) return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+    Alert.alert(
+      'Clear All Data',
+      'This will permanently delete all your workout data, weight logs, goals, and settings from this device. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Everything',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              const result = await clearAllLocalData();
+              if (result.success) {
+                Alert.alert('Data Cleared', 'All local data has been deleted.');
+                router.replace('/');
+              } else {
+                Alert.alert('Error', 'Failed to clear data. Please try again.');
+              }
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Read from the native binary, not the manifest: EAS remote versioning
@@ -374,18 +387,28 @@ export default function SettingsScreen() {
             <LinkRow icon={<Shield size={18} color={colors.text.secondary} />} title="Privacy Policy" onPress={() => router.push('/privacy-policy')} colors={colors} />
             <View style={[styles.separator, { backgroundColor: colors.surface.divider }]} />
             <LinkRow icon={<FileText size={18} color={colors.text.secondary} />} title="Terms of Service" onPress={() => router.push('/terms-of-service')} colors={colors} />
+            {user && (
+              <>
+                <View style={[styles.separator, { backgroundColor: colors.surface.divider }]} />
+                <LinkRow icon={<UserX size={18} color={colors.text.secondary} />} title="Blocked Users" onPress={() => router.push('/blocked-users')} colors={colors} />
+              </>
+            )}
           </View>
 
           <View style={[styles.card, { backgroundColor: colors.surface.card, borderColor: colors.surface.border }]}>
-            <LinkRow icon={<Trash2 size={18} color={colors.error} />} title="Clear All Data" titleColor={colors.error} onPress={handleClearData} colors={colors} />
+            {user ? (
+              <LinkRow icon={<Trash2 size={18} color={colors.error} />} title="Delete Account" titleColor={colors.error} onPress={handleDeleteAccount} colors={colors} />
+            ) : (
+              <LinkRow icon={<Trash2 size={18} color={colors.error} />} title="Clear All Data" titleColor={colors.error} onPress={handleClearLocalData} colors={colors} />
+            )}
           </View>
         </Animated.View>
 
-        {/* Subscription Section */}
+        {/* Support Section */}
         <Animated.View entering={FadeInDown.delay(200).duration(300)}>
-          <Text style={[styles.sectionLabel, { color: colors.text.tertiary }]}>SUBSCRIPTION</Text>
+          <Text style={[styles.sectionLabel, { color: colors.text.tertiary }]}>SUPPORT</Text>
           <View style={[styles.card, { backgroundColor: colors.surface.card, borderColor: colors.surface.border }]}>
-            <LinkRow icon={<CreditCard size={18} color={colors.accent.primary} />} title="Restore Purchases" onPress={handleRestorePurchases} colors={colors} />
+            <LinkRow icon={<MessageSquare size={18} color={colors.accent.primary} />} title="Send Feedback" onPress={() => router.push('/feedback')} colors={colors} />
           </View>
         </Animated.View>
 

@@ -448,7 +448,7 @@ export async function getPRsByCategory() {
 
 /**
  * Get summary stats for PRs
- * @returns {Promise<Object>} Summary statistics
+ * @returns {Promise<{ totalPRs: number, recentPRs: number, topExercise: object | null, totalWeight: number }>} Summary statistics
  */
 export async function getPRStats() {
   const records = await loadPersonalRecords();

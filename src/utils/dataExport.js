@@ -106,79 +106,44 @@ export const clearAllLocalData = async () => {
 };
 
 /**
- * Delete all user data from cloud (Supabase)
- * This deletes workouts, weight entries, goals, and profile
+ * Remove the user's profile pictures from Supabase Storage.
+ * Files are stored as avatars/<userId>-<timestamp>.<ext>.
  */
-export const deleteCloudData = async () => {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
+const deleteProfilePictures = async (userId) => {
+  const bucket = supabase.storage.from('profile-pictures');
+  const { data: files, error } = await bucket.list('avatars', { search: userId, limit: 100 });
+  if (error) throw error;
 
-    if (!user) {
-      return { success: true, message: 'No user logged in' };
-    }
+  const paths = (files || [])
+    .filter(f => f.name.startsWith(userId))
+    .map(f => `avatars/${f.name}`);
+  if (paths.length === 0) return;
 
-    // Delete in order to respect foreign key constraints
-    // 1. Delete weight entries
-    await supabase
-      .from('weight_entries')
-      .delete()
-      .eq('user_id', user.id);
-
-    // 2. Delete weight settings
-    await supabase
-      .from('weight_settings')
-      .delete()
-      .eq('user_id', user.id);
-
-    // 3. Delete workouts
-    await supabase
-      .from('workouts')
-      .delete()
-      .eq('user_id', user.id);
-
-    // 4. Delete weekly goals
-    await supabase
-      .from('weekly_goals')
-      .delete()
-      .eq('user_id', user.id);
-
-    // 5. Delete shared workouts
-    await supabase
-      .from('shared_workouts')
-      .delete()
-      .eq('user_id', user.id);
-
-    // 6. Delete profile (this should be last)
-    await supabase
-      .from('profiles')
-      .delete()
-      .eq('id', user.id);
-
-    return { success: true };
-  } catch (error) {
-    console.error('Delete cloud data failed:', error);
-    return { success: false, error: error.message };
-  }
+  const { error: removeError } = await bucket.remove(paths);
+  if (removeError) throw removeError;
 };
 
 /**
- * Full account deletion - clears local data, cloud data, and signs out
+ * Permanently delete the signed-in user's account: profile pictures, every
+ * cloud row they own, and the login itself (via the delete_my_account
+ * database function), then local data. Signs out on success.
  */
 export const deleteAccount = async () => {
   try {
-    // 1. Delete cloud data
-    const cloudResult = await deleteCloudData();
-    if (!cloudResult.success) {
-      console.warn('Cloud deletion partial failure:', cloudResult.error);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not logged in' };
+
+    // Storage cleanup is best-effort; a leftover avatar shouldn't block deletion
+    try {
+      await deleteProfilePictures(user.id);
+    } catch (error) {
+      console.warn('Could not remove profile pictures:', error);
     }
 
-    // 2. Clear local data
-    const localResult = await clearAllLocalData();
-    if (!localResult.success) {
-      console.warn('Local deletion partial failure:', localResult.error);
-    }
+    const { error } = await supabase.rpc('delete_my_account');
+    if (error) throw error;
 
-    // 3. Sign out
+    await clearAllLocalData();
     await supabase.auth.signOut();
 
     return { success: true };

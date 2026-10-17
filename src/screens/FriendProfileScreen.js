@@ -8,6 +8,7 @@ import {
   Flame,
   Heart,
   Loader,
+  MoreHorizontal,
   Save,
   Trophy,
   User,
@@ -32,6 +33,7 @@ import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import { getUserProfileWithStats, uploadProfilePicture } from '../utils/socialStorage';
 import { saveTemplate } from '../utils/workoutTemplates';
 import { useAuth } from '../contexts/AuthContext';
+import { showUserActions } from '../utils/moderation';
 
 const getTimeAgo = (dateString) => {
   const date = new Date(dateString);
@@ -321,7 +323,21 @@ export default function FriendProfileScreen() {
           <ArrowLeft size={24} color={COLORS.text.primary} strokeWidth={2} />
         </Pressable>
         <Text style={styles.headerTitle}>PROFILE</Text>
-        <View style={styles.headerSpacer} />
+        {isOwnProfile ? (
+          <View style={styles.headerSpacer} />
+        ) : (
+          <Pressable
+            onPress={() => showUserActions({
+              userId,
+              userName: profile.displayName || profile.username,
+              onBlocked: () => router.back(),
+            })}
+            style={styles.headerMenuButton}
+            hitSlop={8}
+          >
+            <MoreHorizontal size={24} color={COLORS.text.primary} strokeWidth={2} />
+          </Pressable>
+        )}
       </View>
 
       <ScrollView
@@ -502,6 +518,12 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 40,
+  },
+  headerMenuButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
   },
 
   // Scroll

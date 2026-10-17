@@ -24,6 +24,7 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { clearLocalWorkouts } from '../../src/utils/storage';
 import { uploadProfilePicture } from '../../src/utils/socialStorage';
+import { containsObjectionableContent } from '../../src/utils/moderation';
 import { formatDateLong } from '../../src/utils/dateFormatter';
 import { TYPOGRAPHY, SPACING, RADIUS, DARK_COLORS } from '../../src/theme/design';
 
@@ -184,6 +185,11 @@ export default function ProfileScreen() {
       return;
     }
 
+    if (containsObjectionableContent(trimmedName)) {
+      Alert.alert('Error', 'Please choose a display name without offensive language');
+      return;
+    }
+
     if (trimmedName === profile?.display_name) {
       setShowDisplayNameModal(false);
       return;
@@ -232,6 +238,11 @@ export default function ProfileScreen() {
       return;
     }
 
+    if (containsObjectionableContent(trimmedUsername)) {
+      Alert.alert('Error', 'Please choose a username without offensive language');
+      return;
+    }
+
     if (trimmedUsername === profile?.username) {
       setShowUsernameModal(false);
       return;
@@ -265,7 +276,11 @@ export default function ProfileScreen() {
       Alert.alert('Success', 'Username updated successfully!');
     } catch (error) {
       console.error('Error updating username:', error);
-      Alert.alert('Error', 'Failed to update username. Please try again.');
+      if ((error as any)?.code === '23505') {
+        Alert.alert('Username Taken', 'This username is already in use. Please choose another.');
+      } else {
+        Alert.alert('Error', 'Failed to update username. Please try again.');
+      }
     } finally {
       setIsUpdatingUsername(false);
     }
@@ -661,7 +676,7 @@ export default function ProfileScreen() {
           <View style={[styles.modalContent, { backgroundColor: COLORS.background.secondary }]}>
             <Text style={[styles.modalTitle, { color: COLORS.text.primary }]}>Change Display Name</Text>
             <Text style={[styles.modalSubtitle, { color: COLORS.text.secondary }]}>
-              This is how you'll appear to friends
+              This is how you&apos;ll appear to friends
             </Text>
             <View style={[styles.usernameInputContainer, { backgroundColor: COLORS.surface.card, borderColor: COLORS.surface.border }]}>
               <TextInput
