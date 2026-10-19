@@ -1,10 +1,9 @@
-import { Calendar, Camera, Check, ChevronLeft, ChevronRight, ChevronRight as ArrowRight, ClipboardList, Dumbbell, Activity, Bike, Waves, Flame, Play, RotateCcw, Scale, Target, Trash2, X } from 'lucide-react-native';
+import { Calendar, Camera, Check, ChevronLeft, ChevronRight, ChevronRight as ArrowRight, Dumbbell, Activity, Bike, Waves, Flame, Play, RotateCcw, Scale, Target, X } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Dimensions,
   Image,
-  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -14,18 +13,20 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
 import { getStreakInfo } from '../utils/calculations';
 import { getTodayString, loadWorkouts, loadInProgressWorkout, clearInProgressWorkout } from '../utils/storage';
-import { getRelativeDateLabel } from '../utils/dateFormatter';
+import { formatDateForStorage, getRelativeDateLabel } from '../utils/dateFormatter';
 import { loadWeeklyGoals, getWeekStart, getWeekEnd, getDateFromDayOfWeek } from '../utils/goalsStorage';
-import { loadWeightData, addWeightEntry, deleteWeightEntry } from '../utils/weightStorage';
+import { loadWeightData, addWeightEntry } from '../utils/weightStorage';
+import WeightDateSelect from '../components/weight/WeightDateSelect';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../theme/design';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -35,7 +36,10 @@ const DAY_HEIGHT = DAY_WIDTH + 4;
 
 export default function DashboardScreen({ navigation }) {
   const router = useRouter();
-  const { colors: themeColors } = useTheme();
+  const { colors: themeColors, isDark } = useTheme();
+  // Read from the app's root provider: inside a full-screen modal SafeAreaView
+  // doesn't see the status bar / home indicator insets
+  const insets = useSafeAreaInsets();
   const [workouts, setWorkouts] = useState([]);
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
@@ -50,8 +54,8 @@ export default function DashboardScreen({ navigation }) {
   const [weightNotes, setWeightNotes] = useState('');
   const [weightMedia, setWeightMedia] = useState([]);
   const [weightDate, setWeightDate] = useState(new Date());
+  const [showWeightDateWheels, setShowWeightDateWheels] = useState(false);
   const [isSubmittingWeight, setIsSubmittingWeight] = useState(false);
-  const [showWeightHistory, setShowWeightHistory] = useState(false);
   const [weightData, setWeightData] = useState({ entries: [], goal: null, settings: { unit: 'lbs' } });
   const [weightMediaViewer, setWeightMediaViewer] = useState(null);
 
@@ -199,44 +203,29 @@ export default function DashboardScreen({ navigation }) {
     );
   };
 
+  const weightDateLogged = weightData.entries.some(e => e.date === formatDateForStorage(weightDate));
+
+  // Picking a logged day loads it for editing; picking an unlogged day after a
+  // logged one clears the form (a weight typed for a new day is kept)
+  const changeWeightDate = (d) => {
+    const entryFor = (date) => weightData.entries.find(e => e.date === formatDateForStorage(date));
+    const next = entryFor(d);
+    const previous = entryFor(weightDate);
+    setWeightDate(d);
+    if (next) {
+      setWeightInput(next.weight.toFixed(1));
+      setWeightNotes(next.notes || '');
+      setWeightMedia(next.media || []);
+    } else if (previous) {
+      setWeightInput('');
+      setWeightNotes('');
+      setWeightMedia([]);
+    }
+  };
+
   const handleRemoveWeightPhoto = (mediaId) => {
     setWeightMedia(prev => prev.filter(m => m.id !== mediaId));
   };
-
-  const handleDeleteWeightEntry = async (entryId) => {
-    Alert.alert(
-      'Delete Entry',
-      'Are you sure you want to delete this weight entry?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteWeightEntry(entryId);
-            const newWeightData = await loadWeightData();
-            setWeightData(newWeightData);
-            // Check if we need to update today's status
-            const today = getTodayString();
-            const hasTodayWeight = newWeightData.entries.some(e => e.date === today);
-            setHasLoggedWeightToday(hasTodayWeight);
-          },
-        },
-      ]
-    );
-  };
-
-  // Format date for weight entry display (uses centralized utility)
-  const formatWeightDate = (dateStr) => getRelativeDateLabel(dateStr);
-
-  // Check if weight date is today (for navigation)
-  const isWeightDateToday = (() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const compare = new Date(weightDate);
-    compare.setHours(0, 0, 0, 0);
-    return compare >= today;
-  })();
 
   // Calculate stats for the viewed calendar month
   const viewedMonthStats = useMemo(() => {
@@ -686,78 +675,106 @@ export default function DashboardScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Weight Tracking Card */}
-        <View style={[styles.weightCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}>
-          <View style={styles.weightCardHeader}>
-            <View style={styles.weightCardTitleRow}>
-              <Scale size={18} color={themeColors.accent.primary} strokeWidth={2} />
-              <Text style={[styles.weightCardTitle, { color: themeColors.text.primary }]}>Weight</Text>
-            </View>
-            <Pressable onPress={() => setShowWeightHistory(true)} hitSlop={8}>
-              <ClipboardList size={20} color={themeColors.text.tertiary} strokeWidth={2} />
-            </Pressable>
-          </View>
+        {/* Weight Card: a prompt to log today's weight, or today's result once logged */}
+        {(() => {
+          const unit = weightData.settings?.unit || 'lbs';
+          const latest = weightData.entries[0];
+          const previous = weightData.entries[1];
+          const openWeightTab = () => router.push({ pathname: '/(tabs)/progress', params: { view: 'weight' } });
+          const openLogModal = () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            // Today, blank unless today is already logged; wheels tucked away
+            const todayEntry = weightData.entries.find(e => e.date === getTodayString());
+            setWeightDate(new Date());
+            setWeightInput(todayEntry ? todayEntry.weight.toFixed(1) : '');
+            setWeightNotes(todayEntry?.notes || '');
+            setWeightMedia(todayEntry?.media || []);
+            setShowWeightDateWheels(false);
+            setShowWeightModal(true);
+          };
 
-          {weightData.entries.length > 0 ? (
-            <View style={styles.weightCardContent}>
-              <Text style={[styles.weightCardValue, { color: themeColors.text.primary }]}>
-                {weightData.entries[0].weight.toFixed(1)}
-              </Text>
-              <Text style={[styles.weightCardUnit, { color: themeColors.text.tertiary }]}>
-                {weightData.settings?.unit || 'lbs'}
-              </Text>
-              {weightData.entries.length > 1 && (() => {
-                const weightChange = weightData.entries[0].weight - weightData.entries[1].weight;
-                const goalDirection = weightData.goal?.direction;
-                // Determine if this change is positive based on goal
-                // - If losing weight: decrease is good
-                // - If gaining weight: increase is good
-                // - If no goal or maintaining: show neutral (use accent color)
-                const isPositiveChange = goalDirection === 'lose'
-                  ? weightChange < 0
-                  : goalDirection === 'gain'
-                    ? weightChange > 0
-                    : null; // No goal = neutral
+          if (!hasLoggedWeightToday) {
+            return (
+              <Pressable
+                onPress={openLogModal}
+                style={[styles.weightCard, styles.weightPromptCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.borderAccent }]}
+              >
+                <View style={styles.weightCardHeader}>
+                  <View style={styles.weightCardTitleRow}>
+                    <View style={[styles.weightPromptIcon, { backgroundColor: themeColors.accent.primaryDim }]}>
+                      <Scale size={18} color={themeColors.accent.primary} strokeWidth={2} />
+                    </View>
+                    <View>
+                      <Text style={[styles.weightCardTitle, { color: themeColors.text.primary }]}>Today&apos;s weigh-in</Text>
+                      <Text style={[styles.weightPromptSub, { color: themeColors.text.tertiary }]}>
+                        {latest
+                          ? `Last: ${latest.weight.toFixed(1)} ${unit} · ${getRelativeDateLabel(latest.date)}`
+                          : 'Log your weight to start tracking your trend'}
+                      </Text>
+                    </View>
+                  </View>
+                  {latest && (
+                    <Pressable onPress={openWeightTab} hitSlop={10}>
+                      <ChevronRight size={20} color={themeColors.text.tertiary} strokeWidth={2} />
+                    </Pressable>
+                  )}
+                </View>
+                <View style={[styles.weightPromptButton, { backgroundColor: themeColors.accent.primary }]}>
+                  <Text style={[styles.weightPromptButtonText, { color: themeColors.text.inverse }]}>+ Log today&apos;s weight</Text>
+                </View>
+              </Pressable>
+            );
+          }
 
-                const bgColor = isPositiveChange === null
-                  ? themeColors.accent.primaryDim
-                  : isPositiveChange
-                    ? themeColors.successDim
-                    : themeColors.errorDim;
+          const change = previous ? latest.weight - previous.weight : null;
+          const goalDirection = weightData.goal?.direction;
+          // Down is good when losing, up when gaining; neutral without a goal
+          const isGood = change === null || change === 0 ? null
+            : goalDirection === 'lose' ? change < 0
+              : goalDirection === 'gain' ? change > 0 : null;
+          const changeColor = isGood === null ? themeColors.text.secondary : isGood ? themeColors.success : themeColors.error;
+          const changeBg = isGood === null ? themeColors.surface.cardActive : isGood ? themeColors.successDim : themeColors.errorDim;
 
-                const textColor = isPositiveChange === null
-                  ? themeColors.accent.primary
-                  : isPositiveChange
-                    ? themeColors.success
-                    : themeColors.error;
-
-                return (
-                  <View style={[styles.weightCardChange, { backgroundColor: bgColor }]}>
-                    <Text style={[styles.weightCardChangeText, { color: textColor }]}>
-                      {weightChange > 0 ? '+' : ''}{weightChange.toFixed(1)}
+          return (
+            <Pressable
+              onPress={openLogModal}
+              style={[styles.weightCard, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
+            >
+              <View style={styles.weightCardHeader}>
+                <View style={styles.weightCardTitleRow}>
+                  <Scale size={18} color={themeColors.accent.primary} strokeWidth={2} />
+                  <Text style={[styles.weightCardTitle, { color: themeColors.text.primary }]}>Weight</Text>
+                </View>
+                <View style={[styles.weightLoggedBadge, { backgroundColor: themeColors.successDim }]}>
+                  <Check size={12} color={themeColors.success} strokeWidth={3} />
+                  <Text style={[styles.weightLoggedText, { color: themeColors.success }]}>Logged today</Text>
+                </View>
+              </View>
+              <View style={styles.weightCardContent}>
+                <Text style={[styles.weightCardValue, { color: themeColors.text.primary }]}>{latest.weight.toFixed(1)}</Text>
+                <Text style={[styles.weightCardUnit, { color: themeColors.text.tertiary }]}>{unit}</Text>
+                {change !== null && (
+                  <View style={[styles.weightCardChange, { backgroundColor: changeBg }]}>
+                    <Text style={[styles.weightCardChangeText, { color: changeColor }]}>
+                      {change > 0 ? '+' : ''}{change.toFixed(1)}
                     </Text>
                   </View>
-                );
-              })()}
-            </View>
-          ) : (
-            <Text style={[styles.weightCardEmpty, { color: themeColors.text.tertiary }]}>No entries yet</Text>
-          )}
-
-          {!hasLoggedWeightToday && (
-            <Pressable
-              style={[styles.weightCardButton, { backgroundColor: themeColors.accent.primaryDim }]}
-              onPress={() => {
-                setWeightDate(new Date());
-                setShowWeightModal(true);
-              }}
-            >
-              <Text style={[styles.weightCardButtonText, { color: themeColors.accent.primary }]}>
-                Log Weight
-              </Text>
+                )}
+              </View>
+              <View style={styles.weightCardFooter}>
+                <Text style={[styles.weightCardLink, { color: themeColors.text.tertiary }]}>Tap to edit</Text>
+                <Pressable
+                  onPress={openWeightTab}
+                  hitSlop={4}
+                  style={({ pressed }) => [styles.weightCardTitleRow, styles.weightTrendLink, pressed && { opacity: 0.5 }]}
+                >
+                  <Text style={[styles.weightCardLink, { color: themeColors.accent.primary }]}>See trend</Text>
+                  <ChevronRight size={16} color={themeColors.accent.primary} strokeWidth={2.5} />
+                </Pressable>
+              </View>
             </Pressable>
-          )}
-        </View>
+          );
+        })()}
 
         {/* Weekly Goals Progress */}
         {weeklyGoals.length > 0 && (
@@ -969,250 +986,140 @@ export default function DashboardScreen({ navigation }) {
       {/* Weight Log Modal */}
       <Modal
         visible={showWeightModal}
-        transparent
-        animationType="fade"
+        animationType="slide"
+        presentationStyle="fullScreen"
         onRequestClose={() => setShowWeightModal(false)}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <GestureHandlerRootView style={[styles.weightModalScreen, { backgroundColor: themeColors.background.primary, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={[styles.weightModalOverlay, { backgroundColor: themeColors.overlay.medium }]}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.weightModalScreen}
           >
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <ScrollView style={[styles.weightModalContent, { backgroundColor: themeColors.background.secondary }]} showsVerticalScrollIndicator={false}>
-                <View style={styles.weightModalHeader}>
-                  <Text style={[styles.weightModalTitle, { color: themeColors.text.primary }]}>Log Weight</Text>
-                  <Pressable onPress={() => setShowWeightModal(false)}>
-                    <X size={24} color={themeColors.text.tertiary} />
-                  </Pressable>
-                </View>
-
-                {/* Date Selector */}
-                <View style={styles.weightDateSelector}>
-                  <Pressable
-                    style={styles.weightDateArrow}
-                    onPress={() => {
-                      const newDate = new Date(weightDate);
-                      newDate.setDate(newDate.getDate() - 1);
-                      setWeightDate(newDate);
-                    }}
-                  >
-                    <ChevronLeft size={20} color={themeColors.text.secondary} />
-                  </Pressable>
-                  <View style={styles.weightDateCenter}>
-                    <Calendar size={16} color={themeColors.accent.primary} strokeWidth={2} />
-                    <Text style={[styles.weightDateText, { color: themeColors.text.primary }]}>
-                      {weightDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                    </Text>
-                  </View>
-                  <Pressable
-                    style={[styles.weightDateArrow, isWeightDateToday && { opacity: 0.3 }]}
-                    onPress={() => {
-                      if (!isWeightDateToday) {
-                        const newDate = new Date(weightDate);
-                        newDate.setDate(newDate.getDate() + 1);
-                        setWeightDate(newDate);
-                      }
-                    }}
-                    disabled={isWeightDateToday}
-                  >
-                    <ChevronRight size={20} color={themeColors.text.secondary} />
-                  </Pressable>
-                </View>
-
-                <View style={styles.weightModalInputRow}>
-                  <TextInput
-                    style={[styles.weightModalInput, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border, color: themeColors.text.primary }]}
-                    placeholder="0.0"
-                    placeholderTextColor={themeColors.text.tertiary}
-                    value={weightInput}
-                    onChangeText={setWeightInput}
-                    keyboardType="decimal-pad"
-                  />
-                  <Text style={[styles.weightModalUnit, { color: themeColors.text.secondary }]}>{weightData.settings?.unit || 'lbs'}</Text>
-                </View>
-
-                {/* Notes Input */}
-                <Text style={[styles.weightModalLabel, { color: themeColors.text.tertiary }]}>NOTES (OPTIONAL)</Text>
-                <TextInput
-                  style={[styles.weightModalNotesInput, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border, color: themeColors.text.primary }]}
-                  placeholder="How are you feeling?"
-                  placeholderTextColor={themeColors.text.tertiary}
-                  value={weightNotes}
-                  onChangeText={setWeightNotes}
-                  multiline
-                  numberOfLines={2}
-                />
-
-                {/* Photo Section */}
-                <Text style={[styles.weightModalLabel, { color: themeColors.text.tertiary }]}>PHOTO (OPTIONAL)</Text>
-                <View style={styles.weightPhotoContainer}>
-                  {weightMedia.map((media) => (
-                    <Pressable
-                      key={media.id}
-                      onLongPress={() => handleRemoveWeightPhoto(media.id)}
-                      onPress={() => setWeightMediaViewer(media)}
-                      style={styles.weightPhotoThumbnail}
-                    >
-                      <Image source={{ uri: media.uri }} style={styles.weightPhotoImage} />
-                    </Pressable>
-                  ))}
-                  <Pressable
-                    onPress={handleAddWeightPhoto}
-                    style={[styles.weightPhotoAdd, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
-                  >
-                    <Camera size={24} color={themeColors.text.tertiary} strokeWidth={2} />
-                  </Pressable>
-                </View>
-
-                <View style={styles.weightModalButtons}>
-                  <Pressable
-                    style={[styles.weightModalCancel, { backgroundColor: themeColors.surface.card }]}
-                    onPress={() => {
-                      setShowWeightModal(false);
-                      setWeightInput('');
-                      setWeightNotes('');
-                      setWeightMedia([]);
-                    }}
-                  >
-                    <Text style={[styles.weightModalCancelText, { color: themeColors.text.secondary }]}>Cancel</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.weightModalSave, { backgroundColor: themeColors.accent.primary, opacity: weightInput ? 1 : 0.5 }]}
-                    onPress={submitWeight}
-                    disabled={isSubmittingWeight || !weightInput}
-                  >
-                    <Check size={18} color={themeColors.text.inverse} strokeWidth={2.5} />
-                    <Text style={[styles.weightModalSaveText, { color: themeColors.text.inverse }]}>Save</Text>
-                  </Pressable>
-                </View>
-              </ScrollView>
-            </TouchableWithoutFeedback>
-          </KeyboardAvoidingView>
-        </TouchableWithoutFeedback>
-      </Modal>
-
-      {/* Weight History Modal */}
-      <Modal
-        visible={showWeightHistory}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowWeightHistory(false)}
-      >
-        <View style={[styles.weightHistoryContainer, { backgroundColor: themeColors.background.primary }]}>
-          <View style={[styles.weightHistoryHeader, { borderBottomColor: themeColors.surface.border }]}>
-            <Text style={[styles.weightHistoryTitle, { color: themeColors.text.primary }]}>Weight History</Text>
-            <TouchableOpacity onPress={() => setShowWeightHistory(false)} style={styles.weightHistoryClose}>
-              <X size={24} color={themeColors.text.primary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.weightHistoryContent} showsVerticalScrollIndicator={false}>
-            {weightData.entries.length === 0 ? (
-              <View style={styles.weightHistoryEmpty}>
-                <Scale size={48} color={themeColors.text.tertiary} strokeWidth={1.5} />
-                <Text style={[styles.weightHistoryEmptyText, { color: themeColors.text.tertiary }]}>
-                  No weight entries yet
+            <ScrollView
+              contentContainerStyle={styles.weightModalContent}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.weightModalHeader}>
+                <Text style={[styles.weightModalTitle, { color: themeColors.text.primary }]}>
+                  {weightDateLogged ? 'Edit Weigh-in' : 'Log Weight'}
                 </Text>
+                <Pressable onPress={() => setShowWeightModal(false)}>
+                  <X size={24} color={themeColors.text.tertiary} />
+                </Pressable>
               </View>
-            ) : (
-              weightData.entries.map((entry, index) => (
-                <TouchableOpacity
-                  key={entry.id}
-                  style={[styles.weightHistoryEntry, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
-                  onPress={() => {
-                    if (entry.media && entry.media.length > 0) {
-                      setWeightMediaViewer(entry.media[0]);
-                    }
-                  }}
-                  activeOpacity={entry.media && entry.media.length > 0 ? 0.7 : 1}
+
+              <WeightDateSelect
+                date={weightDate}
+                onChange={changeWeightDate}
+                entries={weightData.entries}
+                unit={weightData.settings?.unit || 'lbs'}
+                wheelsOpen={showWeightDateWheels}
+                onWheelsOpenChange={setShowWeightDateWheels}
+                colors={themeColors}
+                isDark={isDark}
+              />
+
+              <View style={styles.weightModalInputRow}>
+                <TextInput
+                  style={[styles.weightModalInput, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border, color: themeColors.text.primary }]}
+                  placeholder="0.0"
+                  placeholderTextColor={themeColors.text.tertiary}
+                  value={weightInput}
+                  onChangeText={setWeightInput}
+                  onFocus={() => { if (Platform.OS === 'ios') setShowWeightDateWheels(false); }}
+                  keyboardType="decimal-pad"
+                />
+                <Text style={[styles.weightModalUnit, { color: themeColors.text.secondary }]}>{weightData.settings?.unit || 'lbs'}</Text>
+              </View>
+
+              {/* Notes Input */}
+              <Text style={[styles.weightModalLabel, { color: themeColors.text.tertiary }]}>NOTES (OPTIONAL)</Text>
+              <TextInput
+                style={[styles.weightModalNotesInput, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border, color: themeColors.text.primary }]}
+                placeholder="How are you feeling?"
+                placeholderTextColor={themeColors.text.tertiary}
+                value={weightNotes}
+                onChangeText={setWeightNotes}
+                onFocus={() => { if (Platform.OS === 'ios') setShowWeightDateWheels(false); }}
+                multiline
+                numberOfLines={2}
+              />
+
+              {/* Photo Section */}
+              <Text style={[styles.weightModalLabel, { color: themeColors.text.tertiary }]}>PHOTO (OPTIONAL)</Text>
+              <View style={styles.weightPhotoContainer}>
+                {weightMedia.map((media) => (
+                  <Pressable
+                    key={media.id}
+                    onLongPress={() => handleRemoveWeightPhoto(media.id)}
+                    onPress={() => setWeightMediaViewer(media)}
+                    style={styles.weightPhotoThumbnail}
+                  >
+                    <Image source={{ uri: media.uri }} style={styles.weightPhotoImage} />
+                  </Pressable>
+                ))}
+                <Pressable
+                  onPress={handleAddWeightPhoto}
+                  style={[styles.weightPhotoAdd, { backgroundColor: themeColors.surface.card, borderColor: themeColors.surface.border }]}
                 >
-                  <View style={styles.weightHistoryEntryRow}>
-                    <View style={styles.weightHistoryEntryLeft}>
-                      <Text style={[styles.weightHistoryEntryDate, { color: themeColors.text.primary }]}>
-                        {formatWeightDate(entry.date)}
-                      </Text>
-                      <Text style={[styles.weightHistoryEntryFullDate, { color: themeColors.text.tertiary }]}>
-                        {new Date(entry.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                      </Text>
-                    </View>
-                    <View style={styles.weightHistoryEntryCenter}>
-                      <Text style={[styles.weightHistoryEntryValue, { color: themeColors.text.primary }]}>
-                        {entry.weight.toFixed(1)}
-                      </Text>
-                      <Text style={[styles.weightHistoryEntryUnit, { color: themeColors.text.tertiary }]}>
-                        {weightData.settings?.unit || 'lbs'}
-                      </Text>
-                      {index < weightData.entries.length - 1 && (
-                        <View style={[
-                          styles.weightHistoryChangeBadge,
-                          { backgroundColor: (entry.weight - weightData.entries[index + 1].weight) <= 0 ? themeColors.successDim : themeColors.errorDim }
-                        ]}>
-                          <Text style={[
-                            styles.weightHistoryChangeText,
-                            { color: (entry.weight - weightData.entries[index + 1].weight) <= 0 ? themeColors.success : themeColors.error }
-                          ]}>
-                            {(entry.weight - weightData.entries[index + 1].weight) > 0 ? '+' : ''}
-                            {(entry.weight - weightData.entries[index + 1].weight).toFixed(1)}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.weightHistoryEntryActions}>
-                      {entry.media && entry.media.length > 0 && (
-                        <View style={[styles.weightHistoryPhotoIndicator, { backgroundColor: themeColors.accent.primaryDim }]}>
-                          <Camera size={14} color={themeColors.accent.primary} strokeWidth={2} />
-                        </View>
-                      )}
-                      <TouchableOpacity
-                        onPress={() => handleDeleteWeightEntry(entry.id)}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      >
-                        <Trash2 size={16} color={themeColors.text.tertiary} strokeWidth={2} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                  <Camera size={24} color={themeColors.text.tertiary} strokeWidth={2} />
+                </Pressable>
+              </View>
 
-                  {entry.notes ? (
-                    <View style={[styles.weightHistoryNotes, { backgroundColor: themeColors.background.elevated }]}>
-                      <Text style={[styles.weightHistoryNotesText, { color: themeColors.text.secondary }]}>
-                        {entry.notes}
-                      </Text>
-                    </View>
-                  ) : null}
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
-
-          {/* Weight Media Viewer Modal - inside weight history modal */}
-          <Modal
-            visible={!!weightMediaViewer}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setWeightMediaViewer(null)}
+              <View style={styles.weightModalButtons}>
+                <Pressable
+                  style={[styles.weightModalCancel, { backgroundColor: themeColors.surface.card }]}
+                  onPress={() => {
+                    setShowWeightModal(false);
+                    setWeightInput('');
+                    setWeightNotes('');
+                    setWeightMedia([]);
+                  }}
+                >
+                  <Text style={[styles.weightModalCancelText, { color: themeColors.text.secondary }]}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.weightModalSave, { backgroundColor: themeColors.accent.primary, opacity: weightInput ? 1 : 0.5 }]}
+                  onPress={submitWeight}
+                  disabled={isSubmittingWeight || !weightInput}
+                >
+                  <Check size={18} color={themeColors.text.inverse} strokeWidth={2.5} />
+                  <Text style={[styles.weightModalSaveText, { color: themeColors.text.inverse }]}>{weightDateLogged ? 'Update' : 'Save'}</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </GestureHandlerRootView>
+        {/* Photo viewer, opened from the photo thumbnails */}
+        <Modal
+          visible={!!weightMediaViewer}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setWeightMediaViewer(null)}
+        >
+          <TouchableOpacity
+            style={[styles.weightMediaViewerOverlay, { backgroundColor: themeColors.overlay.heavy }]}
+            activeOpacity={1}
+            onPress={() => setWeightMediaViewer(null)}
           >
+            {weightMediaViewer && (
+              <Image
+                source={{ uri: weightMediaViewer.uri }}
+                style={styles.weightMediaViewerImage}
+              />
+            )}
             <TouchableOpacity
-              style={[styles.weightMediaViewerOverlay, { backgroundColor: themeColors.overlay.heavy }]}
-              activeOpacity={1}
+              style={styles.weightMediaViewerClose}
               onPress={() => setWeightMediaViewer(null)}
             >
-              {weightMediaViewer && (
-                <Image
-                  source={{ uri: weightMediaViewer.uri }}
-                  style={styles.weightMediaViewerImage}
-                />
-              )}
-              <TouchableOpacity
-                style={styles.weightMediaViewerClose}
-                onPress={() => setWeightMediaViewer(null)}
-              >
-                <X size={28} color="#fff" />
-              </TouchableOpacity>
+              <X size={28} color="#fff" />
             </TouchableOpacity>
-          </Modal>
-        </View>
+          </TouchableOpacity>
+        </Modal>
       </Modal>
+
     </ScrollView>
   );
 }
@@ -1789,17 +1696,13 @@ const styles = StyleSheet.create({
   },
 
   // Weight Modal
-  weightModalOverlay: {
+  weightModalScreen: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: SPACING.xl,
   },
   weightModalContent: {
-    width: '100%',
-    backgroundColor: COLORS.background.secondary,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.xl,
+    paddingHorizontal: SPACING.screenPadding,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xl,
   },
   weightModalHeader: {
     flexDirection: 'row',
@@ -1931,23 +1834,56 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.bodyBold,
     fontSize: 14,
   },
-
-  // Weight Modal Enhancements
-  weightDateSelector: {
-    flexDirection: 'row',
+  weightPromptCard: {
+    borderWidth: 1.5,
+  },
+  weightPromptIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SPACING.lg,
-    gap: SPACING.md,
   },
-  weightDateArrow: {
-    padding: SPACING.xs,
+  weightPromptSub: {
+    ...TYPOGRAPHY.caption,
+    marginTop: 2,
   },
-  weightDateCenter: {
+  weightPromptButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+    borderRadius: RADIUS.md,
+  },
+  weightPromptButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 15,
+  },
+  weightLoggedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: 4,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
   },
+  weightLoggedText: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '700',
+  },
+  weightCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  weightTrendLink: {
+    gap: 2,
+  },
+  weightCardLink: {
+    ...TYPOGRAPHY.bodyBold,
+    fontSize: 14,
+  },
+
+  // Weight Modal Enhancements
   weightDateText: {
     ...TYPOGRAPHY.body,
     fontWeight: '500',
@@ -1993,104 +1929,6 @@ const styles = StyleSheet.create({
   },
 
   // Weight History Modal
-  weightHistoryContainer: {
-    flex: 1,
-  },
-  weightHistoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-  },
-  weightHistoryTitle: {
-    ...TYPOGRAPHY.bodyBold,
-    fontSize: 18,
-  },
-  weightHistoryClose: {
-    padding: SPACING.xs,
-  },
-  weightHistoryContent: {
-    flex: 1,
-    padding: SPACING.lg,
-  },
-  weightHistoryEmpty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.xl * 2,
-    gap: SPACING.md,
-  },
-  weightHistoryEmptyText: {
-    ...TYPOGRAPHY.body,
-  },
-  weightHistoryEntry: {
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    marginBottom: SPACING.sm,
-    padding: SPACING.md,
-  },
-  weightHistoryEntryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  weightHistoryEntryLeft: {
-    flex: 1,
-  },
-  weightHistoryEntryDate: {
-    ...TYPOGRAPHY.bodyBold,
-    fontSize: 14,
-  },
-  weightHistoryEntryFullDate: {
-    ...TYPOGRAPHY.caption,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  weightHistoryEntryCenter: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-    marginRight: SPACING.md,
-  },
-  weightHistoryEntryValue: {
-    ...TYPOGRAPHY.h4,
-    fontWeight: '700',
-  },
-  weightHistoryEntryUnit: {
-    ...TYPOGRAPHY.caption,
-  },
-  weightHistoryChangeBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: RADIUS.sm,
-    marginLeft: SPACING.xs,
-  },
-  weightHistoryChangeText: {
-    ...TYPOGRAPHY.caption,
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  weightHistoryEntryActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  weightHistoryPhotoIndicator: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  weightHistoryNotes: {
-    marginTop: SPACING.sm,
-    padding: SPACING.sm,
-    borderRadius: RADIUS.md,
-  },
-  weightHistoryNotesText: {
-    ...TYPOGRAPHY.body,
-    fontSize: 13,
-  },
   weightMediaViewerOverlay: {
     flex: 1,
     justifyContent: 'center',
